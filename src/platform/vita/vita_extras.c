@@ -96,6 +96,12 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_res") == 0) return FAST_EXTRA_VOXEL_RES;
         if (strcmp(key, "voxel_fps") == 0) return FAST_EXTRA_VOXEL_FPS;
         if (strcmp(key, "voxel_blur") == 0) return FAST_EXTRA_VOXEL_BLUR;
+#ifdef PLATFORM_DECK
+        if (strcmp(key, "voxel_quality") == 0) return FAST_EXTRA_VOXEL_QUALITY;
+        if (strcmp(key, "voxel_shaders") == 0) return FAST_EXTRA_VOXEL_SHADERS;
+        if (strcmp(key, "voxel_grade") == 0) return FAST_EXTRA_VOXEL_GRADE;
+        if (strcmp(key, "voxel_bloom") == 0) return FAST_EXTRA_VOXEL_BLOOM;
+#endif
         break;
     default:
         break;
@@ -132,6 +138,10 @@ static const char *const sFilterValues[] = { "NEAREST", "BILINEAR", "SHARP", NUL
 // Order = UI_THEME_* (src/platform/ui/ui_internal.h); RED is the default
 static const char *const sUiThemeValues[] = { "RED", "EMERALD", "CRYSTAL", "TROPICAL", "ROYAL", NULL };
 static const char *const sVoxelFpsValues[] = { "30", "60", NULL };
+#ifdef PLATFORM_DECK
+static const char *const sVoxelQualityValues[] = { "LOW", "MEDIUM", "HIGH", NULL };
+static const char *const sVoxelFxValues[] = { "OFF", "ON", "AUTO", NULL };
+#endif
 static const char *const sSaveSlotValues[] = { "SLOT 1", "SLOT 2", "SLOT 3", NULL };
 static const char *const sDayNightValues[] = { "OFF", "AUTO", NULL };
 static const char *const sClockSpeedValues[] = { "1X", "6X", "12X", "24X", "60X", "120X", "1000X", NULL };
@@ -274,6 +284,12 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "RENDERER",   "3D VOXEL DIORAMA",  "voxel_3d",         2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "RENDERER",   "DIORAMA BLUR (DOF)","voxel_blur",       2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "RENDERER",   "TARGET FRAMERATE",  "voxel_fps",        2, 0, sVoxelFpsValues,    NULL, NULL, NULL },
+#ifdef PLATFORM_DECK
+    { VITA_TAB_WORLD,   "EFFECTS",    "EFFECTS PRESET",    "voxel_quality",    3, 1, sVoxelQualityValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "SHADERS",           "voxel_shaders",    2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "COLOR GRADE",       "voxel_grade",      3, 2, sVoxelFxValues,      NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "BLOOM",             "voxel_bloom",      3, 2, sVoxelFxValues,      NULL, NULL, NULL },
+#endif
     { VITA_TAB_WORLD,   "TIME & SKY", "DAY / NIGHT CYCLE", "day_night",        2, 1, sDayNightValues,    NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "TIME & SKY", "TIMED ENCOUNTERS",  "timed_encounters", 2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "TIME & SKY", "CLOCK SPEED",       "clock_speed",      7, 0, sClockSpeedValues,  NULL, NULL, NULL },

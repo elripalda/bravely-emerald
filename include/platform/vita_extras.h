@@ -70,6 +70,12 @@ typedef enum
     FAST_EXTRA_VOXEL_BLUR,
     FAST_EXTRA_UI_V2,          // new UI (phase B test screen on START)
     FAST_EXTRA_UI_THEME,       // colour theme of the new UI menus (UI_THEME_*)
+#ifdef PLATFORM_DECK
+    FAST_EXTRA_VOXEL_QUALITY,  // Deck effects preset: 0 low, 1 medium, 2 high
+    FAST_EXTRA_VOXEL_SHADERS,  // Deck shader master switch: 0 off (legacy picture), 1 on
+    FAST_EXTRA_VOXEL_GRADE,    // Deck colour grade + vignette: 0 off, 1 on, 2 auto (preset)
+    FAST_EXTRA_VOXEL_BLOOM,    // Deck bloom: 0 off, 1 on, 2 auto (preset)
+#endif
     FAST_EXTRA_COUNT
 } FastExtraId;
 
