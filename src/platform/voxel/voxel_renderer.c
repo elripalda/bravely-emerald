@@ -26,6 +26,10 @@
 #endif
 
 #include "../vita/vita_perf.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_gl_shader.h"
+#include "../deck/deck_post.h"
+#endif
 
 static int32_t sFrameDrawCalls = 0;
 static uint32_t sFrameVertCount = 0;
@@ -3655,6 +3659,10 @@ bool VoxelRenderer_Init(void)
 #endif
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     sDioramaFboReady = (sDioramaFbo != 0 && sScratchFbo != 0);
+#ifdef PLATFORM_DECK
+    // RGBA8 scene target and post chain (deck_post.c); the legacy FBOs above stay the fallback.
+    DeckPost_Init(VOXEL_DIORAMA_FBO_W, VOXEL_DIORAMA_FBO_H);
+#endif
 
     MakeFog();
     MakeWeather();
@@ -3723,6 +3731,9 @@ void VoxelRenderer_Shutdown(void)
     if (sScratchFbo) { glDeleteFramebuffers(1, &sScratchFbo); sScratchFbo = 0; }
     if (sScratchColorTex) { glDeleteTextures(1, &sScratchColorTex); sScratchColorTex = 0; }
     sDioramaFboReady = false;
+#ifdef PLATFORM_DECK
+    DeckPost_Shutdown();
+#endif
 
     if (sChunkStaging)
     {
@@ -3852,6 +3863,9 @@ typedef struct
     VoxelFrameGrade grade;
     int32_t renderW, renderH;
     bool dioramaActive;                 // the 3D scene goes to the FBO for the depth of field
+#ifdef PLATFORM_DECK
+    bool postActive;                    // the 3D scene goes to the Deck RGBA8 target (deck_post.c)
+#endif
 } VoxelFrame;
 
 // Chunk builds left after the visibility loop: unbuilt chunks outside the view (pre-warm) and
@@ -4741,6 +4755,25 @@ static void Frame_BeginPasses(VoxelFrame *const f)
     const bool isIndoor = (inst0 != NULL && inst0->indoor);
     const bool dioramaActive = sDioramaFboReady && dioramaSetting && !isIndoor && (fadeAmount < 0.99f);
 
+#ifdef PLATFORM_DECK
+    {
+        // Per-frame shader uniforms (uTime, uWind = dirX, dirZ, strength); sway shaders use them in phase 2.
+        const float amount = f->weatherAmount < 0.0f ? 0.0f : (f->weatherAmount > 1.0f ? 1.0f : f->weatherAmount);
+        float windStrength = 0.25f;
+        if (f->weather == VOXEL_WEATHER_RAIN)
+            windStrength = 0.6f + 0.4f * amount;
+        else if (f->weather == VOXEL_WEATHER_SAND)
+            windStrength = 0.8f + 0.2f * amount;
+        DeckGl_SetFrameUniforms(f->seconds, 0.8f, 0.6f, windStrength);
+    }
+    // Field only (Decision 12); the FBO path no longer depends on the DoF setting.
+    f->postActive = !f->inBattle3D && (fadeAmount < 0.99f) && DeckPost_WantScene(renderW, renderH, isIndoor);
+    if (f->postActive)
+    {
+        DeckPost_BindScene();
+    }
+    else
+#endif
     if (dioramaActive)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, sDioramaFbo);
@@ -5474,6 +5507,28 @@ static void Pass_DepthOfField(const VoxelFrame *const f)
     glDisable(GL_BLEND);
 }
 
+#ifdef PLATFORM_DECK
+// Deck post chain on the RGBA8 scene target; replaces Pass_DepthOfField when f->postActive.
+static void Pass_DeckPost(const VoxelFrame *const f)
+{
+    const bool isIndoor = (f->inst0 != NULL && f->inst0->indoor); // same test as Frame_BeginPasses
+    const VitaDayNightLight *const dn = VitaDayNight_Get();
+    DeckPostFrame in;
+    in.renderW = f->renderW;
+    in.renderH = f->renderH;
+    in.indoor = isIndoor;
+    in.fade = f->fadeAmount;
+    in.bloom = f->light.bloom;
+    in.daylight = (isIndoor || dn == NULL) ? 1.0f : dn->daylight;
+    in.glow = (isIndoor || dn == NULL) ? 0.0f : dn->glow;
+    in.dofTopRows = VOXEL_DOF_TOP_ROWS;
+    in.dofBottomRows = VOXEL_DOF_BOTTOM_ROWS;
+    in.dofTopAlpha = VOXEL_DOF_TOP_ALPHA;
+    in.dofBottomAlpha = VOXEL_DOF_BOTTOM_ALPHA;
+    DeckPost_Run(&in);
+}
+#endif
+
 // Pass 6: the GBA's 2D layer over the 3D world (text, menus, dialogue on BG0, the 3D battle
 // foreground, HM and Fly animations). Kept as it is: the new menu system will replace it.
 static void Pass_Overlay2D(const VoxelFrame *const f)
@@ -5814,6 +5869,11 @@ bool VoxelRenderer_RenderFrame(void)
         VitaPerf_MarkDraw3DEnd(sFrameDrawCalls, sFrameVertCount);
     }
 
+#ifdef PLATFORM_DECK
+    if (f.postActive)
+        Pass_DeckPost(&f);
+    else
+#endif
     if (f.dioramaActive)
         Pass_DepthOfField(&f);
 
