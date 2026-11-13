@@ -25,6 +25,7 @@ awk '{v[NR]=$1; s+=$1; if (NR==1||$1<mn) mn=$1}
        printf "3D frames: %d\n", n
        printf "frame ms: avg %.2f  min %.2f  max %.2f\n", s/n, mn, v[1]
        printf "FPS: avg %.1f  1%% low %.1f  0.1%% low %.1f\n", 1000/(s/n), 1000/(a/k1), 1000/(b/k01)
+       printf "frame ms p99 %.2f\n", v[k1]
        printf "over 16.7 ms: %d (%.2f%%)  over 33.3 ms: %d (%.2f%%)\n", o16, 100*o16/n, o33, 100*o33/n
      }' "$tmp"
 
@@ -43,6 +44,33 @@ awk -F, 'NR==1 {for (i=1;i<=NF;i++) c[$i]=i; next}
            else print "chunk build (Core 0): none"
            if (nw>0) printf "chunk build (worker): %d chunks, %.2f ms/chunk\n", nw, w/nw
            else print "chunk build (worker): none"
+         }' "$csv"
+
+# Deck: present interval = time between the ends of two consecutive 3D swaps
+# (vita_perf.c VitaPerf_MarkSwapEnd). CSVs from before phase 1 have no such column.
+awk -F, 'NR==1 {for (i=1;i<=NF;i++) c[$i]=i; if (!("present_ms" in c)) exit; next}
+         $c["render3d"]==1 && $c["present_ms"]>0 {print $c["present_ms"]}' "$csv" | sort -rn > "$tmp"
+if [ -s "$tmp" ]; then
+    awk '{v[NR]=$1; s+=$1}
+         END {
+           n=NR; k1=int(n*0.01); if (k1<1) k1=1
+           for (i=1;i<=n;i++) {if (v[i]>17.5) m1++; if (v[i]>34.2) m2++}
+           printf "present ms: avg %.2f  p50 %.2f  p99 %.2f  max %.2f  (shown FPS %.1f)\n", s/n, v[int(n/2)+1], v[k1], v[1], 1000/(s/n)
+           printf "present over 17.5 ms: %d (%.2f%%)  over 34.2 ms: %d (%.2f%%)\n", m1, 100*m1/n, m2, 100*m2/n
+         }' "$tmp"
+else
+    echo "present ms: no column (CSV from before phase 1)"
+fi
+awk -F, 'NR==1 {for (i=1;i<=NF;i++) c[$i]=i; if (!("post_ms" in c)) exit; next}
+         $c["render3d"]==1 && $c["post_ms"]>0 {
+           p+=$c["post_ms"]; np++
+           if ($c["post_gpu_ms"]>0) {g+=$c["post_gpu_ms"]; ng++; if ($c["post_gpu_ms"]>gm) gm=$c["post_gpu_ms"]}
+         }
+         END {
+           if (np==0) {print "post: not run"; exit}
+           printf "post CPU ms: avg %.3f over %d frames\n", p/np, np
+           if (ng>0) printf "post GPU ms: avg %.3f  max %.3f\n", g/ng, gm
+           else print "post GPU ms: n/a (no GL_ARB_timer_query result)"
          }' "$csv"
 
 if [ -f "$sum" ]; then

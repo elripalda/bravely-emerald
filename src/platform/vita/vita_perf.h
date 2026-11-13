@@ -110,6 +110,15 @@ void VitaPerf_MarkEvent(VitaPerfEvent event);
 // vitaGL pool, labelled with `stage` (e.g. "after vglInit"). For one-off points, not per frame.
 void VitaPerf_LogMemory(const char *stage);
 
+#ifdef PLATFORM_DECK
+// Deck post chain (src/platform/deck/deck_post.c): CPU time of DeckPost_Run, and the GPU time
+// of the post chain measured with GL_TIME_ELAPSED two frames earlier (-1 when unknown).
+// CSV columns post_ms and post_gpu_ms; present_ms comes from VitaPerf_MarkSwapEnd.
+void VitaPerf_DeckMarkPostStart(void);
+void VitaPerf_DeckMarkPostEnd(void);
+void VitaPerf_DeckSetPostGpuMs(double ms);
+#endif
+
 // Core 1 (AgbMain GBA Simulation) Stage Markers
 void VitaPerf_Core1LogicTick(void);
 void VitaPerf_Core1LogicDone(double logicMs);

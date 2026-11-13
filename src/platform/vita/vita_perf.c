@@ -23,6 +23,12 @@ extern int32_t _newlib_heap_size_user;
 
 #define PERF_SUMMARY_PATH VITA_DATA_DIR "perf_summary.txt"
 #define PERF_CSV_PATH     VITA_DATA_DIR "perf_frames.csv"
+#ifdef PLATFORM_DECK
+// Extra CSV columns of the Deck build (present interval and post chain), appended at the end.
+#define PERF_CSV_DECK_COLUMNS ",present_ms,post_ms,post_gpu_ms"
+#else
+#define PERF_CSV_DECK_COLUMNS ""
+#endif
 // A summary block is written after this many 3D frames, or after PERF_WINDOW_MAX_MS
 // (so 2D-only stretches don't make one block last a minute).
 #define SAMPLE_WINDOW_FRAMES 120
@@ -230,7 +236,7 @@ void VitaPerf_Init(void)
                           "c1_logic_ms,c1_vblank_ms,c1_pacing_ms,chunks_vis,chunks_built,draw_calls,verts,events,holes,"
                           "light_ray_ms,light_contact_ms,light_steps,light_cells,light_blocks,light_api_ms,logic_ticks,world_ms,atlas_slots_ms,"
                           "worker_built,worker_dropped,worker_compute_ms,worker_wait_ms,"
-                          "ui2_render_ms,ui2_tick_ms,ui2_quads\n");
+                          "ui2_render_ms,ui2_tick_ms,ui2_quads" PERF_CSV_DECK_COLUMNS "\n");
         fflush(sCsvFile);
     }
 
@@ -376,6 +382,29 @@ void VitaPerf_MarkUiUploadEnd(void)
     sCurUiUpMs = VitaPerf_NowMs() - sUiUpStartMs;
 }
 
+#ifdef PLATFORM_DECK
+static double sDeckLastSwapEndMs = 0.0; // end of the previous 3D swap; 0 after a frame without one
+static double sDeckPresentMs = 0.0;     // end of this swap minus end of the previous one
+static double sDeckPostStartMs = 0.0;
+static double sDeckPostMs = 0.0;        // CPU time of DeckPost_Run this frame
+static double sDeckPostGpuMs = -1.0;    // GPU time of an earlier frame's post chain, -1 unknown
+
+void VitaPerf_DeckMarkPostStart(void)
+{
+    sDeckPostStartMs = VitaPerf_NowMs();
+}
+
+void VitaPerf_DeckMarkPostEnd(void)
+{
+    sDeckPostMs = VitaPerf_NowMs() - sDeckPostStartMs;
+}
+
+void VitaPerf_DeckSetPostGpuMs(const double ms)
+{
+    sDeckPostGpuMs = ms;
+}
+#endif
+
 void VitaPerf_MarkSwapStart(void)
 {
     sSwapStartMs = VitaPerf_NowMs();
@@ -384,6 +413,13 @@ void VitaPerf_MarkSwapStart(void)
 void VitaPerf_MarkSwapEnd(void)
 {
     sCurSwapMs = VitaPerf_NowMs() - sSwapStartMs;
+#ifdef PLATFORM_DECK
+    {
+        const double endMs = sSwapStartMs + sCurSwapMs;
+        sDeckPresentMs = (sDeckLastSwapEndMs > 0.0) ? (endMs - sDeckLastSwapEndMs) : 0.0;
+        sDeckLastSwapEndMs = endMs;
+    }
+#endif
 }
 
 void VitaPerf_SubBegin(const VitaPerfTimer timer)
@@ -750,7 +786,7 @@ void VitaPerf_EndFrame(const bool didRender3D, const uint32_t targetFps)
                 "%.2f,%.2f,%.2f,%d,%d,%d,%u,%s,%u,"
                 "%.2f,%.2f,%u,%u,%u,%.2f,%u,%.2f,%.2f,"
                 "%u,%u,%.2f,%.2f,"
-                "%.3f,%.3f,%u\n",
+                "%.3f,%.3f,%u",
                 sTotalFrameIndex, didRender3D ? 1 : 0, sWindowTargetFps, frameMs, c0Active, otherMs,
                 sCurAtlasMs, sCurSubMs[VITA_PERF_T_ATLAS_COMPOSE], sCurSubMs[VITA_PERF_T_ATLAS_UPLOAD],
                 sCurCount[VITA_PERF_C_ATLAS_UPLOADS],
@@ -769,7 +805,21 @@ void VitaPerf_EndFrame(const bool didRender3D, const uint32_t targetFps)
                 sCurCount[VITA_PERF_C_WORKER_BUILT], sCurCount[VITA_PERF_C_WORKER_DROPPED],
                 sCurSubMs[VITA_PERF_T_WORKER_COMPUTE], sCurSubMs[VITA_PERF_T_WORKER_WAIT],
                 sCurSubMs[VITA_PERF_T_UI2_RENDER], sCurSubMs[VITA_PERF_T_UI2_TICK], sCurCount[VITA_PERF_C_UI2_QUADS]);
+#ifdef PLATFORM_DECK
+        fprintf(sCsvFile, ",%.2f,%.3f,%.3f\n", sDeckPresentMs, sDeckPostMs, sDeckPostGpuMs);
+#else
+        fputc('\n', sCsvFile);
+#endif
     }
+
+#ifdef PLATFORM_DECK
+    // A frame without a 3D swap breaks the chain: the next 3D frame has no present interval.
+    if (!didRender3D)
+        sDeckLastSwapEndMs = 0.0;
+    sDeckPresentMs = 0.0;
+    sDeckPostMs = 0.0;
+    sDeckPostGpuMs = -1.0;
+#endif
 
     // Flush a summary block every SAMPLE_WINDOW_FRAMES 3D frames, or every PERF_WINDOW_MAX_MS
     const bool windowFull = (sWindowRenderCount >= SAMPLE_WINDOW_FRAMES)

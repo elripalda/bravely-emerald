@@ -127,7 +127,7 @@ bool DeckVideo_Init(SDL_Window **outWindow)
         fprintf(stderr, "SDL_GL_CreateContext: %s\n", SDL_GetError());
         return false;
     }
-    SDL_GL_SetSwapInterval(1);
+    DeckVideo_SetSwapInterval(1);
     {
         const char *dbg = getenv("DECK_GL_DEBUG");
         sGlDebug = (dbg != NULL && strcmp(dbg, "0") != 0);
@@ -138,9 +138,11 @@ bool DeckVideo_Init(SDL_Window **outWindow)
         SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, &attrDepth);
         if (sGlDebug)
             remove(GLERR_LOG_PATH);
-        DeckDebugLog("[GL] vendor=%s | renderer=%s | version=%s\n[GL] GL_DEPTH_BITS=%d (SDL depth attr %d) | FBO ext: ARB=%d EXT=%d | DECK_GL_DEBUG=%d\n",
+        DeckDebugLog("[GL] vendor=%s | renderer=%s | version=%s | glsl=%s | vblank_mode=%s\n[GL] GL_DEPTH_BITS=%d (SDL depth attr %d) | FBO ext: ARB=%d EXT=%d | DECK_GL_DEBUG=%d\n",
                      (const char *)glGetString(GL_VENDOR), (const char *)glGetString(GL_RENDERER),
-                     (const char *)glGetString(GL_VERSION), (int)depthBits, attrDepth,
+                     (const char *)glGetString(GL_VERSION),
+                     (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION),
+                     getenv("vblank_mode") ? getenv("vblank_mode") : "unset", (int)depthBits, attrDepth,
                      ext != NULL && strstr(ext, "GL_ARB_framebuffer_object") != NULL,
                      ext != NULL && strstr(ext, "GL_EXT_framebuffer_object") != NULL, (int)sGlDebug);
     }
@@ -196,9 +198,19 @@ void DeckGlViewport(int x, int y, int w, int h)
     glViewport(x, y, w, h);
 }
 
+// sdl2.c asks for the interval every 3D frame (sdl2.c:836, eglSwapInterval -> here). Only a change
+// reaches SDL; each change is logged with SDL's answer, so the log shows whether vsync took.
+static int sSwapInterval = -1000;
+
 void DeckVideo_SetSwapInterval(int interval)
 {
-    SDL_GL_SetSwapInterval(interval);
+    if (interval == sSwapInterval)
+        return;
+    sSwapInterval = interval; // also on failure, so a refused value is logged once, not per frame
+    const int ret = SDL_GL_SetSwapInterval(interval);
+    DeckDebugLog("[GL] swap interval %d: SDL_GL_SetSwapInterval=%d (%s) | SDL_GL_GetSwapInterval=%d | video driver %s\n",
+                 interval, ret, ret == 0 ? "ok" : SDL_GetError(), SDL_GL_GetSwapInterval(),
+                 SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "none");
 }
 
 void DeckVideo_GetViewport(int *x, int *y, int *w, int *h)
