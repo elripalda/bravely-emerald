@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <SDL2/SDL.h>
@@ -79,6 +80,81 @@ static uint32_t DecodePad(SDL_GameController *pad, uint8_t *lx, uint8_t *ly, uin
     return b;
 }
 
+// DECK_AUTOPLAY=<file>: synthetic buttons for unattended tests. Lines "<start_ms> <button> <duration_ms>",
+// '#' starts a comment, times count from the first VitaPlatform_GetMilliseconds call (process start).
+// The bits are ORed into the pad state, so a real pad still works.
+#define AUTOPLAY_MAX 2048
+static struct { uint32_t start, end, bit; bool logged; } sAp[AUTOPLAY_MAX];
+static int sApCount = -1; // -1 = not loaded yet
+
+static void AutoplayLoad(void)
+{
+    static const struct { const char *name; uint32_t bit; } names[] = {
+        {"UP", VITA_BTN_UP}, {"DOWN", VITA_BTN_DOWN}, {"LEFT", VITA_BTN_LEFT}, {"RIGHT", VITA_BTN_RIGHT},
+        {"A", VITA_BTN_A}, {"B", VITA_BTN_B}, {"START", VITA_BTN_START}, {"SELECT", VITA_BTN_SELECT},
+        {"L", VITA_BTN_L}, {"R", VITA_BTN_R}, {"X", VITA_BTN_SQUARE}, {"Y", VITA_BTN_TRIANGLE},
+    };
+    const char *path = getenv("DECK_AUTOPLAY");
+    char line[128], btn[16];
+    unsigned st, dur;
+    FILE *f;
+
+    sApCount = 0;
+    if (path == NULL || (f = fopen(path, "r")) == NULL)
+        return;
+    while (fgets(line, sizeof(line), f) != NULL && sApCount < AUTOPLAY_MAX)
+    {
+        if (sscanf(line, "%u %15s %u", &st, btn, &dur) != 3)
+            continue; // blank or comment line
+        for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+        {
+            if (strcmp(btn, names[i].name) == 0)
+            {
+                sAp[sApCount].start = st;
+                sAp[sApCount].end = st + dur;
+                sAp[sApCount].bit = names[i].bit;
+                sApCount++;
+                break;
+            }
+        }
+    }
+    fclose(f);
+    FILE *lg = fopen(VITA_DATA_DIR "debug.log", "a");
+    if (lg != NULL)
+    {
+        fprintf(lg, "[AUTOPLAY] %s: %d lines\n", path, sApCount);
+        fclose(lg);
+    }
+}
+
+static uint32_t AutoplayButtons(void)
+{
+    uint32_t bits = 0;
+    if (sApCount < 0)
+        AutoplayLoad();
+    if (sApCount == 0)
+        return 0;
+    const uint32_t now = (uint32_t)VitaPlatform_GetMilliseconds();
+    for (int i = 0; i < sApCount; i++)
+    {
+        if (now >= sAp[i].start && now < sAp[i].end)
+        {
+            bits |= sAp[i].bit;
+            if (!sAp[i].logged)
+            {
+                sAp[i].logged = true;
+                FILE *lg = fopen(VITA_DATA_DIR "debug.log", "a");
+                if (lg != NULL)
+                {
+                    fprintf(lg, "[AUTOPLAY] t=%u fire bit 0x%x for %u ms\n", now, sAp[i].bit, sAp[i].end - sAp[i].start);
+                    fclose(lg);
+                }
+            }
+        }
+    }
+    return bits;
+}
+
 void VitaInput_Poll(VitaInputState *const outState)
 {
     uint32_t currentButtons = VITA_BTN_NONE;
@@ -105,6 +181,7 @@ void VitaInput_Poll(VitaInputState *const outState)
     {
         currentButtons = DecodePad(sPad, &lx, &ly, &rx, &ry);
     }
+    currentButtons |= AutoplayButtons();
     sCurrentState.buttonsHeld     = currentButtons;
     sCurrentState.buttonsPressed  = currentButtons & ~sPreviousButtons;
     sCurrentState.buttonsReleased = ~currentButtons & sPreviousButtons;
