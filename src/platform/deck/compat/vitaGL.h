@@ -7,6 +7,9 @@
 // prototypes only: pulling in SDL here clashes with game macros (min/max) in files that include vitaGL.h
 void DeckVideo_Swap(void);
 void DeckVideo_SetSwapInterval(int interval);
+void DeckGlViewport(int x, int y, int w, int h);
+// the 960x544 picture is letterboxed inside the window; FBO passes pass through unchanged
+#define glViewport(x, y, w, h) DeckGlViewport((x), (y), (w), (h))
 
 // vitaGL setup calls have no desktop equivalent: the window and context come from DeckVideo_Init.
 #define SHARK_OPT_FAST 0

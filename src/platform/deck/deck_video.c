@@ -1,5 +1,7 @@
 #include "deck_video.h"
 #include <stdio.h>
+#include <GL/gl.h>
+#include <GL/glext.h>
 
 static SDL_Window *sWindow;
 static SDL_GLContext sContext;
@@ -33,6 +35,47 @@ bool DeckVideo_Init(SDL_Window **outWindow)
 void DeckVideo_Swap(void)
 {
     SDL_GL_SwapWindow(sWindow);
+    // Black letterbox bars: the game clears with its own colour, but only inside the scissor
+    // rect set by DeckGlViewport, so the bars keep what is cleared here.
+    int winW, winH;
+    GLint vp[4];
+    GLfloat cc[4];
+    SDL_GL_GetDrawableSize(sWindow, &winW, &winH);
+    glGetIntegerv(GL_VIEWPORT, vp);
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, cc);
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(0, 0, winW, winH);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(cc[0], cc[1], cc[2], cc[3]);
+    glViewport(vp[0], vp[1], vp[2], vp[3]);
+}
+
+SDL_Window *DeckVideo_GetWindow(void)
+{
+    return sWindow;
+}
+
+// Replaces glViewport in game code (macro in compat/vitaGL.h). The game draws its 960x544 picture
+// with glViewport(0,0,960,544) on the default framebuffer: map that into the letterboxed rect.
+// Any other call (FBO passes, other sizes) is passed through unchanged.
+void DeckGlViewport(int x, int y, int w, int h)
+{
+    GLint fbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
+    if (fbo == 0 && sWindow != NULL && x == 0 && y == 0 && w == DECK_LOGICAL_WIDTH && h == DECK_LOGICAL_HEIGHT)
+    {
+        int vx, vy, vw, vh, winW, winH;
+        DeckVideo_GetViewport(&vx, &vy, &vw, &vh);
+        SDL_GL_GetDrawableSize(sWindow, &winW, &winH);
+        const int glY = winH - (vy + vh);   // GL origin is bottom-left
+        glViewport(vx, glY, vw, vh);
+        glScissor(vx, glY, vw, vh);
+        glEnable(GL_SCISSOR_TEST);
+        return;
+    }
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(x, y, w, h);
 }
 
 void DeckVideo_SetSwapInterval(int interval)
