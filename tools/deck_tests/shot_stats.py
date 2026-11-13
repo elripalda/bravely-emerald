@@ -9,4 +9,3 @@ ma, mb = ImageStat.Stat(a).mean, ImageStat.Stat(b).mean
 print("A mean", [round(x, 2) for x in ma])
 print("B mean", [round(x, 2) for x in mb])
 print("B-A   ", [round(y - x, 2) for x, y in zip(ma, mb)])
-```
