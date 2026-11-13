@@ -115,3 +115,11 @@ Run over SSH: `DISPLAY=:0 XAUTHORITY=$(ls /run/user/1000/xauth_*) XDG_RUNTIME_DI
 Window: fullscreen 1280x800; the 960x544 picture is letterboxed through `DeckGlViewport` (glViewport macro in compat/vitaGL.h) with a scissor, bars cleared black in `DeckVideo_Swap`.
 Open: (1) 8 early `Failed to queue audio: Invalid audio device ID` lines, then none (device opens with pulseaudio/pipewire drivers; alsa fails). Likely calls made before the device is opened; sound not verified by ear. (2) Intro scene shows repeated tile slivers at the left/right edges: the port's "intro margins" generation (fetch_assets.sh step 3) was skipped (needs Pillow). (3) debug.log is absent (VITA_LOGGING off), perf_summary.txt exists but reports Vita labels.
 Screenshot: `spectacle -b -n -f -o file.png` on the Deck host (no import/xwd/scrot in the container).
+
+## Phase 1: swap interval (2026-11-13)
+
+- GL_VERSION `4.6 (Compatibility Profile) Mesa 26.2.7-arch1.1`, GLSL `4.60`, renderer `AMD Custom GPU 0405 (radeonsi, vangogh, ACO)`, `vblank_mode` unset.
+- Session: kwin_wayland with Xwayland; SDL video driver `x11`. No `~/.drirc`.
+- `SDL_GL_SetSwapInterval(1)` after context creation: returns 0, `SDL_GL_GetSwapInterval` = 1.
+- Finding: `VitaPlatform_ApplyTargetFramerate` (sdl2.c:1013) calls `eglSwapInterval` before the window exists; SDL answers -1 "Video subsystem has not been initialized". `DeckVideo_SetSwapInterval` therefore remembers an interval only after SDL accepted it, else the later real call at init would be skipped.
+- Present pacing (60 and 30 FPS) not yet measured: needs a human route (xdotool input is unreliable, spectacle steals focus). Run the brief's Step 7 by hand.
