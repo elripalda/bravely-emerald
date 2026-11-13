@@ -95,3 +95,4 @@ __pycache__/
 /.assets_src/
 /.assets_ok
 /vita/sce_sys_custom/
+.superpowers/
