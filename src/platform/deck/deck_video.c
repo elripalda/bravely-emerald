@@ -1,10 +1,110 @@
 #include "deck_video.h"
 #include <stdio.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include "vita_platform.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
 
 static SDL_Window *sWindow;
 static SDL_GLContext sContext;
+
+// GL diagnostics, enabled by the environment variable DECK_GL_DEBUG (anything but "0").
+static bool sGlDebug;
+static unsigned sFrame;
+#define GLERR_LOG_PATH VITA_DATA_DIR "gl_errors.log"
+#define GLERR_LOG_MAX 20 // lines printed per (where, code); later hits are only counted
+static struct { const char *where; GLenum code; unsigned count; } sErrTable[64];
+
+// Appends one line to userdata/debug.log and flushes at once (the VITA_LOG stream is buffered).
+static void DeckDebugLog(const char *fmt, ...)
+{
+    FILE *f = fopen(VITA_DATA_DIR "debug.log", "a");
+    va_list ap;
+    if (f == NULL)
+        return;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fclose(f);
+}
+
+static const char *GlErrorName(GLenum e)
+{
+    switch (e)
+    {
+    case GL_INVALID_ENUM: return "GL_INVALID_ENUM";
+    case GL_INVALID_VALUE: return "GL_INVALID_VALUE";
+    case GL_INVALID_OPERATION: return "GL_INVALID_OPERATION";
+    case GL_STACK_OVERFLOW: return "GL_STACK_OVERFLOW";
+    case GL_STACK_UNDERFLOW: return "GL_STACK_UNDERFLOW";
+    case GL_OUT_OF_MEMORY: return "GL_OUT_OF_MEMORY";
+    case GL_INVALID_FRAMEBUFFER_OPERATION: return "GL_INVALID_FRAMEBUFFER_OPERATION";
+    default: return "unknown";
+    }
+}
+
+static void GlErrLog(const char *fmt, ...)
+{
+    FILE *f = fopen(GLERR_LOG_PATH, "a");
+    va_list ap;
+    if (f == NULL)
+        return;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fclose(f);
+}
+
+// Drains glGetError; each distinct (where, code) is logged GLERR_LOG_MAX times, then counted.
+// Main (GL context) thread only. One branch when DECK_GL_DEBUG is off.
+void DeckGl_CheckErrors(const char *where)
+{
+    GLenum e;
+    if (!sGlDebug)
+        return;
+    while ((e = glGetError()) != GL_NO_ERROR)
+    {
+        int i;
+        for (i = 0; i < 64 && sErrTable[i].where != NULL; i++)
+            if (sErrTable[i].code == e && strcmp(sErrTable[i].where, where) == 0)
+                break;
+        if (i == 64)
+            continue; // table full
+        if (sErrTable[i].where == NULL)
+        {
+            sErrTable[i].where = where;
+            sErrTable[i].code = e;
+        }
+        sErrTable[i].count++;
+        if (sErrTable[i].count <= GLERR_LOG_MAX)
+        {
+            fprintf(stderr, "GLERR frame=%u where=%s code=0x%04x (%s)\n", sFrame, where, (unsigned)e, GlErrorName(e));
+            GlErrLog("GLERR frame=%u where=%s code=0x%04x (%s) count=%u\n", sFrame, where, (unsigned)e, GlErrorName(e), sErrTable[i].count);
+        }
+    }
+}
+
+// Logs glCheckFramebufferStatus for each FBO to userdata/debug.log (always) and gl_errors.log (debug).
+void DeckGlCheckFbos(unsigned int diorama, unsigned int scratch)
+{
+    const unsigned int fbos[2] = { diorama, scratch };
+    const char *names[2] = { "diorama", "scratch" };
+    GLint prev = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev);
+    for (int i = 0; i < 2; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, fbos[i]);
+        const GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        DeckDebugLog("[GL] FBO %s (id %u): status 0x%04x %s\n", names[i], fbos[i], (unsigned)st,
+                     st == GL_FRAMEBUFFER_COMPLETE ? "COMPLETE" : "INCOMPLETE");
+        if (sGlDebug)
+            GlErrLog("FBO %s (id %u): status 0x%04x %s\n", names[i], fbos[i], (unsigned)st,
+                     st == GL_FRAMEBUFFER_COMPLETE ? "COMPLETE" : "INCOMPLETE");
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev);
+}
 
 bool DeckVideo_Init(SDL_Window **outWindow)
 {
@@ -28,12 +128,30 @@ bool DeckVideo_Init(SDL_Window **outWindow)
         return false;
     }
     SDL_GL_SetSwapInterval(1);
+    {
+        const char *dbg = getenv("DECK_GL_DEBUG");
+        sGlDebug = (dbg != NULL && strcmp(dbg, "0") != 0);
+        GLint depthBits = -1;
+        int attrDepth = -1;
+        const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+        glGetIntegerv(GL_DEPTH_BITS, &depthBits);
+        SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, &attrDepth);
+        if (sGlDebug)
+            remove(GLERR_LOG_PATH);
+        DeckDebugLog("[GL] vendor=%s | renderer=%s | version=%s\n[GL] GL_DEPTH_BITS=%d (SDL depth attr %d) | FBO ext: ARB=%d EXT=%d | DECK_GL_DEBUG=%d\n",
+                     (const char *)glGetString(GL_VENDOR), (const char *)glGetString(GL_RENDERER),
+                     (const char *)glGetString(GL_VERSION), (int)depthBits, attrDepth,
+                     ext != NULL && strstr(ext, "GL_ARB_framebuffer_object") != NULL,
+                     ext != NULL && strstr(ext, "GL_EXT_framebuffer_object") != NULL, (int)sGlDebug);
+    }
     *outWindow = sWindow;
     return true;
 }
 
 void DeckVideo_Swap(void)
 {
+    sFrame++;
+    DeckGl_CheckErrors("swap");
     SDL_GL_SwapWindow(sWindow);
     // Black letterbox bars: the game clears with its own colour, but only inside the scissor
     // rect set by DeckGlViewport, so the bars keep what is cleared here.

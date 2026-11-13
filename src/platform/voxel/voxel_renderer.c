@@ -3650,8 +3650,11 @@ bool VoxelRenderer_Init(void)
     glBindFramebuffer(GL_FRAMEBUFFER, sScratchFbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sScratchColorTex, 0);
 
+#ifdef PLATFORM_DECK
+    DeckGlCheckFbos(sDioramaFbo, sScratchFbo); // logs glCheckFramebufferStatus, rebinds the previous FBO
+#endif
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    sDioramaFboReady = (sDioramaFbo != 0 && sScratchFbo != 0);
+    sDioramaFboReady =(sDioramaFbo != 0 && sScratchFbo != 0);
 
     MakeFog();
     MakeWeather();

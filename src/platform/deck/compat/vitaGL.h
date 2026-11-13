@@ -8,6 +8,7 @@
 void DeckVideo_Swap(void);
 void DeckVideo_SetSwapInterval(int interval);
 void DeckGlViewport(int x, int y, int w, int h);
+void DeckGlCheckFbos(unsigned int diorama, unsigned int scratch); // logs FBO completeness (deck_video.c)
 // the 960x544 picture is letterboxed inside the window; FBO passes pass through unchanged
 #define glViewport(x, y, w, h) DeckGlViewport((x), (y), (w), (h))
 
