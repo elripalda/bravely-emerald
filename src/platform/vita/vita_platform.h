@@ -6,7 +6,12 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifdef PLATFORM_DECK
+// Relative to the working directory; the launcher script changes into the install folder.
+#define VITA_DATA_DIR "userdata/"
+#else
 #define VITA_DATA_DIR "ux0:data/POKEVITA/"
+#endif
 
 struct VitaLocalTime
 {
