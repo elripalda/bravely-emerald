@@ -3,7 +3,9 @@
 
 #include <GL/gl.h>
 #include <GL/glext.h>
-#include "../deck_video.h"
+// prototypes only: pulling in SDL here clashes with game macros (min/max) in files that include vitaGL.h
+void DeckVideo_Swap(void);
+void DeckVideo_SetSwapInterval(int interval);
 
 // vitaGL setup calls have no desktop equivalent: the window and context come from DeckVideo_Init.
 #define SHARK_OPT_FAST 0
@@ -19,6 +21,8 @@ static inline void vglUseTripleBuffering(int v) { (void)v; }
 static inline void vglSwapResolution(int w, int h) { (void)w; (void)h; }
 static inline void vglSwapBuffers(int hasCommonDialog) { (void)hasCommonDialog; DeckVideo_Swap(); }
 static inline void eglSwapInterval(void *display, int interval) { (void)display; DeckVideo_SetSwapInterval(interval); }
+// replaces vglGetTexDataPointer: no direct texel access on desktop GL, callers fall back to glTexSubImage2D
+static inline void *vglGetTexDataPointer(unsigned int target) { (void)target; return 0; }
 int vglInitWithCustomSizes(int, int, int, int, int, int, int, int);
 
 #endif
