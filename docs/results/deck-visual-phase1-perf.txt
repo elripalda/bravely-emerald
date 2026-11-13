@@ -13,3 +13,44 @@ NOT MEASURED (same reason). Verified without 3D frames:
 [GL] vendor=AMD | renderer=AMD Custom GPU 0405 (radeonsi, vangogh, ACO, DRM 3.65, 6.18.50-valve2-1-neptune-618-gc7289a96b14d) | version=4.6 (Compatibility Profile) Mesa 26.2.7-arch1.1 | glsl=4.60 | vblank_mode=unset
 CSV header ends with: ui2_quads,present_ms,post_ms,post_gpu_ms
 Session: kwin_wayland + Xwayland (SDL video driver x11), no ~/.drirc, vblank_mode unset.
+
+== autoplay runs (2026-11-13; tools/deck/run_autoplay.sh, field.txt, 200 s, test copy dist-test) ==
+-- voxel_fps=1 (60) --
+3D frames: 10798
+frame ms: avg 6.05  min 0.34  max 18.07
+FPS: avg 165.2  1% low 59.2  0.1% low 56.5
+frame ms p99 16.70
+over 16.7 ms: 92 (0.85%)  over 33.3 ms: 0 (0.00%)
+draw3D ms: avg 0.03  max 0.16
+chunk build (Core 0): 1825 chunks in 74 frames, 0.20 ms/chunk, 4.89 ms/frame-with-build
+chunk build (worker): 598 chunks, 0.52 ms/chunk
+present ms: avg 16.67  p50 16.67  p99 17.62  max 265.31  (shown FPS 60.0)
+present over 17.5 ms: 129 (1.20%)  over 34.2 ms: 1 (0.01%)
+post: not run
+--- last summary lines ---
+  FRAME (3D): p50 6.49 | p95 6.61 | p99 6.64 | max 6.66 ms | over 16.7 ms: 0 | over 33.3 ms: 0
+  DECK: RSS 120984 KB (session max 124216 KB) | process CPU 13% of one core (window) | GPU busy 0%
+  SESSION (3D): 10680 frames | over 16.7 ms: 182 (1.70%) | over 33.3 ms: 0 (0.00%) | max 18.07 ms
+[MEMORY map warm-up done] RSS 120984 KB | process CPU 26697 ms
+present_ms percentiles (3D frames, n=10748): p50 16.67  p95 16.85  p99 17.62
+-- voxel_fps=0 (30) --
+3D frames: 10821
+frame ms: avg 4.23  min 0.34  max 18.69
+FPS: avg 236.5  1% low 111.8  0.1% low 70.5
+frame ms p99 7.52
+over 16.7 ms: 1 (0.01%)  over 33.3 ms: 0 (0.00%)
+draw3D ms: avg 0.03  max 0.50
+chunk build (Core 0): 1825 chunks in 74 frames, 0.19 ms/chunk, 4.65 ms/frame-with-build
+chunk build (worker): 598 chunks, 0.52 ms/chunk
+present ms: avg 16.65  p50 16.67  p99 17.05  max 23.08  (shown FPS 60.1)
+present over 17.5 ms: 35 (0.32%)  over 34.2 ms: 0 (0.00%)
+post: not run
+--- last summary lines ---
+[MEMORY map warm-up done] RSS 121528 KB | process CPU 26569 ms
+  FRAME (3D): p50 0.71 | p95 7.58 | p99 7.62 | max 7.64 ms | over 16.7 ms: 0 | over 33.3 ms: 0
+  DECK: RSS 121528 KB (session max 123204 KB) | process CPU 10% of one core (window) | GPU busy 38%
+  SESSION (3D): 10800 frames | over 16.7 ms: 1 (0.01%) | over 33.3 ms: 0 (0.00%) | max 18.69 ms
+present_ms percentiles (n=10771): p50 16.67  p95 16.83  p99 17.05
+Verdict: 60 FPS mode is paced to the display (present p50 16.67 ms, vsync took: SDL_GL_SetSwapInterval(1)=0, Get=1, x11/Xwayland).
+30 FPS mode is NOT: present stays 16.67 ms. Log has only a failed pre-window 'swap interval 2' (-1, video not initialised) followed by the init 'interval 1'; no later interval-2 request occurs on Deck.
+Overworld reached: 10.8k 3D frames, chunk builds, [AUTOPLAY] fire lines in debug.log. 15 s screenshot shows the Continue menu; end screenshot is black (spectacle cannot capture the GL window).
