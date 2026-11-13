@@ -391,6 +391,11 @@ if(DECK)
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECK_DIST}/app0"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/voxel" "${DECK_DIST}/app0/voxel"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/ui" "${DECK_DIST}/app0/ui"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECK_DIST}/userdata"
+        COMMAND "${CMAKE_COMMAND}" -E copy "${ROOT}/tools/deck/run.sh" "${DECK_DIST}/run.sh"
+        COMMAND chmod +x "${DECK_DIST}/run.sh"
+        # Stage 1 runs 2D only: seed settings.txt (voxel_3d=0) unless one already exists.
+        COMMAND sh -c "test -f '${DECK_DIST}/userdata/settings.txt' || cp '${ROOT}/tools/deck/settings.txt' '${DECK_DIST}/userdata/settings.txt'"
         COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:pokeemerald>" "${DECK_DIST}/pokeemerald")
     # The VPK also packs followers/ and ui2/ (each only when present).
     if(EXISTS "${ROOT}/assets/followers")

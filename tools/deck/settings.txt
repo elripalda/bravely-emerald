@@ -1,0 +1,2 @@
+voxel_3d=0
+voxel_battle=0
