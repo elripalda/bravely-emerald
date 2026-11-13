@@ -9,15 +9,23 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    if(NOT DEFINED ENV{VITASDK})
-        message(FATAL_ERROR "VITASDK is not set; see README.md")
-    endif()
-    set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
-endif()
+option(DECK "Build for the Steam Deck (32-bit x86 Linux) instead of the PS Vita" OFF)
 
-project(pokeemerald_vita C)
-include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
+if(DECK)
+    # 32-bit x86: the game data is assembled with 4-byte pointers (.4byte).
+    set(CMAKE_C_FLAGS_INIT "-m32")
+    set(CMAKE_EXE_LINKER_FLAGS_INIT "-m32")
+    project(pokeemerald_deck C)
+else()
+    if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+        if(NOT DEFINED ENV{VITASDK})
+            message(FATAL_ERROR "VITASDK is not set; see README.md")
+        endif()
+        set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
+    endif()
+    project(pokeemerald_vita C)
+    include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
+endif()
 
 set(VITA_APP_NAME "Emerald Vita")   # neutral name; change it for your own builds
 set(VITA_TITLEID  "PKEM00001")
@@ -36,10 +44,22 @@ if(NOT EXISTS "${PREPROC}" OR NOT EXISTS "${ROOT}/include/constants/map_groups.h
                         "  make -f make_tools.mk\n  make -f vita/assets.mk -j8")
 endif()
 
-find_program(VITA_CPP     arm-vita-eabi-cpp     HINTS "$ENV{VITASDK}/bin" REQUIRED)
-find_program(VITA_AS      arm-vita-eabi-as      HINTS "$ENV{VITASDK}/bin" REQUIRED)
-find_program(VITA_LD      arm-vita-eabi-ld      HINTS "$ENV{VITASDK}/bin" REQUIRED)
-find_program(VITA_OBJCOPY arm-vita-eabi-objcopy HINTS "$ENV{VITASDK}/bin" REQUIRED)
+if(DECK)
+    find_program(VITA_CPP     cpp     REQUIRED)
+    find_program(VITA_AS      as      REQUIRED)
+    find_program(VITA_LD      ld      REQUIRED)
+    find_program(VITA_OBJCOPY objcopy REQUIRED)
+else()
+    find_program(VITA_CPP     arm-vita-eabi-cpp     HINTS "$ENV{VITASDK}/bin" REQUIRED)
+    find_program(VITA_AS      arm-vita-eabi-as      HINTS "$ENV{VITASDK}/bin" REQUIRED)
+    find_program(VITA_LD      arm-vita-eabi-ld      HINTS "$ENV{VITASDK}/bin" REQUIRED)
+    find_program(VITA_OBJCOPY arm-vita-eabi-objcopy HINTS "$ENV{VITASDK}/bin" REQUIRED)
+endif()
+# Aliases so shared pipeline code reads the same on both targets.
+set(DECK_CPP "${VITA_CPP}")
+set(DECK_AS "${VITA_AS}")
+set(DECK_LD "${VITA_LD}")
+set(DECK_OBJCOPY "${VITA_OBJCOPY}")
 
 set(GAME_DEFINES -DNONMATCHING -DPORTABLE -DPLATFORM_SDL2 -DPLATFORM_VITA -DRENDERER_FAST_DRAW -DVOXEL_SUPPORTED -DMODERN=1 -DUBFIX)
 option(VITA_LOGGING "Write VITA_LOG output to ux0:data/POKEVITA/debug.log" OFF)
@@ -54,11 +74,28 @@ option(VITA_DRAW_SELFCHECK "Periodically compare parallel drawing against sequen
 if(VITA_DRAW_SELFCHECK)
     list(APPEND GAME_DEFINES -DVITA_DRAW_SELFCHECK)
 endif()
+if(DECK)
+    # Keep PLATFORM_VITA: the port's UI and renderer code is guarded by it. PLATFORM_DECK marks
+    # the places where the Deck differs.
+    list(APPEND GAME_DEFINES -DPLATFORM_DECK)
+    set(ASM_ARCH --32)
+    set(ASM_WORD ".long")
+    set(LD_EMULATION -m elf_i386)
+else()
+    set(ASM_ARCH -march=armv7-a)
+    set(ASM_WORD ".word")
+    set(LD_EMULATION "")
+endif()
 string(REPLACE ";" " " GAME_DEFINES_STR "${GAME_DEFINES}")
 
 # --- C sources: cpp -> preproc (charmap strings, INCBIN) -> compiled below ---
 file(GLOB_RECURSE GAME_C CONFIGURE_DEPENDS "${ROOT}/src/*.c" "${ROOT}/gflib/*.c")
 list(FILTER GAME_C EXCLUDE REGEX "\\.inc\\.c$")
+if(DECK)
+    list(FILTER GAME_C EXCLUDE REGEX "/src/platform/vita/(vita_platform|vita_input)\\.c$")
+else()
+    list(FILTER GAME_C EXCLUDE REGEX "/src/platform/deck/")
+endif()
 
 # Lets IMPLICIT_DEPENDS follow #include into these folders, so header edits
 # regenerate the preprocessed sources that use them.
@@ -107,7 +144,7 @@ foreach(SOURCE IN LISTS DATA_ASM SONG_ASM)
         add_custom_command(
             OUTPUT "${OUTPUT}"
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${OUTPUT_DIR}"
-            COMMAND /bin/sh -c "cd '${ROOT}' && sed -e 's/\\.4byte/\\.word/g;s/\\.2byte/\\.short/g' '${RELATIVE_SOURCE}' > '${OUTPUT}.s' && '${VITA_AS}' -march=armv7-a -I sound -o '${OUTPUT}' '${OUTPUT}.s'"
+            COMMAND /bin/sh -c "cd '${ROOT}' && sed -e 's/\\.4byte/${ASM_WORD}/g;s/\\.2byte/\\.short/g' '${RELATIVE_SOURCE}' > '${OUTPUT}.s' && '${VITA_AS}' ${ASM_ARCH} -I sound -o '${OUTPUT}' '${OUTPUT}.s'"
             DEPENDS "${SOURCE}"
             VERBATIM)
     else()
@@ -116,7 +153,7 @@ foreach(SOURCE IN LISTS DATA_ASM SONG_ASM)
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${OUTPUT_DIR}"
             # special_ids.inc is found through -I: an absolute path written inside the .s
             # would not be translated for a native assembler under MSYS2.
-            COMMAND /bin/sh -c "cd '${ROOT}' && { printf '.include \"special_ids.inc\"\\n'; '${PREPROC}' '${RELATIVE_SOURCE}' charmap.txt | '${VITA_CPP}' -I include -DMODERN=1 -DPORTABLE -DUBFIX | '${PREPROC}' -ie '${RELATIVE_SOURCE}' charmap.txt; } > '${OUTPUT}.s' && '${VITA_AS}' -march=armv7-a -I . -I sound -I '${CMAKE_BINARY_DIR}/generated' -o '${OUTPUT}' '${OUTPUT}.s'"
+            COMMAND /bin/sh -c "cd '${ROOT}' && { printf '.include \"special_ids.inc\"\\n'; '${PREPROC}' '${RELATIVE_SOURCE}' charmap.txt | '${VITA_CPP}' -I include -DMODERN=1 -DPORTABLE -DUBFIX | '${PREPROC}' -ie '${RELATIVE_SOURCE}' charmap.txt; } > '${OUTPUT}.s' && '${VITA_AS}' ${ASM_ARCH} -I . -I sound -I '${CMAKE_BINARY_DIR}/generated' -o '${OUTPUT}' '${OUTPUT}.s'"
             DEPENDS "${SOURCE}" "${PREPROC}" "${ROOT}/charmap.txt" "${SPECIAL_IDS}"
             VERBATIM)
     endif()
@@ -136,7 +173,7 @@ endforeach()
 file(WRITE "${GAME_DATA_RSP}" "${GAME_DATA_RSP_CONTENT}")
 add_custom_command(
     OUTPUT "${GAME_DATA_OBJECT}"
-    COMMAND "${VITA_LD}" -r -o game_data.o.tmp @game_data.rsp
+    COMMAND "${VITA_LD}" ${LD_EMULATION} -r -o game_data.o.tmp @game_data.rsp
     COMMAND "${VITA_OBJCOPY}" --rename-section .rodata=.data,alloc,load,data,contents game_data.o.tmp game_data.o
     DEPENDS ${GENERATED_ASM} "${GAME_DATA_RSP}"
     WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/generated"
@@ -150,7 +187,7 @@ set_source_files_properties("${GAME_DATA_OBJECT}" PROPERTIES GENERATED TRUE EXTE
 # restarts the game (src/platform/vita/vita_reset.c). The platform side (SDL, the parallel
 # renderer with its threads, widescreen, the port menu) stays outside, as does game_data.o: ROM
 # data, read only.
-set(PLATFORM_SIDE_REGEX "/src/platform/(sdl2|widescreen|gba_fast_draw|gba_fast_draw_b|gba_fast_draw_c)\\.c$|/src/platform/(vita|voxel|ui)/")
+set(PLATFORM_SIDE_REGEX "/src/platform/(sdl2|widescreen|gba_fast_draw|gba_fast_draw_b|gba_fast_draw_c)\\.c$|/src/platform/(vita|voxel|ui|deck)/")
 set(GAME_SIDE_C)
 set(PLATFORM_SIDE_C)
 foreach(OUTPUT IN LISTS GENERATED_C)
@@ -163,16 +200,19 @@ endforeach()
 
 # -fno-strict-aliasing / -fwrapv: the decomp relies on type punning and signed overflow
 # that the GBA tolerates; without them GCC 15 may optimise that code away.
-set(VITA_CPU_TUNING_OPTIONS
-    -mcpu=cortex-a9
-    -mtune=cortex-a9
-    -mfpu=neon
-    -mfloat-abi=hard)
+if(DECK)
+    # Deck CPU is Zen 2. SSE2 is the baseline for the PPU conversion (Task 6).
+    set(VITA_CPU_TUNING_OPTIONS -march=znver2 -mtune=znver2 -msse2)
+    set(OPT_LEVEL -O3)
+else()
+    set(VITA_CPU_TUNING_OPTIONS -mcpu=cortex-a9 -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard)
+    set(OPT_LEVEL -O2)
+endif()
 
 # Options shared by both sides.
 set(COMMON_COMPILE_OPTIONS
     -std=gnu99
-    -O2
+    ${OPT_LEVEL}
     ${VITA_CPU_TUNING_OPTIONS}
     -fno-strict-aliasing
     -fwrapv
@@ -211,7 +251,7 @@ file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/game_side.abs.rsp"
 add_custom_command(
     OUTPUT "${GAME_COMBINED_OBJECT}"
     COMMAND /bin/sh -c "sed -e 's|^${CMAKE_BINARY_DIR}/||' game_side.abs.rsp > game_side.rsp"
-    COMMAND "${VITA_LD}" -r -d -o game_combined.o.tmp @game_side.rsp
+    COMMAND "${VITA_LD}" ${LD_EMULATION} -r -d -o game_combined.o.tmp @game_side.rsp
     COMMAND "${VITA_OBJCOPY}" --rename-section .data=gamedata --rename-section .bss=gamebss game_combined.o.tmp game_combined.o
     DEPENDS game_side $<TARGET_OBJECTS:game_side> "${CMAKE_BINARY_DIR}/game_side.abs.rsp"
     WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -223,30 +263,39 @@ set_source_files_properties("${GAME_COMBINED_OBJECT}" PROPERTIES GENERATED TRUE 
 add_executable(pokeemerald ${PLATFORM_SIDE_C} "${GAME_COMBINED_OBJECT}" "${GAME_DATA_OBJECT}")
 target_include_directories(pokeemerald PRIVATE "${ROOT}" "${ROOT}/sound")
 target_compile_options(pokeemerald PRIVATE ${PLATFORM_COMPILE_OPTIONS})
-# SDL2's own config carries its stub libraries, which differ between VitaSDK builds
-# (e.g. SDL2 built with the vitaGL backend also needs vitaGL and its dependencies).
-# SDL2 renders through GXM directly (VitaSDK 2026.08); no vitaGL. SDL2_image loads the border art.
-find_package(SDL2 REQUIRED CONFIG)
-find_package(SDL2_image REQUIRED CONFIG)
-target_link_libraries(pokeemerald PRIVATE
-    SDL2_image::SDL2_image-static
-    SDL2::SDL2-static
-    vitaGL
-    vitashark
-    mathneon
-    SceShaccCgExt
-    SceShaccCg_stub
-    SceKernelDmacMgr_stub
-    taihen_stub
-    SceGxm_stub
-    SceDisplay_stub
-    ScePower_stub
-    SceAudio_stub
-    SceCtrl_stub
-    SceTouch_stub
-    SceRtc_stub
-    stdc++
-    m)
+if(DECK)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DECK_LIBS REQUIRED sdl2 SDL2_image gl)
+    target_include_directories(pokeemerald PRIVATE "${ROOT}/src/platform/deck/compat" ${DECK_LIBS_INCLUDE_DIRS})
+    target_link_libraries(pokeemerald PRIVATE ${DECK_LIBS_LDFLAGS} pthread m)
+else()
+    # SDL2's own config carries its stub libraries, which differ between VitaSDK builds
+    # (e.g. SDL2 built with the vitaGL backend also needs vitaGL and its dependencies).
+    # SDL2 renders through GXM directly (VitaSDK 2026.08); no vitaGL. SDL2_image loads the border art.
+    find_package(SDL2 REQUIRED CONFIG)
+    find_package(SDL2_image REQUIRED CONFIG)
+    target_link_libraries(pokeemerald PRIVATE
+        SDL2_image::SDL2_image-static
+        SDL2::SDL2-static
+        vitaGL
+        vitashark
+        mathneon
+        SceShaccCgExt
+        SceShaccCg_stub
+        SceKernelDmacMgr_stub
+        taihen_stub
+        SceGxm_stub
+        SceDisplay_stub
+        ScePower_stub
+        SceAudio_stub
+        SceCtrl_stub
+        SceTouch_stub
+        SceRtc_stub
+        stdc++
+        m)
+endif()
+
+if(NOT DECK)
 target_link_options(pokeemerald PRIVATE -Wl,-z,max-page-size=0x10000 -Wl,-z,common-page-size=0x10000)
 # libwebp (pulled in by SDL2_image) needs pthread. CMake appends transitive dependencies after
 # the target's own libraries, so it has to go at the very end of the link line.
@@ -324,3 +373,23 @@ add_custom_command(
     VERBATIM)
 add_custom_target(pokeemerald-vpk ALL DEPENDS "${CMAKE_BINARY_DIR}/pokeemerald.vpk")
 add_dependencies(pokeemerald-vpk eboot.bin-self)
+endif()  # NOT DECK
+
+if(DECK)
+    # Platform-side sources: Vita-SDK files are swapped for the Deck versions by the source filter above.
+    set(DECK_DIST "${CMAKE_BINARY_DIR}/dist")
+    add_custom_command(TARGET pokeemerald POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECK_DIST}/app0"
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/voxel" "${DECK_DIST}/app0/voxel"
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/ui" "${DECK_DIST}/app0/ui"
+        COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:pokeemerald>" "${DECK_DIST}/pokeemerald")
+    # The VPK also packs followers/ and ui2/ (each only when present).
+    if(EXISTS "${ROOT}/assets/followers")
+        add_custom_command(TARGET pokeemerald POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/followers" "${DECK_DIST}/app0/followers")
+    endif()
+    if(EXISTS "${ROOT}/assets/ui2")
+        add_custom_command(TARGET pokeemerald POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/ui2" "${DECK_DIST}/app0/ui2")
+    endif()
+endif()
