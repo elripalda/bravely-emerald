@@ -111,13 +111,13 @@ foreach(SOURCE IN LISTS GAME_C)
     set(EXTRA_PREPROC_FLAGS "")
     if(DECK)
         # the cpp step also sees platform files that include SDL and the vitaGL/psp2 compat headers
-        set(EXTRA_PREPROC_FLAGS "-I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat' -I'${ROOT}/src/platform/vita'")
+        set(EXTRA_PREPROC_FLAGS "-m32 -march=znver2 -msse2 -I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat' -I'${ROOT}/src/platform/vita'")
     endif()
     # Stage scenes (one whole GBA picture each): their VBlank callbacks are reported to
     # vita_stage.c through a forced include, so the platform knows a stage is on screen without
     # editing the scene code (the approach of Emerald 3DS, compat/ctr_gba_stage.h).
     if(RELATIVE_SOURCE MATCHES "src/(intro|title_screen|credits|cable_car|rayquaza_scene)\\.c$")
-        set(EXTRA_PREPROC_FLAGS "-DCTR_GBA_STAGE -include '${ROOT}/src/platform/vita/compat/ctr_gba_stage.h'")
+        set(EXTRA_PREPROC_FLAGS "${EXTRA_PREPROC_FLAGS} -DCTR_GBA_STAGE -include '${ROOT}/src/platform/vita/compat/ctr_gba_stage.h'")
     endif()
     add_custom_command(
         OUTPUT "${OUTPUT}"

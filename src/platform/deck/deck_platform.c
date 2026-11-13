@@ -1,3 +1,4 @@
+#define _GNU_SOURCE   /* pthread_setname_np */
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
