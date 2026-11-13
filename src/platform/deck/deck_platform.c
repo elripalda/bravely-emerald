@@ -266,3 +266,37 @@ int64_t VitaPlatform_GetWallSeconds(void)
 
 // replaces the Vita newlib heap-size variable (vita_platform.c); vita_perf.c reads it for the HUD
 int32_t _newlib_heap_size_user = 64 * 1024 * 1024;
+
+/* Linked with -Wl,--wrap=fopen: replaces Vita path prefixes for game code that fopens them directly
+ * (voxel_file.h, follower_mon.c, ui_stall.c). "app0:" -> "app0/", "ux0:data/POKEVITA/" -> "userdata/". */
+FILE *__real_fopen(const char *, const char *);
+
+FILE *__wrap_fopen(const char *path, const char *mode)
+{
+    char buf[512];
+    const char *prefix = NULL;
+    const char *repl = NULL;
+
+    if (path != NULL)
+    {
+        if (strncmp(path, "ux0:data/POKEVITA/", 18) == 0)
+        {
+            prefix = "ux0:data/POKEVITA/";
+            repl = "userdata/";
+        }
+        else if (strncmp(path, "app0:", 5) == 0)
+        {
+            prefix = "app0:";
+            repl = "app0/";
+        }
+    }
+    if (prefix != NULL)
+    {
+        int n = snprintf(buf, sizeof(buf), "%s%s", repl, path + strlen(prefix));
+        if (n > 0 && (size_t)n < sizeof(buf))
+        {
+            return __real_fopen(buf, mode);
+        }
+    }
+    return __real_fopen(path, mode);
+}

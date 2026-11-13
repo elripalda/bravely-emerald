@@ -277,6 +277,8 @@ if(DECK)
     target_include_directories(pokeemerald PRIVATE "${ROOT}/src/platform/deck/compat" "${ROOT}/src/platform/vita" "${DECK_DEPS32}/include" ${DECK_LIBS_STATIC_INCLUDE_DIRS})
     target_compile_options(pokeemerald PRIVATE ${DECK_LIBS_STATIC_CFLAGS_OTHER})
     target_link_libraries(pokeemerald PRIVATE ${DECK_LIBS_STATIC_LDFLAGS} -lm -ldl -pthread)
+    # Map Vita asset path prefixes (app0:, ux0:data/POKEVITA/) onto the dist layout; see __wrap_fopen in deck_platform.c.
+    target_link_options(pokeemerald PRIVATE -Wl,--wrap=fopen)
 else()
     # SDL2's own config carries its stub libraries, which differ between VitaSDK builds
     # (e.g. SDL2 built with the vitaGL backend also needs vitaGL and its dependencies).
