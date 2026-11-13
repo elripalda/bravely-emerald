@@ -2,7 +2,11 @@
 // Before global.h, whose macros clash with the C library headers SDL pulls in (as in sdl2.c).
 #include <stdint.h>
 #include <SDL2/SDL.h>
+#ifdef __ARM_NEON
 #include <arm_neon.h>
+#else
+#include <emmintrin.h>
+#endif
 #include "vita/vita_platform.h"
 #endif
 #include "global.h"
@@ -3137,7 +3141,11 @@ static void CopyLineToTexture(const uint16_t *pixels, int32_t i)
 {
     const uint16_t *src;
     uint16_t *dst;
+#ifdef __ARM_NEON
     const uint16x8_t mask5 = vdupq_n_u16(0x1F);
+#else
+    const __m128i mask5 = _mm_set1_epi16(0x1F);
+#endif
 
     int32_t x0 = gFastDrawWide.output ? 0 : FRAME_LINE_X0;
     int32_t x1 = FRAME_LINE_WIDTH - x0;
@@ -3147,6 +3155,7 @@ static void CopyLineToTexture(const uint16_t *pixels, int32_t i)
     src = &pixels[i * FRAME_LINE_WIDTH];
     dst = (uint16_t *)((uint8_t *)gFastDrawTexture + i * gFastDrawTexturePitch);
     // All 288 pixels with widescreen, else the middle 240. 24, 240 and 288 are multiples of 8.
+#ifdef __ARM_NEON
     for (int32_t x = x0; x < x1; x += 8)
     {
         uint16x8_t c = vld1q_u16(src + x);
@@ -3156,6 +3165,18 @@ static void CopyLineToTexture(const uint16_t *pixels, int32_t i)
         uint16x8_t g6 = vorrq_u16(vshlq_n_u16(g, 1), vshrq_n_u16(g, 4));
         vst1q_u16(dst + x, vorrq_u16(vorrq_u16(vshlq_n_u16(r, 11), vshlq_n_u16(g6, 5)), b));
     }
+#else
+    for (int32_t x = x0; x < x1; x += 8)
+    {
+        __m128i c = _mm_loadu_si128((const __m128i *)(src + x));
+        __m128i r = _mm_and_si128(c, mask5);
+        __m128i g = _mm_and_si128(_mm_srli_epi16(c, 5), mask5);
+        __m128i b = _mm_and_si128(_mm_srli_epi16(c, 10), mask5);
+        __m128i g6 = _mm_or_si128(_mm_slli_epi16(g, 1), _mm_srli_epi16(g, 4));
+        __m128i out = _mm_or_si128(_mm_or_si128(_mm_slli_epi16(r, 11), _mm_slli_epi16(g6, 5)), b);
+        _mm_storeu_si128((__m128i *)(dst + x), out);
+    }
+#endif
 }
 
 // Draws lines first, first+step, ... from their captures (one copy of this per core).
