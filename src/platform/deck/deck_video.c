@@ -206,8 +206,9 @@ void DeckVideo_SetSwapInterval(int interval)
 {
     if (interval == sSwapInterval)
         return;
-    sSwapInterval = interval; // also on failure, so a refused value is logged once, not per frame
     const int ret = SDL_GL_SetSwapInterval(interval);
+    if (ret == 0)
+        sSwapInterval = interval; // remembered only on success: a call before the window exists (sdl2.c:1013) must not mask the real one
     DeckDebugLog("[GL] swap interval %d: SDL_GL_SetSwapInterval=%d (%s) | SDL_GL_GetSwapInterval=%d | video driver %s\n",
                  interval, ret, ret == 0 ? "ok" : SDL_GetError(), SDL_GL_GetSwapInterval(),
                  SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "none");
