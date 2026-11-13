@@ -36,6 +36,7 @@ sleep "$secs"
 [ -n "$SPECTACLE" ] && spectacle -b -n -f -o "$out/desktop_end.png"
 ps -eo pid,args | grep '[.]/pokeemerald'
 killgame
+cp /tmp/game.out "$out/game.out" 2>/dev/null
 for f in perf_frames.csv perf_summary.txt gl_errors.log debug.log; do cp "$test/userdata/$f" "$out/" 2>/dev/null; done
 sh "$root/tools/deck/perf_report.sh" "$out" > "$out/report.txt"; cat "$out/report.txt"
 launch "$dist"
