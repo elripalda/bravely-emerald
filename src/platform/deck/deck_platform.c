@@ -263,3 +263,6 @@ int64_t VitaPlatform_GetWallSeconds(void)
 {
     return (int64_t)time(NULL) + 62135596800LL;
 }
+
+// replaces the Vita newlib heap-size variable (vita_platform.c); vita_perf.c reads it for the HUD
+int32_t _newlib_heap_size_user = 64 * 1024 * 1024;
