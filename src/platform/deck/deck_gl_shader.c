@@ -2,6 +2,7 @@
 #include <SDL2/SDL.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "vita_platform.h"
 
@@ -241,6 +242,21 @@ bool DeckGl_SelfTest(void)
     }
     DeckGl_DeleteProgram(&p);
     DeckGl_Log("[SHADER] self-test OK\n");
+    const char *dbg = getenv("DECK_GL_DEBUG");
+    if (dbg != NULL && strcmp(dbg, "0") != 0)
+    {
+        // one-shot timer exercise: query 0 is read back when query 2 begins, both slots get used
+        const bool on = DeckGl_TimerInit();
+        for (int i = 0; on && i < 3; i++)
+        {
+            DeckGl_TimerBegin();
+            glClear(GL_COLOR_BUFFER_BIT);
+            DeckGl_TimerEnd();
+            glFinish();
+        }
+        DeckGl_Log("[SHADER] timer query self-test: %s, last result %.4f ms\n", on ? "ran" : "unavailable", DeckGl_TimerLastMs());
+        DeckGl_TimerShutdown();
+    }
     return true;
 }
 
