@@ -4,7 +4,7 @@ Date: 2026-11-13. Branch `deck-port` in `F:\emerald-deck` (local only, never pus
 
 ## Next session starter
 
-Read `docs/HANDOFF.md` and `.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/progress.md`, then continue the phase 1 plan at the Task 4 verification step. Use Marcos' Token Optimizer. Caveman style in chat. Per-task review gates use Sonnet; Opus only for the final whole-branch review.
+Read `docs/HANDOFF.md` and `.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/progress.md`, then continue the phase 1 plan: Task 4 Sonnet review gate and warp-fade tint check, then Task 5. Use Marcos' Token Optimizer. Caveman style in chat. Per-task review gates use Sonnet; Opus only for the final whole-branch review.
 
 ## What works (verified)
 
@@ -14,7 +14,7 @@ Read `docs/HANDOFF.md` and `.superpowers/sdd/2026-11-13-deck-visual-phase1-shade
 - Tools: `tools/deck/run_autoplay.sh` runs a scripted unattended session on a copy (`build-deck/dist-test`), takes in-engine screenshots (`DECK_SHOT`), runs `tools/deck/perf_report.sh`. `tools/deck/setkey.sh` edits settings. Screenshots are real (Read the PNGs).
 - Phase 1 Tasks 1, 1b, 2, 2b, 3 are complete and reviewed (Sonnet). Fix round 1 applied.
 
-## Task 4 state (post effects), NOT verified
+## Task 4 state (post effects): runs verified, review gate and warp-fade check pending
 
 - Commit `64febc5` adds `src/platform/deck/deck_post.c/.h`, hooks in `src/platform/voxel/voxel_renderer.c` and `tools/deck_tests/shot_stats.py`. The agent was stopped (user shutdown) before it compared legacy and post screenshots, ran the fallback test (`DECK_POST_FORCE_FAIL`) or measured performance. Its last message was about running a Python script (`/c/Python314` exists on the PC).
 - Next: build (`-j4`) and run the brief's runs A-D, read the PNGs, compare legacy vs post, then a Sonnet review gate (brief: `.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/task-4-brief.md`), then Tasks 5 to 8 of the plan `docs/superpowers/plans/2026-11-13-deck-visual-phase1-shaders.md`.
