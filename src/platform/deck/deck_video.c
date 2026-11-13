@@ -6,6 +6,7 @@
 #include "vita_platform.h"
 #include <GL/gl.h>
 #include <GL/glext.h>
+#include "deck_gl_shader.h"
 
 static SDL_Window *sWindow;
 static SDL_GLContext sContext;
@@ -145,6 +146,7 @@ bool DeckVideo_Init(SDL_Window **outWindow)
                      getenv("vblank_mode") ? getenv("vblank_mode") : "unset", (int)depthBits, attrDepth,
                      ext != NULL && strstr(ext, "GL_ARB_framebuffer_object") != NULL,
                      ext != NULL && strstr(ext, "GL_EXT_framebuffer_object") != NULL, (int)sGlDebug);
+        DeckDebugLog("[GL] shader self-test: %s (details in gl_errors.log)\n", DeckGl_SelfTest() ? "OK" : "FAILED");
     }
     *outWindow = sWindow;
     return true;
