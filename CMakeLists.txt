@@ -111,7 +111,7 @@ foreach(SOURCE IN LISTS GAME_C)
     set(EXTRA_PREPROC_FLAGS "")
     if(DECK)
         # the cpp step also sees platform files that include SDL and the vitaGL/psp2 compat headers
-        set(EXTRA_PREPROC_FLAGS "-I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat'")
+        set(EXTRA_PREPROC_FLAGS "-I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat' -I'${ROOT}/src/platform/vita'")
     endif()
     # Stage scenes (one whole GBA picture each): their VBlank callbacks are reported to
     # vita_stage.c through a forced include, so the platform knows a stage is on screen without
@@ -274,7 +274,7 @@ if(DECK)
     set(ENV{PKG_CONFIG_PATH} "${DECK_DEPS32}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(DECK_LIBS REQUIRED sdl2 SDL2_image gl)
-    target_include_directories(pokeemerald PRIVATE "${ROOT}/src/platform/deck/compat" "${DECK_DEPS32}/include" ${DECK_LIBS_STATIC_INCLUDE_DIRS})
+    target_include_directories(pokeemerald PRIVATE "${ROOT}/src/platform/deck/compat" "${ROOT}/src/platform/vita" "${DECK_DEPS32}/include" ${DECK_LIBS_STATIC_INCLUDE_DIRS})
     target_compile_options(pokeemerald PRIVATE ${DECK_LIBS_STATIC_CFLAGS_OTHER})
     target_link_libraries(pokeemerald PRIVATE ${DECK_LIBS_STATIC_LDFLAGS} -lm -ldl -pthread)
 else()
