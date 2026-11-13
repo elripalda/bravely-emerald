@@ -84,6 +84,23 @@ void VitaInput_Poll(VitaInputState *const outState)
     uint32_t currentButtons = VITA_BTN_NONE;
     uint8_t lx = 128U, ly = 128U, rx = 128U, ry = 128U;   // stick centre when no pad is present
 
+    // Hot-plug: drop a pad that went away, then look for any game controller.
+    if (sPad != NULL && !SDL_GameControllerGetAttached(sPad))
+    {
+        SDL_GameControllerClose(sPad);
+        sPad = NULL;
+    }
+    if (sPad == NULL)
+    {
+        for (int i = 0; i < SDL_NumJoysticks(); i++)
+        {
+            if (SDL_IsGameController(i))
+            {
+                sPad = SDL_GameControllerOpen(i);
+                break;
+            }
+        }
+    }
     if (sPad != NULL)
     {
         currentButtons = DecodePad(sPad, &lx, &ly, &rx, &ry);
@@ -101,9 +118,14 @@ void VitaInput_Poll(VitaInputState *const outState)
     // Touch: Steam Input may turn touch into mouse events, so both are read.
     int vx, vy, vw, vh;
     DeckVideo_GetViewport(&vx, &vy, &vw, &vh);
-    SDL_Window *win = SDL_GL_GetCurrentWindow();
-    int winW = 1, winH = 1;
-    if (win) SDL_GL_GetDrawableSize(win, &winW, &winH);
+    // The GL context belongs to the main thread, so SDL_GL_GetCurrentWindow() can be NULL here.
+    SDL_Window *win = DeckVideo_GetWindow();
+    int winW = 1, winH = 1, uW = 1, uH = 1;
+    if (win)
+    {
+        SDL_GL_GetDrawableSize(win, &winW, &winH);   // pixels, like the viewport
+        SDL_GetWindowSize(win, &uW, &uH);            // window units, like the mouse
+    }
 
     float px = 0.0f, py = 0.0f;
     bool down = false;
@@ -123,7 +145,9 @@ void VitaInput_Poll(VitaInputState *const outState)
         int mx, my;
         if (SDL_GetMouseState(&mx, &my) & SDL_BUTTON(SDL_BUTTON_LEFT))
         {
-            px = (float)mx; py = (float)my; down = true;
+            px = (float)mx * (float)winW / (float)uW;
+            py = (float)my * (float)winH / (float)uH;
+            down = true;
         }
     }
     sCurrentState.touchActive = false;
