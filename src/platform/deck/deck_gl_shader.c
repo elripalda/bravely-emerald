@@ -59,8 +59,7 @@ void DeckGl_Log(const char *fmt, ...)
     if (sLogCount > DECK_GL_LOG_MAX)
         return;
     if (++sLogCount > DECK_GL_LOG_MAX)
-        snprintf(line, sizeof(line), "[SHADER] log capped at %d lines, later messages dropped
-", DECK_GL_LOG_MAX);
+        snprintf(line, sizeof(line), "[SHADER] log capped at %d lines, later messages dropped\n", DECK_GL_LOG_MAX);
     fputs(line, stderr);
     FILE *f = fopen(DECK_GL_LOG_PATH, "a");
     if (f != NULL)
