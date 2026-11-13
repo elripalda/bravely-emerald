@@ -45,7 +45,7 @@ static void ShotLoad(void)
         sCount++;
     }
     free(copy);
-    ShotLog("[SHOT] DECK_SHOT: %d entries%s\n", "", sCount);
+    ShotLog("[SHOT] %s: entries=%d\n", "DECK_SHOT", sCount);
 }
 
 static void ShotSave(const char *path, int w, int h)
