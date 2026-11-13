@@ -6,6 +6,11 @@
 #include <string.h>
 #include <float.h>
 
+#ifdef PLATFORM_DECK
+#include <sys/resource.h>
+#include <time.h>
+#endif
+
 #ifdef PLATFORM_VITA
 #include <malloc.h>
 #include <psp2/kernel/processmgr.h>
@@ -410,11 +415,71 @@ void VitaPerf_MarkEvent(const VitaPerfEvent event)
     sCurEvents |= (uint32_t)event;
 }
 
+#ifdef PLATFORM_DECK
+// Deck telemetry: read-only /proc and /sys readouts. Every reader returns -1 when unavailable.
+static long DeckReadRssKb(void)
+{
+    long total = 0, resident = 0;
+    FILE *f = fopen("/proc/self/statm", "r");
+    if (f == NULL)
+        return -1;
+    const int n = fscanf(f, "%ld %ld", &total, &resident);
+    fclose(f);
+    return n == 2 ? resident * 4 : -1; // 4 KB pages
+}
+
+// Process CPU time (user + system, all threads) in ms.
+static double DeckProcessCpuMs(void)
+{
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0)
+        return -1.0;
+    return (double)ru.ru_utime.tv_sec * 1000.0 + (double)ru.ru_utime.tv_usec / 1000.0
+         + (double)ru.ru_stime.tv_sec * 1000.0 + (double)ru.ru_stime.tv_usec / 1000.0;
+}
+
+// amdgpu exposes gpu_busy_percent; try the first few cards, skip when absent.
+static int DeckGpuBusyPercent(void)
+{
+    static int sCard = -2; // -2 not probed, -1 none
+    char path[96];
+    if (sCard == -2)
+    {
+        sCard = -1;
+        for (int i = 0; i < 4; i++)
+        {
+            snprintf(path, sizeof(path), "/sys/class/drm/card%d/device/gpu_busy_percent", i);
+            FILE *t = fopen(path, "r");
+            if (t != NULL)
+            {
+                fclose(t);
+                sCard = i;
+                break;
+            }
+        }
+    }
+    if (sCard < 0)
+        return -1;
+    snprintf(path, sizeof(path), "/sys/class/drm/card%d/device/gpu_busy_percent", sCard);
+    FILE *f = fopen(path, "r");
+    if (f == NULL)
+        return -1;
+    int v = -1;
+    if (fscanf(f, "%d", &v) != 1)
+        v = -1;
+    fclose(f);
+    return v;
+}
+#endif
+
 void VitaPerf_LogMemory(const char *stage)
 {
     if (sSummaryFile == NULL)
         return;
-#ifdef PLATFORM_VITA
+#if defined(PLATFORM_DECK)
+    fprintf(sSummaryFile, "[MEMORY %s] RSS %ld KB | process CPU %.0f ms
+", stage, DeckReadRssKb(), DeckProcessCpuMs());
+#elif defined(PLATFORM_VITA)
     const struct mallinfo info = mallinfo();
     fprintf(sSummaryFile, "[MEMORY %s] KB free / total: newlib %u / %u | vitaGL VRAM %u / %u | RAM %u / %u | PHYCONT %u / %u\n",
             stage,
@@ -536,7 +601,28 @@ static void WriteSummaryBlock(void)
     fprintf(sSummaryFile, "--------------------------------------------------------------------------------\n");
     fprintf(sSummaryFile, "  SCENE COMPLEXITY\n");
     fprintf(sSummaryFile, "    - Visible Chunks:     avg %5.1f\n", mVisChunks.sum / avgFrames);
-#ifdef PLATFORM_VITA
+#if defined(PLATFORM_DECK)
+    {
+        static double sPrevCpuMs = -1.0, sPrevWallMs = 0.0;
+        const double cpuMs = DeckProcessCpuMs(), wallMs = VitaPerf_NowMs();
+        const long rss = DeckReadRssKb();
+        static long sMaxRss = 0;
+        if (rss > sMaxRss)
+            sMaxRss = rss;
+        const double cpuPct = (sPrevCpuMs >= 0.0 && wallMs > sPrevWallMs) ? 100.0 * (cpuMs - sPrevCpuMs) / (wallMs - sPrevWallMs) : -1.0;
+        sPrevCpuMs = cpuMs;
+        sPrevWallMs = wallMs;
+        const int gpu = DeckGpuBusyPercent();
+        fprintf(sSummaryFile, "  DECK: RSS %ld KB (session max %ld KB) | process CPU %.0f%% of one core (window) | GPU busy ",
+                rss, sMaxRss, cpuPct);
+        if (gpu >= 0)
+            fprintf(sSummaryFile, "%d%%
+", gpu);
+        else
+            fprintf(sSummaryFile, "n/a
+");
+    }
+#elif defined(PLATFORM_VITA)
     {
         const struct mallinfo info = mallinfo();
         const size_t heapFree = (size_t)_newlib_heap_size_user - (size_t)info.uordblks;

@@ -79,6 +79,11 @@ if(DECK)
     # Keep PLATFORM_VITA: the port's UI and renderer code is guarded by it. PLATFORM_DECK marks
     # the places where the Deck differs.
     list(APPEND GAME_DEFINES -DPLATFORM_DECK)
+    # Telemetry: perf_summary.txt / perf_frames.csv are always written to userdata/; this adds debug.log.
+    option(DECK_LOGGING "Deck: write VITA_LOG output to userdata/debug.log" ON)
+    if(DECK_LOGGING AND NOT VITA_LOGGING)
+        list(APPEND GAME_DEFINES -DVITA_LOGGING)
+    endif()
     set(ASM_ARCH --32)
     set(ASM_WORD ".long")
     set(LD_EMULATION -m elf_i386)
