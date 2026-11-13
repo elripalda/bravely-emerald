@@ -43,6 +43,11 @@ void DeckVideo_SetSwapInterval(int interval)
 void DeckVideo_GetViewport(int *x, int *y, int *w, int *h)
 {
     int winW, winH;
+    if (sWindow == NULL)
+    {
+        *x = 0; *y = 0; *w = DECK_LOGICAL_WIDTH; *h = DECK_LOGICAL_HEIGHT;
+        return;
+    }
     SDL_GL_GetDrawableSize(sWindow, &winW, &winH);
     // Fit 960x544 (16:9) inside the window, centred.
     int fitW = winW;

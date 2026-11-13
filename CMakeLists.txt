@@ -264,10 +264,15 @@ add_executable(pokeemerald ${PLATFORM_SIDE_C} "${GAME_COMBINED_OBJECT}" "${GAME_
 target_include_directories(pokeemerald PRIVATE "${ROOT}" "${ROOT}/sound")
 target_compile_options(pokeemerald PRIVATE ${PLATFORM_COMPILE_OPTIONS})
 if(DECK)
+    # Static 32-bit SDL2 + SDL2_image live under DECK_DEPS32 (built on the Deck, see docs/DECK_NOTES.md).
+    set(DECK_DEPS32 "/run/media/deck/SD512/emerald-deck/deps32" CACHE PATH "Prefix of the 32-bit static SDL2/SDL2_image build")
+    list(PREPEND CMAKE_PREFIX_PATH "${DECK_DEPS32}")
+    set(ENV{PKG_CONFIG_PATH} "${DECK_DEPS32}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(DECK_LIBS REQUIRED sdl2 SDL2_image gl)
-    target_include_directories(pokeemerald PRIVATE "${ROOT}/src/platform/deck/compat" ${DECK_LIBS_INCLUDE_DIRS})
-    target_link_libraries(pokeemerald PRIVATE ${DECK_LIBS_LDFLAGS} pthread m)
+    target_include_directories(pokeemerald PRIVATE "${ROOT}/src/platform/deck/compat" ${DECK_LIBS_STATIC_INCLUDE_DIRS})
+    target_compile_options(pokeemerald PRIVATE ${DECK_LIBS_STATIC_CFLAGS_OTHER})
+    target_link_libraries(pokeemerald PRIVATE ${DECK_LIBS_STATIC_LDFLAGS} -lm -ldl -pthread)
 else()
     # SDL2's own config carries its stub libraries, which differ between VitaSDK builds
     # (e.g. SDL2 built with the vitaGL backend also needs vitaGL and its dependencies).
