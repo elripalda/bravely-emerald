@@ -1,6 +1,7 @@
 #ifndef DECK_COMPAT_VITAGL_H
 #define DECK_COMPAT_VITAGL_H
 
+#include <stddef.h>   /* the real vitaGL.h pulls this in; voxel_camera.c relies on it for NULL */
 #include <GL/gl.h>
 #include <GL/glext.h>
 // prototypes only: pulling in SDL here clashes with game macros (min/max) in files that include vitaGL.h

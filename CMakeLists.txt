@@ -111,7 +111,7 @@ foreach(SOURCE IN LISTS GAME_C)
     set(EXTRA_PREPROC_FLAGS "")
     if(DECK)
         # the cpp step also sees platform files that include SDL and the vitaGL/psp2 compat headers
-        set(EXTRA_PREPROC_FLAGS "-m32 -march=znver2 -msse2 -I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat' -I'${ROOT}/src/platform/vita'")
+        set(EXTRA_PREPROC_FLAGS "-m32 -march=znver2 -msse2 -include stddef.h -I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat' -I'${ROOT}/src/platform/vita'")
     endif()
     # Stage scenes (one whole GBA picture each): their VBlank callbacks are reported to
     # vita_stage.c through a forced include, so the platform knows a stage is on screen without
