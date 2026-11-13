@@ -45,6 +45,7 @@ if(NOT EXISTS "${PREPROC}" OR NOT EXISTS "${ROOT}/include/constants/map_groups.h
 endif()
 
 if(DECK)
+    set(DECK_DEPS32 "/run/media/deck/SD512/emerald-deck/deps32" CACHE PATH "Prefix of the 32-bit static SDL2/SDL2_image build")
     find_program(VITA_CPP     cpp     REQUIRED)
     find_program(VITA_AS      as      REQUIRED)
     find_program(VITA_LD      ld      REQUIRED)
@@ -108,6 +109,10 @@ foreach(SOURCE IN LISTS GAME_C)
     set(OUTPUT "${CMAKE_BINARY_DIR}/generated/${RELATIVE_SOURCE}")
     get_filename_component(OUTPUT_DIR "${OUTPUT}" DIRECTORY)
     set(EXTRA_PREPROC_FLAGS "")
+    if(DECK)
+        # the cpp step also sees platform files that include SDL and the vitaGL/psp2 compat headers
+        set(EXTRA_PREPROC_FLAGS "-I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat'")
+    endif()
     # Stage scenes (one whole GBA picture each): their VBlank callbacks are reported to
     # vita_stage.c through a forced include, so the platform knows a stage is on screen without
     # editing the scene code (the approach of Emerald 3DS, compat/ctr_gba_stage.h).
@@ -265,7 +270,6 @@ target_include_directories(pokeemerald PRIVATE "${ROOT}" "${ROOT}/sound")
 target_compile_options(pokeemerald PRIVATE ${PLATFORM_COMPILE_OPTIONS})
 if(DECK)
     # Static 32-bit SDL2 + SDL2_image live under DECK_DEPS32 (built on the Deck, see docs/DECK_NOTES.md).
-    set(DECK_DEPS32 "/run/media/deck/SD512/emerald-deck/deps32" CACHE PATH "Prefix of the 32-bit static SDL2/SDL2_image build")
     list(PREPEND CMAKE_PREFIX_PATH "${DECK_DEPS32}")
     set(ENV{PKG_CONFIG_PATH} "${DECK_DEPS32}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
     find_package(PkgConfig REQUIRED)
