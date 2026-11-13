@@ -477,8 +477,7 @@ void VitaPerf_LogMemory(const char *stage)
     if (sSummaryFile == NULL)
         return;
 #if defined(PLATFORM_DECK)
-    fprintf(sSummaryFile, "[MEMORY %s] RSS %ld KB | process CPU %.0f ms
-", stage, DeckReadRssKb(), DeckProcessCpuMs());
+    fprintf(sSummaryFile, "[MEMORY %s] RSS %ld KB | process CPU %.0f ms\n", stage, DeckReadRssKb(), DeckProcessCpuMs());
 #elif defined(PLATFORM_VITA)
     const struct mallinfo info = mallinfo();
     fprintf(sSummaryFile, "[MEMORY %s] KB free / total: newlib %u / %u | vitaGL VRAM %u / %u | RAM %u / %u | PHYCONT %u / %u\n",
