@@ -586,3 +586,9 @@ orchestrator); edits to `voxel_renderer.c` are never split across parallel agent
     Recommended: embedded, with an optional override directory only if tuning needs it.
 12. **Battles:** apply the post chain (bloom, grade, DoF) to the 3D battle stage too, or field
     only at first? Recommended: field only in phases 1-6, battles in phase 7.
+
+## Decisions (2026-11-13, Marcos)
+
+Answered by Marcos: (2) both presets, Medium "faithful plus" and High strong Octopath-style; (3) ambient audio fully procedural, no recordings, so no LICENSES.txt is needed; (4) the 3D scene renders at about 1280x720 (phase 7); (5) grass and flowers reuse existing tile art first.
+
+Taken as the plan's recommended answers because Marcos asked for "as much as we can" and did not object: (1) effects Deck-only behind PLATFORM_DECK, Vita unchanged; (6) sun shadow map deferred to a go/no-go after phase 6; (7) default preset Medium until the baseline exists, High if p99 frame time is under 14 ms; (8) priority order as listed in the phases; (9) ambient on at 6/10, off indoors and in battles; (10) options in settings.txt now, an in-game page later; (11) shaders as embedded C strings; (12) post effects in the field first, battles in phase 7.
