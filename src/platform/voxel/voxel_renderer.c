@@ -3654,7 +3654,7 @@ bool VoxelRenderer_Init(void)
     DeckGlCheckFbos(sDioramaFbo, sScratchFbo); // logs glCheckFramebufferStatus, rebinds the previous FBO
 #endif
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    sDioramaFboReady =(sDioramaFbo != 0 && sScratchFbo != 0);
+    sDioramaFboReady = (sDioramaFbo != 0 && sScratchFbo != 0);
 
     MakeFog();
     MakeWeather();
