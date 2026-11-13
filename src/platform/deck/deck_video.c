@@ -7,6 +7,7 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include "deck_gl_shader.h"
+#include "deck_shot.h"
 
 static SDL_Window *sWindow;
 static SDL_GLContext sContext;
@@ -156,6 +157,11 @@ void DeckVideo_Swap(void)
 {
     sFrame++;
     DeckGl_CheckErrors("swap");
+    {
+        int shotW, shotH;
+        SDL_GL_GetDrawableSize(sWindow, &shotW, &shotH);
+        DeckShot_Frame(shotW, shotH);
+    }
     SDL_GL_SwapWindow(sWindow);
     // Black letterbox bars: the game clears with its own colour, but only inside the scissor
     // rect set by DeckGlViewport, so the bars keep what is cleared here.
