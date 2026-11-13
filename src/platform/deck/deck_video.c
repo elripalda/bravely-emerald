@@ -206,8 +206,10 @@ void DeckGlViewport(int x, int y, int w, int h)
     glViewport(x, y, w, h);
 }
 
-// sdl2.c asks for the interval every 3D frame (sdl2.c:836, eglSwapInterval -> here). Only a change
-// reaches SDL; each change is logged with SDL's answer, so the log shows whether vsync took.
+// sdl2.c reaches here through the eglSwapInterval shim in compat/vitaGL.h: from
+// VitaPlatform_ApplyTargetFramerate (init at sdl2.c:1013 and on a voxel_fps change at :1133, interval 2
+// for the 30 FPS mode) and from the present paths (:836 3D, :308 and :848 2D). Only a change reaches
+// SDL; each change is logged with SDL's answer, so the log shows whether vsync took.
 static int sSwapInterval = -1000;
 
 void DeckVideo_SetSwapInterval(int interval)
@@ -216,7 +218,7 @@ void DeckVideo_SetSwapInterval(int interval)
         return;
     const int ret = SDL_GL_SetSwapInterval(interval);
     if (ret == 0)
-        sSwapInterval = interval; // remembered only on success: a call before the window exists (sdl2.c:1013) must not mask the real one
+        sSwapInterval = interval; // remembered only on success: a call before the window exists must not mask the real one (SDL answered -1 "Video subsystem has not been initialized" for it in the baseline run)
     DeckDebugLog("[GL] swap interval %d: SDL_GL_SetSwapInterval=%d (%s) | SDL_GL_GetSwapInterval=%d | video driver %s\n",
                  interval, ret, ret == 0 ? "ok" : SDL_GetError(), SDL_GL_GetSwapInterval(),
                  SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "none");

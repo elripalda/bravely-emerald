@@ -7,6 +7,7 @@
 #include "vita_platform.h"
 
 #define DECK_GL_LOG_PATH VITA_DATA_DIR "gl_errors.log"
+#define DECK_GL_LOG_MAX 1000
 
 static struct
 {
@@ -42,7 +43,7 @@ static bool sLoaded, sAvailable;
 static float sTime, sWind[3];
 
 static GLuint sTimerQ[2];
-static bool sTimerOn, sTimerUsed[2];
+static bool sTimerOn, sTimerUsed[2], sTimerActive;
 static unsigned sTimerIdx;
 static double sTimerLastMs = -1.0;
 
@@ -53,6 +54,13 @@ void DeckGl_Log(const char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(line, sizeof(line), fmt, ap);
     va_end(ap);
+    static unsigned sLogCount;
+    // gl_errors.log must not grow without bound when nothing resets it: cap the lines per run
+    if (sLogCount > DECK_GL_LOG_MAX)
+        return;
+    if (++sLogCount > DECK_GL_LOG_MAX)
+        snprintf(line, sizeof(line), "[SHADER] log capped at %d lines, later messages dropped
+", DECK_GL_LOG_MAX);
     fputs(line, stderr);
     FILE *f = fopen(DECK_GL_LOG_PATH, "a");
     if (f != NULL)
@@ -263,12 +271,15 @@ bool DeckGl_SelfTest(void)
 bool DeckGl_CreateTarget(DeckGlTarget *t, int w, int h, DeckGlDepth depth, GLint filter)
 {
     static const char *const kDepthNames[] = { "none", "texture24", "renderbuffer24" };
-    GLint prev = 0;
+    GLint prev = 0, prevTex = 0, prevUnit = 0, prevRb = 0;
     memset(t, 0, sizeof(*t));
     t->w = w;
     t->h = h;
     t->depth = depth;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);   // of the active unit; this function never switches unit
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &prevUnit);
+    glGetIntegerv(GL_RENDERBUFFER_BINDING, &prevRb);
 
     glGenTextures(1, &t->color);
     glBindTexture(GL_TEXTURE_2D, t->color);
@@ -301,7 +312,9 @@ bool DeckGl_CreateTarget(DeckGlTarget *t, int w, int h, DeckGlDepth depth, GLint
     }
     const GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    DeckGl_ActiveTexture((GLenum)prevUnit);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)prevTex);
+    glBindRenderbuffer(GL_RENDERBUFFER, (GLuint)prevRb);
     t->complete = (st == GL_FRAMEBUFFER_COMPLETE);
     DeckGl_Log("[FBO] %dx%d RGBA8 depth=%s: status 0x%04x %s\n", w, h, kDepthNames[depth],
                (unsigned)st, t->complete ? "COMPLETE" : "INCOMPLETE");
@@ -321,7 +334,8 @@ bool DeckGl_TimerInit(void)
 {
     const char *ext = (const char *)glGetString(GL_EXTENSIONS);
     bool ok = true;
-    sTimerOn = false;
+    if (sTimerOn)
+        return true; // idempotent: a second init must not leak the first pair of queries
     if (!sAvailable || ext == NULL || strstr(ext, "GL_ARB_timer_query") == NULL)
     {
         DeckGl_Log("[SHADER] GPU timer off (GL_ARB_timer_query not listed)\n");
@@ -339,6 +353,7 @@ bool DeckGl_TimerInit(void)
     sTimerUsed[0] = sTimerUsed[1] = false;
     sTimerIdx = 0;
     sTimerLastMs = -1.0;
+    sTimerActive = false;
     sTimerOn = true;
     return true;
 }
@@ -346,14 +361,19 @@ bool DeckGl_TimerInit(void)
 void DeckGl_TimerShutdown(void)
 {
     if (sTimerOn)
+    {
+        if (sTimerActive)
+            sGl.EndQuery(GL_TIME_ELAPSED);
         sGl.DeleteQueries(2, sTimerQ);
+    }
     sTimerOn = false;
+    sTimerActive = false;
 }
 
 void DeckGl_TimerBegin(void)
 {
-    if (!sTimerOn)
-        return;
+    if (!sTimerOn || sTimerActive)
+        return; // Begin twice without End is ignored (GL would raise GL_INVALID_OPERATION)
     const unsigned i = sTimerIdx & 1u;
     if (sTimerUsed[i])
     {
@@ -365,19 +385,18 @@ void DeckGl_TimerBegin(void)
             sGl.GetQueryObjectui64v(sTimerQ[i], GL_QUERY_RESULT, &ns);
             sTimerLastMs = (double)ns / 1.0e6;
         }
-        else
-        {
-            sTimerLastMs = -1.0; // not ready: never stall the frame waiting for it
-        }
+        // not ready: keep the last good result and never stall the frame waiting for it
     }
     sGl.BeginQuery(GL_TIME_ELAPSED, sTimerQ[i]);
+    sTimerActive = true;
 }
 
 void DeckGl_TimerEnd(void)
 {
-    if (!sTimerOn)
-        return;
+    if (!sTimerOn || !sTimerActive)
+        return; // End without Begin is ignored
     sGl.EndQuery(GL_TIME_ELAPSED);
+    sTimerActive = false;
     sTimerUsed[sTimerIdx & 1u] = true;
     sTimerIdx++;
 }

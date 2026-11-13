@@ -57,9 +57,19 @@ static void ShotSave(const char *path, int w, int h)
         free(flip);
         return;
     }
+    GLint prevAlign = 4, prevRead = GL_BACK, prevFbo = 0;
+    glGetIntegerv(GL_PACK_ALIGNMENT, &prevAlign);
+    glGetIntegerv(GL_READ_BUFFER, &prevRead);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    if (prevFbo != 0)
+        glBindFramebuffer(GL_FRAMEBUFFER, 0); // the window back buffer is wanted, not an offscreen target
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadBuffer(GL_BACK);
     glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    glReadBuffer((GLenum)prevRead);
+    glPixelStorei(GL_PACK_ALIGNMENT, prevAlign);
+    if (prevFbo != 0)
+        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prevFbo);
     for (int y = 0; y < h; y++) // GL rows run bottom to top
         memcpy(flip + (size_t)y * w * 4, px + (size_t)(h - 1 - y) * w * 4, (size_t)w * 4);
     for (size_t i = 3; i < (size_t)w * h * 4; i += 4)

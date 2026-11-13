@@ -21,6 +21,18 @@ launch() { # <dir> <env...>
         >/tmp/game.out 2>&1 </dev/null & )
 }
 
+# pids of game processes whose cwd is <dir> (the test copy or dist): ps cannot tell them apart, /proc can
+pids_in() { for p in $(ps -eo pid,args | grep '[.]/pokeemerald' | awk '{print $1}'); do
+    [ "$(readlink /proc/$p/cwd 2>/dev/null)" = "$1" ] && echo "$p"; done; }
+cleanup() { # runs on EXIT/INT/TERM: stop the test instance, make sure one normal instance runs from dist
+    trap - EXIT INT TERM
+    for p in $(pids_in "$test"); do kill "$p"; done
+    sleep 3
+    for p in $(pids_in "$test"); do kill -9 "$p"; done
+    if [ -z "$(ps -eo pid,args | grep '[.]/pokeemerald')" ]; then launch "$dist"; sleep 5; fi
+}
+trap cleanup EXIT INT TERM
+
 killgame
 rm -rf "$test"; cp -a "$dist" "$test"
 rm -f "$test"/userdata/perf_frames.csv "$test"/userdata/perf_summary.txt "$test"/userdata/debug.log "$test"/userdata/gl_errors.log
