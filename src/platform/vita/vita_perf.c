@@ -604,6 +604,7 @@ static void WriteSummaryBlock(void)
 #if defined(PLATFORM_DECK)
     {
         static double sPrevCpuMs = -1.0, sPrevWallMs = 0.0;
+        (void)sSessionMinHeapFree; // Vita-only statistic
         const double cpuMs = DeckProcessCpuMs(), wallMs = VitaPerf_NowMs();
         const long rss = DeckReadRssKb();
         static long sMaxRss = 0;
@@ -616,11 +617,9 @@ static void WriteSummaryBlock(void)
         fprintf(sSummaryFile, "  DECK: RSS %ld KB (session max %ld KB) | process CPU %.0f%% of one core (window) | GPU busy ",
                 rss, sMaxRss, cpuPct);
         if (gpu >= 0)
-            fprintf(sSummaryFile, "%d%%
-", gpu);
+            fprintf(sSummaryFile, "%d%%\n", gpu);
         else
-            fprintf(sSummaryFile, "n/a
-");
+            fprintf(sSummaryFile, "n/a\n");
     }
 #elif defined(PLATFORM_VITA)
     {
