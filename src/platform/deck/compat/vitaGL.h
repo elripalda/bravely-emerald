@@ -23,6 +23,10 @@ static inline void vglSwapBuffers(int hasCommonDialog) { (void)hasCommonDialog; 
 static inline void eglSwapInterval(void *display, int interval) { (void)display; DeckVideo_SetSwapInterval(interval); }
 // replaces vglGetTexDataPointer: no direct texel access on desktop GL, callers fall back to glTexSubImage2D
 static inline void *vglGetTexDataPointer(unsigned int target) { (void)target; return 0; }
+// replaces vglMemFree/vglMemTotal: Vita memory pools do not exist on desktop, the perf HUD reads 0
+enum { VGL_MEM_VRAM, VGL_MEM_RAM, VGL_MEM_SLOW, VGL_MEM_BUDGET, VGL_MEM_EXTERNAL, VGL_MEM_ALL, VGL_MEM_PHYCONT };
+static inline unsigned int vglMemFree(int type) { (void)type; return 0; }
+static inline unsigned int vglMemTotal(int type) { (void)type; return 0; }
 int vglInitWithCustomSizes(int, int, int, int, int, int, int, int);
 
 #endif
