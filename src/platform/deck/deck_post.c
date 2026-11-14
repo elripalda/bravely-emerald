@@ -33,6 +33,10 @@ static const float kLutLevel[3] = { 0.5f, 1.0f, 1.3f };
 // Tilt-shift by level: largest gather radius (fraction of the picture height at full circle of confusion) and taps.
 static const float kTiltRadius[3] = { 0.6f * 0.014f, 0.014f, 1.4f * 0.014f };
 static const float kTiltTaps[3] = { 8.0f, 12.0f, 16.0f };
+// 3D battle backdrop (voxel_battledim) by level: blur passes at half resolution, their step, and the black overlay opacity.
+static const int kBackPasses[3] = { 1, 2, 3 };
+static const float kBackStep[3] = { 1.0f, 1.0f, 1.6f };
+static const float kBackDim[3] = { 0.25f, 0.40f, 0.55f };
 
 static const DeckPostPreset kPresets[3] = {
     /* low    */ { 0.60f, 1.04f, 0.12f, 0.0f, 0.70f, 1 },
@@ -127,6 +131,7 @@ static const char kCompositeBody[] =
     "uniform float uSaturation;\n"
     "uniform float uVignette;\n"
     "uniform float uAspect;\n"
+    "uniform vec2 uBack;   // battle backdrop: x blur amount, y black overlay opacity\n"
     "#ifdef POST_X\n"
     "uniform sampler2D uDepth;\n"
     "uniform vec4 uTilt;   // x on, y focus distance, z max radius (fraction of the height), w taps\n"
@@ -180,6 +185,8 @@ static const char kCompositeBody[] =
     "        vec3 nn = cross(dFdx(wp), dFdy(wp));\n"
     "        float nl = length(nn);\n"
     "        nn = nl > 1.0e-12 ? nn / nl : vec3(0.0, 1.0, 0.0);\n"
+    "        vec4 cq = uInvVP * vec4(0.0, 0.0, -1.0, 1.0);\n"          // a point on the near plane: the eye side
+    "        if (dot(nn, wp - cq.xyz / cq.w) > 0.0) nn = -nn;\n"      // face the viewer whatever the derivative handedness
     "        float ndl = dot(nn, uSunL);\n"
     "        if (sd < 0.9999 && ndl > 0.05) {\n"
     "            float sinT = sqrt(max(1.0 - ndl * ndl, 0.0));\n"
@@ -221,6 +228,10 @@ static const char kCompositeBody[] =
     "        c = mix(c, texture2D(uBlur, vPos).rgb, max(wTop, wBot));\n"
     "    }\n"
     "    c += texture2D(uBloom, vPos).rgb * uBloomAmt;\n"
+    "    if (uBack.x > 0.0) {\n"
+    "        c = mix(c, texture2D(uBlur, vPos).rgb, uBack.x);\n"
+    "        c *= 1.0 - uBack.y;\n"
+    "    }\n"
     "#ifdef POST_X\n"
     "    if (uShaft.x > 0.0)\n"
     "        c += texture2D(uShafts, vPos).rgb * uShaft.x * vec3(1.0, 0.92, 0.74);\n"
@@ -256,6 +267,7 @@ static void DeleteTargets(void);
 static bool CreateLut(void);
 static bool sXOk;      // the composite with POST_X built
 static bool sSunOk;    // the composite has the sun shadow resolve (POST_SUN)
+static GLint sCBack;
 static GLint sCSunMap, sCInvVP, sCSunVP, sCSunA, sCSunB, sCSunL;
 static bool sShaftOk;  // the shaft program built and the composite has POST_X
 static DeckGlProgram sShaft;
@@ -297,6 +309,7 @@ DeckPostConfig DeckPost_ReadConfig(void)
     c.shaftLvl = DeckLevel(FAST_EXTRA_VOXEL_SHAFTS);
     c.lutLvl = DeckLevel(FAST_EXTRA_VOXEL_LUT);
     c.sunLvl = DeckSunShadow_Level();
+    c.dimLvl = DeckLevel(FAST_EXTRA_VOXEL_BATTLEDIM);
     c.grade = c.gradeLvl >= 0;
     c.bloom = c.bloomLvl >= 0;
     c.blur = c.blurLvl >= 0;
@@ -362,6 +375,7 @@ static bool BuildPrograms(void)
     sCSat = DeckGl_Uniform(&sComposite, "uSaturation");
     sCVignette = DeckGl_Uniform(&sComposite, "uVignette");
     sCAspect = DeckGl_Uniform(&sComposite, "uAspect");
+    sCBack = DeckGl_Uniform(&sComposite, "uBack");
     sCDepth = DeckGl_Uniform(&sComposite, "uDepth");   // -1 in the plain composite (setters ignore it)
     sCTilt = DeckGl_Uniform(&sComposite, "uTilt");
     sCZ = DeckGl_Uniform(&sComposite, "uZ");
@@ -516,7 +530,7 @@ static void ApplyWantedSize(void)
 int DeckPost_SceneWidth(void) { return sScene.w; }
 int DeckPost_SceneHeight(void) { return sScene.h; }
 
-bool DeckPost_WantScene(int renderW, int renderH, bool indoor)
+bool DeckPost_WantScene(int renderW, int renderH, bool indoor, bool battle)
 {
     if (!sReady)
         return false;
@@ -534,6 +548,8 @@ bool DeckPost_WantScene(int renderW, int renderH, bool indoor)
     const DeckPostConfig c = DeckPost_ReadConfig();
     if (!c.shaders)
         return false;
+    if (battle)
+        return c.dimLvl >= 0; // the battle only gets the backdrop blur and dim
     return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor) || (c.shafts && sShaftOk) || (c.lut && sLutOk) || (c.sun && sSunOk);
 }
 
@@ -579,9 +595,9 @@ static void BlurPass(const DeckGlTarget *dst, const DeckGlTarget *src, float ste
 }
 
 // The step grows with the scene width so the blur keeps its size on the picture at 1120 and 1280.
-static void Blur(const DeckGlTarget *t, const DeckGlTarget *tmp, int passes)
+static void Blur(const DeckGlTarget *t, const DeckGlTarget *tmp, int passes, float stepMul)
 {
-    const float k = (float)sScene.w / (float)DECK_BASE_W;
+    const float k = stepMul * (float)sScene.w / (float)DECK_BASE_W;
 
     for (int i = 0; i < passes; i++)
     {
@@ -675,7 +691,15 @@ static void BuildLut(float daylight, float glow, const DeckPostPreset *pr, bool 
 
 void DeckPost_Run(const DeckPostFrame *in)
 {
-    const DeckPostConfig cfg = DeckPost_ReadConfig();
+    DeckPostConfig cfg = DeckPost_ReadConfig();
+    const int backLvl = in->battle ? cfg.dimLvl : -1;
+    const bool doBack = backLvl >= 0;
+    if (in->battle)
+    {
+        // a battle gets the backdrop blur and dim only; the scene stays crisp and ungraded
+        cfg.grade = cfg.bloom = cfg.blur = cfg.tilt = cfg.shafts = cfg.lut = cfg.sun = false;
+        cfg.gradeLvl = cfg.bloomLvl = cfg.blurLvl = cfg.tiltLvl = cfg.shaftLvl = cfg.lutLvl = cfg.sunLvl = -1;
+    }
     const DeckPostPreset *const pr = &kPresets[cfg.gradeLvl >= 0 ? cfg.gradeLvl : cfg.quality];      // grade, saturation, vignette
     const DeckPostPreset *const pb = &kPresets[cfg.bloomLvl >= 0 ? cfg.bloomLvl : cfg.quality];      // bloom threshold and blur passes
     const float bloomGain = cfg.bloomLvl >= 0 ? kBloomGain[cfg.bloomLvl] : 0.0f;
@@ -727,7 +751,7 @@ void DeckPost_Run(const DeckPostFrame *in)
         DeckGl_Set1i(sBrightScene, 0);
         DeckGl_Set1f(sBrightThreshold, pb->threshold);
         DrawQuad();
-        Blur(&sHalf[0], &sHalf[1], pb->bloomPasses);
+        Blur(&sHalf[0], &sHalf[1], pb->bloomPasses, 1.0f);
     }
     if (doShafts)
     {
@@ -738,7 +762,7 @@ void DeckPost_Run(const DeckPostFrame *in)
         DeckGl_Set2f(sShaftSun, in->sunX, 1.3f);
         DrawQuad();
     }
-    if (doBlur || doTilt)
+    if (doBlur || doTilt || doBack)
     {
         BindTex(0, sScene.color);
         BeginTarget(&sHalf[2]);
@@ -746,7 +770,9 @@ void DeckPost_Run(const DeckPostFrame *in)
         DeckGl_Set1i(sCopyScene, 0);
         DrawQuad();
         if (doBlur)
-            Blur(&sHalf[2], &sHalf[1], 1); // the tilt-shift gathers from the plain half-res copy
+            Blur(&sHalf[2], &sHalf[1], 1, 1.0f);
+        else if (doBack)
+            Blur(&sHalf[2], &sHalf[1], kBackPasses[backLvl], kBackStep[backLvl]); // the tilt-shift gathers from the plain half-res copy
     }
 
     // Composite into the letterbox: same viewport call as the legacy present (DeckGlViewport maps
@@ -757,7 +783,7 @@ void DeckPost_Run(const DeckPostFrame *in)
     BindTex(4, doLut ? sLutTex : 0);
     BindTex(6, sun != NULL ? sun->depthTex : 0);
     BindTex(3, (doTilt || sun != NULL) ? sScene.depthTex : 0);
-    BindTex(2, (doBlur || doTilt) ? sHalf[2].color : 0);
+    BindTex(2, (doBlur || doTilt || doBack) ? sHalf[2].color : 0);
     BindTex(1, doBloom ? sHalf[0].color : 0);
     BindTex(0, sScene.color);
     // 960: one texel per logical pixel, NEAREST keeps the pixel art sharp. 1120 and 1280 are not integer multiples
@@ -793,6 +819,7 @@ void DeckPost_Run(const DeckPostFrame *in)
     }
     DeckGl_Set1f(sCBloomAmt, doBloom ? in->bloom * bloomGain * keep : 0.0f);
     DeckGl_Set1f(sCBlurOn, doBlur ? 1.0f : 0.0f);
+    DeckGl_Set2f(sCBack, doBack ? keep : 0.0f, doBack ? kBackDim[backLvl] * keep : 0.0f);
     // Legacy band height: VOXEL_DOF_*_ROWS * (renderH / 544) / renderH = rows / 544.
     DeckGl_Set4f(sCDof, in->dofTopRows / 544.0f, in->dofBottomRows / 544.0f, in->dofTopAlpha * blurMul, in->dofBottomAlpha * blurMul);
     DeckGl_Set1f(sCGradeAmt, cfg.grade ? pr->grade * keep : 0.0f);

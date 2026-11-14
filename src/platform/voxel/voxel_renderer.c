@@ -4969,7 +4969,7 @@ static void Frame_BeginPasses(VoxelFrame *const f)
         DeckGl_SetFrameUniforms(f->seconds, 0.8f, 0.6f, windStrength);
     }
     // Field only (Decision 12); the FBO path no longer depends on the DoF setting.
-    f->postActive = !f->inBattle3D && (fadeAmount < 0.99f) && DeckPost_WantScene(renderW, renderH, isIndoor);
+    f->postActive = (fadeAmount < 0.99f) && DeckPost_WantScene(renderW, renderH, isIndoor, f->inBattle3D); // a battle: backdrop blur and dim only
     if (f->postActive)
     {
         DeckPost_BindScene();
@@ -5900,6 +5900,7 @@ static void Pass_DeckPost(const VoxelFrame *const f)
             in.sunX = in.sunX < 0.05f ? 0.05f : (in.sunX > 0.95f ? 0.95f : in.sunX);
         }
     }
+    in.battle = f->inBattle3D;
     in.sun = DeckSunShadow_Resolve();
     in.zNear = VOXEL_PERSP_NEAR;
     in.zFar = VOXEL_PERSP_FAR;

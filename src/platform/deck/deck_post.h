@@ -18,6 +18,7 @@ typedef struct
     float sunAmount;       // 0..1 shaft strength: sun and daylight, 0 at night, indoors, in rain, fog, sand, ash
     float zNear, zFar;     // projection planes of the scene (depth texture linearisation)
     float focusDist;       // eye to target distance (view-space depth of the focus plane), 0 = unknown
+    bool battle;           // a 3D battle: only the backdrop blur and dim (voxel_battledim)
     const DeckSunResolve *sun; // this frame's sun shadow map (NULL: none)
     float dofTopRows, dofBottomRows, dofTopAlpha, dofBottomAlpha; // VOXEL_DOF_* (voxel_tuning.h:89-92)
 } DeckPostFrame;
@@ -33,6 +34,7 @@ typedef struct
     bool shafts;   // voxel_shafts on
     bool sun;      // voxel_sunshadow on and the composite can resolve it
     int sunLvl;
+    int dimLvl;    // voxel_battledim, -1 off
     bool lut;      // voxel_lut on (a generated colour table replaces the procedural grade)
     int gradeLvl, bloomLvl, blurLvl, tiltLvl, shaftLvl, lutLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
 } DeckPostConfig;
@@ -42,7 +44,7 @@ void DeckPost_Shutdown(void);
 DeckPostConfig DeckPost_ReadConfig(void);
 // true: this frame's 3D scene goes to the RGBA8 scene target. Call before binding a framebuffer.
 // May recreate the scene target when voxel_res changed (960 / 1120 / 1280 wide; the picture is 960:544, the heights 544 / 636 / 726 are that ratio rounded to even).
-bool DeckPost_WantScene(int renderW, int renderH, bool indoor);
+bool DeckPost_WantScene(int renderW, int renderH, bool indoor, bool battle);
 // Size of the scene target: the 3D viewport of the frame (the projection aspect stays 960/544).
 int DeckPost_SceneWidth(void);
 int DeckPost_SceneHeight(void);
