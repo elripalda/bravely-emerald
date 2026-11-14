@@ -89,10 +89,32 @@ static u8 sSlotEffect[VOXEL_SPRITE_SLOTS];
 /* Slots whose pixels changed since VoxelEntities_TakeDirtySlots last read them. */
 static uint32_t sDirtySlots;
 static int32_t sPlayerVertexFirst = -1;
+#ifdef PLATFORM_DECK
+/* Phase 6 (deck_chars): the object cards' vertex range in the entity builder, and a soft blob under each outdoor card. */
+static uint32_t sCharFirst, sCharEnd;
+static float sBlobs[64][4];
+static int sBlobCount;
+#endif
 /* The door frame the atlas's door slot holds is not known (FindDoors). */
 static bool sDoorStale = true;
 
 int32_t VoxelEntities_PlayerVertexFirst(void) { return sPlayerVertexFirst; }
+#ifdef PLATFORM_DECK
+int VoxelEntities_GetBlobs(float (*out)[4], int max)
+{
+    int n = sBlobCount < max ? sBlobCount : max;
+
+    for (int i = 0; i < n; ++i)
+        memcpy(out[i], sBlobs[i], sizeof(sBlobs[i]));
+    return n;
+}
+
+void VoxelEntities_CharacterRange(uint32_t *first, uint32_t *end)
+{
+    *first = sCharFirst;
+    *end = sCharEnd;
+}
+#endif
 
 void VoxelEntities_Reset(void)
 {
@@ -1894,6 +1916,10 @@ uint32_t VoxelEntities_Emit(VoxelBuilder *builder, uint16_t *atlas, const VoxelC
     }
     for (uint32_t d = 0; d < VOXEL_DOORS; ++d)
         EmitDoor(builder, &doors[d]);
+#ifdef PLATFORM_DECK
+    sCharFirst = builder->count;
+    sBlobCount = 0;
+#endif
     for (uint32_t i = 0; i < OBJECT_EVENTS_COUNT; ++i)
     {
         VoxelObjectCard *card = &objects[i];
@@ -1916,6 +1942,19 @@ uint32_t VoxelEntities_Emit(VoxelBuilder *builder, uint16_t *atlas, const VoxelC
         if (shadows != NULL && card->outdoor)
             EmitCastShadow(shadows, &sSlots[i], i, card->worldX, card->worldZ, rightX, rightZ,
                            stretch, card->shade, card->rise > 0.0f ? rise : 0.0f, card->deck);
+#ifdef PLATFORM_DECK
+        if (shadows != NULL && card->outdoor && !(card->rise > 0.0f) && sBlobCount < 64)
+        {
+            const float bx = card->worldX + 0.5f, bz = card->worldZ + 0.5f;
+            const float shade = card->shade < 0.0f ? 0.0f : (card->shade > 1.0f ? 1.0f : card->shade);
+
+            sBlobs[sBlobCount][0] = bx;
+            sBlobs[sBlobCount][1] = VoxelRelief_LiftAt(bx, bz) + 0.028f + card->deck;
+            sBlobs[sBlobCount][2] = bz + VoxelRelief_ShiftAt(bx, bz) + card->deck;
+            sBlobs[sBlobCount][3] = 0.20f * (0.35f + 0.65f * shade) * (dusk < 1.0f ? dusk : 1.0f);
+            ++sBlobCount;
+        }
+#endif
         if (reflections != NULL && snap->objectEvents[i].hasReflection)
             EmitReflection(reflections, &sSlots[i], i, card->worldX, card->worldZ,
                            rightX, rightZ, stretch);
@@ -1925,6 +1964,9 @@ uint32_t VoxelEntities_Emit(VoxelBuilder *builder, uint16_t *atlas, const VoxelC
         if (i == gPlayerAvatar.objectEventId && builder->count == first + 6)
             sPlayerVertexFirst = (int32_t)first;
     }
+#ifdef PLATFORM_DECK
+    sCharEnd = builder->count;
+#endif
 
     for (uint32_t e = 0; e < effectCount; ++e)
     {

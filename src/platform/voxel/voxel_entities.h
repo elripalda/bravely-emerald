@@ -74,6 +74,12 @@ float VoxelEntities_PlayerDeck(void);
 float VoxelEntities_PlayerGround(void);
 /* First vertex of the emitted player quad, or -1 when invisible/not emitted. */
 int32_t VoxelEntities_PlayerVertexFirst(void);
+#ifdef PLATFORM_DECK
+/* Phase 6: the soft blob under each outdoor object card of the last Emit (x, y, z of the ground, strength), returns the count;
+ * and the vertex range [first, end) of the entity builder that holds the object cards (not doors, not effects). */
+int VoxelEntities_GetBlobs(float (*out)[4], int max);
+void VoxelEntities_CharacterRange(uint32_t *first, uint32_t *end);
+#endif
 
 /*
  * Re-decodes the slots whose sprite changed and appends one billboard per

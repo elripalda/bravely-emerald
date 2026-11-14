@@ -33,6 +33,7 @@
 #include "../deck/deck_flowers.h"
 #include "../deck/deck_rain.h"
 #include "../deck/deck_particles.h"
+#include "../deck/deck_chars.h"
 #endif
 
 static int32_t sFrameDrawCalls = 0;
@@ -3723,6 +3724,7 @@ bool VoxelRenderer_Init(void)
     DeckSway_Init();
     DeckRain_Init();
     DeckParticles_Init();
+    DeckChars_Init();
 #endif
 
     MakeFog();
@@ -3797,6 +3799,7 @@ void VoxelRenderer_Shutdown(void)
     DeckSway_Shutdown();
     DeckRain_Shutdown();
     DeckParticles_Shutdown();
+    DeckChars_Shutdown();
 #endif
 
     if (sChunkStaging)
@@ -4866,6 +4869,9 @@ static void Frame_EmitEntities(const VoxelFrame *const f)
                 sShadowGlVerts[i].g = 20;
                 sShadowGlVerts[i].b = 40;
                 float a = sShadowVerts[i].shade;
+#ifdef PLATFORM_DECK
+                a *= DeckChars_SilhouetteScale();
+#endif
                 if (a < 0.0f) a = 0.0f;
                 if (a > 1.0f) a = 1.0f;
                 sShadowGlVerts[i].a = (uint8_t)(a * 255.0f);
@@ -5209,6 +5215,16 @@ static bool Pass_Buildings(const VoxelFrame *const f)
 // Pass 4: cast and decal silhouette shadows (Emerald 3DS GL_COMBINE, 0xFF281408u).
 static void Pass_CastShadows(void)
 {
+#ifdef PLATFORM_DECK
+    {
+        // B4: soft blobs under the characters first, the silhouettes (scaled down while the blobs are on) over them
+        float blobs[DECK_CHARS_MAX_BLOBS][4];
+        const int nBlobs = VoxelEntities_GetBlobs(blobs, DECK_CHARS_MAX_BLOBS);
+
+        if (nBlobs > 0)
+            DeckChars_DrawBlobs((const float (*)[4])blobs, nBlobs, gVoxelSun.dx, gVoxelSun.dz);
+    }
+#endif
     if (sShadowGlCount > 0 && sSpriteTex != 0)
     {
         glEnable(GL_TEXTURE_2D);
@@ -5314,6 +5330,25 @@ static void Pass_Entities(void)
         glVertexPointer(3, GL_FLOAT, sizeof(VoxelGlVertex), &sEntityGlVerts[0].x);
         glTexCoordPointer(2, GL_FLOAT, sizeof(VoxelGlVertex), &sEntityGlVerts[0].u);
         glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(VoxelGlVertex), &sEntityGlVerts[0].r);
+#ifdef PLATFORM_DECK
+        // G4: the object cards (not doors or effects) through the outline program; the rest the plain way
+        uint32_t cFirst = 0, cEnd = 0;
+        VoxelEntities_CharacterRange(&cFirst, &cEnd);
+        if (cEnd > sEntityGlCount) cEnd = sEntityGlCount;
+        if (cFirst > cEnd) cFirst = cEnd;
+        if (cEnd > cFirst && DeckChars_OutlineBegin(gVoxelSun.dx, gVoxelSun.dz, gVoxelSun.strength))
+        {
+            DeckChars_OutlineEnd();
+            if (cFirst > 0)
+                glDrawArrays(GL_TRIANGLES, 0, (GLsizei)cFirst);
+            if (sEntityGlCount > cEnd)
+                glDrawArrays(GL_TRIANGLES, (GLint)cEnd, (GLsizei)(sEntityGlCount - cEnd));
+            DeckChars_OutlineBegin(gVoxelSun.dx, gVoxelSun.dz, gVoxelSun.strength);
+            glDrawArrays(GL_TRIANGLES, (GLint)cFirst, (GLsizei)(cEnd - cFirst));
+            DeckChars_OutlineEnd();
+        }
+        else
+#endif
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)sEntityGlCount);
     }
 }
