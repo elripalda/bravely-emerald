@@ -5626,7 +5626,7 @@ static void Cmd_hitanimation(void)
 
             if (gBattleStruct->dynamicMoveType)
                 moveType = gBattleStruct->dynamicMoveType & 0x3F;
-            DeckBattleFx_Hit(moveType, gActiveBattler, (gMoveResultFlags & MOVE_RESULT_CRITICAL_HIT) != 0,
+            DeckBattleFx_Hit(moveType, gActiveBattler, gCritMultiplier > 1,
                              gBattleMoveDamage > 0 ? (u16)gBattleMoveDamage : 0, gBattleMons[gActiveBattler].maxHP);
         }
 #endif
