@@ -340,6 +340,69 @@ void VoxelEntities_GetPlayerWorldPos(float *worldX, float *worldZ)
     if (worldZ != NULL) *worldZ = pz;
 }
 
+#ifdef PLATFORM_DECK
+/* Deck player bend (deck_sway.c): the player first, then the nearest visible objects (the follower, NPCs)
+ * within 4 tiles of it, at most `max`; tile centres in the current frame, as the camera target is. */
+int VoxelEntities_GetWalkers(float (*xz)[2], int max)
+{
+    const VoxelEntitySnapshot *snap = VoxelEntities_GetVisibleSnapshot();
+    float offX = 0.0f, offZ = 0.0f, px, pz, bestD[8];
+    int n = 0;
+
+    if (snap == NULL || max < 1 || max > 8 || gPlayerAvatar.objectEventId >= OBJECT_EVENTS_COUNT)
+        return 0;
+    if (snap->mapGroup >= 0 && snap->mapNum >= 0)
+    {
+        int32_t ox = 0, oy = 0;
+
+        if (VoxelWorld_GetInstanceOffset(snap->mapGroup, snap->mapNum, &ox, &oy))
+        {
+            offX = (float)ox;
+            offZ = (float)oy;
+        }
+    }
+    VoxelEntities_GetPlayerWorldPos(&px, &pz);
+    xz[0][0] = px + 0.5f;
+    xz[0][1] = pz + 0.5f;
+    bestD[0] = 0.0f;
+    n = 1;
+    for (uint32_t i = 0; i < OBJECT_EVENTS_COUNT; ++i)
+    {
+        const struct ObjectEvent *obj = &snap->objectEvents[i];
+        float x, z, d;
+        int slot;
+
+        if (i == gPlayerAvatar.objectEventId || !obj->active || obj->invisible)
+            continue;
+        if (!GetObjectWorldPos(obj, &snap->sprites[i], &x, &z))
+            continue;
+        x += offX + 0.5f;
+        z += offZ + 0.5f;
+        d = (x - xz[0][0]) * (x - xz[0][0]) + (z - xz[0][1]) * (z - xz[0][1]);
+        if (d > 16.0f)
+            continue;
+        /* insertion into the nearest-first list (index 0 is the player) */
+        slot = n;
+        while (slot > 1 && bestD[slot - 1] > d)
+            --slot;
+        if (slot >= max)
+            continue;
+        for (int k = (n < max ? n : max - 1); k > slot; --k)
+        {
+            xz[k][0] = xz[k - 1][0];
+            xz[k][1] = xz[k - 1][1];
+            bestD[k] = bestD[k - 1];
+        }
+        xz[slot][0] = x;
+        xz[slot][1] = z;
+        bestD[slot] = d;
+        if (n < max)
+            ++n;
+    }
+    return n;
+}
+#endif
+
 /* ── Slot decoding ──────────────────────────────────────────────────────── */
 
 /*
@@ -1740,6 +1803,10 @@ uint32_t VoxelEntities_Emit(VoxelBuilder *builder, uint16_t *atlas, const VoxelC
                  * was a patch of the old drawing. */
                 if (sprite->template == gFieldEffectObjectTemplatePointers[FLDEFFOBJ_LONG_GRASS]
                  && VoxelTree_PartAt((int32_t)floorf(cx), (int32_t)floorf(cz)) == VOXEL_TREE_GRASS)
+                    continue;
+                /* Deck: the same for ordinary tall grass, where a standing tuft is (voxel_tree.c) */
+                if (sprite->template == gFieldEffectObjectTemplatePointers[FLDEFFOBJ_TALL_GRASS]
+                 && VoxelTree_TallGrassStands((int32_t)floorf(cx), (int32_t)floorf(cz)))
                     continue;
                 inRange = fabsf(cx - camera->targetX) <= VOXEL_EFFECT_RANGE
                        && fabsf(cz - camera->targetZ) <= VOXEL_EFFECT_RANGE;

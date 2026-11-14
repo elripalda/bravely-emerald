@@ -3,7 +3,9 @@
 #include "platform/vita_extras.h"
 
 static DeckGlProgram sProg;
-static GLint sTex = -1, sChunk = -1;
+static GLint sTex = -1, sChunk = -1, sFrame = -1, sBend[DECK_SWAY_WALKERS] = { -1, -1, -1, -1 };
+static float sWalk[DECK_SWAY_WALKERS][2];
+static int sWalkN;
 static bool sReady = false;
 
 // Vertex alpha = 255 - round(190 * weight) (voxel_mesh_builder.h swayW). Weight 0 at the foot, 0.5 at the
@@ -52,6 +54,11 @@ void DeckSway_Init(void)
     }
     sTex = DeckGl_Uniform(&sProg, "uTex");
     sChunk = DeckGl_Uniform(&sProg, "uChunkOffset");
+    sFrame = DeckGl_Uniform(&sProg, "uFrameOffset");
+    sBend[0] = DeckGl_Uniform(&sProg, "uBend0");
+    sBend[1] = DeckGl_Uniform(&sProg, "uBend1");
+    sBend[2] = DeckGl_Uniform(&sProg, "uBend2");
+    sBend[3] = DeckGl_Uniform(&sProg, "uBend3");
     sReady = true;
     DeckGl_Log("[SWAY] ready\n");
 }
@@ -69,12 +76,35 @@ bool DeckSway_Begin(void)
         return false;
     DeckGl_UseProgram(&sProg);
     DeckGl_Set1i(sTex, 0);
+    for (int i = 0; i < DECK_SWAY_WALKERS; ++i)
+    {
+        if (i < sWalkN)
+            DeckGl_Set3f(sBend[i], sWalk[i][0], sWalk[i][1], 1.0f);
+        else
+            DeckGl_Set3f(sBend[i], 0.0f, 0.0f, 0.0f);
+    }
     return true;
 }
 
-void DeckSway_SetChunkOffset(float x, float z)
+void DeckSway_SetChunkOffset(float x, float z, float frameX, float frameZ)
 {
     DeckGl_Set2f(sChunk, x, z);
+    DeckGl_Set2f(sFrame, frameX, frameZ);
+}
+
+void DeckSway_SetWalkers(const float (*xz)[2], int n)
+{
+    sWalkN = n < 0 ? 0 : (n > DECK_SWAY_WALKERS ? DECK_SWAY_WALKERS : n);
+    for (int i = 0; i < sWalkN; ++i)
+    {
+        sWalk[i][0] = xz[i][0];
+        sWalk[i][1] = xz[i][1];
+    }
+}
+
+bool DeckGrass_Enabled(void)
+{
+    return sReady && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0 && VitaExtras_GetFast(FAST_EXTRA_VOXEL_GRASS) != 0;
 }
 
 void DeckSway_End(void)

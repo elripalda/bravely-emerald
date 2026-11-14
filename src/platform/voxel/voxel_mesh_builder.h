@@ -81,6 +81,9 @@ typedef struct
      * writes 0. Set by the tree emitters around a crown card or a tuft. */
     uint8_t *swayW;
     float swayY0, swayRise, swayScale;
+    /* Grass cards (long and tall): weight bytes are stored even, with bit 0 set so the shader also
+     * bends them away from walkers (player bend, phase 4). Trees leave it clear. */
+    bool swayBend;
     /* The relief's lattice: each vertex's shade already holds its face term,
      * worked out a tile across (see EmitRelief), not its quad's. */
     bool vertexFace;

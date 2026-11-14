@@ -298,7 +298,10 @@ static void BattleCamera(void)
 #define CHUNK_SIZE 8
 #define CHUNK_GROUND_CAP 1536
 #define CHUNK_GROUND_TOTAL_CAP (VOXEL_MAX_ATLAS_PAGES * CHUNK_GROUND_CAP)
-#define CHUNK_TREE_CAP 768
+/* trees and grass of one chunk: 64 cells, a card 6 vertices (a large crown's two rows 12); tall grass standing on
+ * every cell (Deck) plus the trees of a wood fills ~700 at most, the old 768 stays the base and leaves room (3072 per
+ * the spec). Staging and VBO sizes follow it (CHUNK_VERTS_PER_SLOT, treeFirstVert uint16: max 6144 + 3072 + 12288). */
+#define CHUNK_TREE_CAP 3072
 #define CHUNK_BUILDING_CAP 12288
 #define MAX_CHUNK_GROUND_SPANS 24
 #define MAX_CHUNK_BUILDING_SPANS 4
@@ -2259,6 +2262,9 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
 
     // 2. Trees & Tall Grass across all overlapping instances
     phaseStart = VitaPerf_NowMs();
+#ifdef PLATFORM_DECK
+    const uint32_t tuftsBefore = VoxelTree_TuftsEmitted();
+#endif
     VoxelBuilder_Init(&builder, sScratch, SCRATCH_VERTICES);
     builder.swayW = SwayWeights(); // Deck wind weights (NULL elsewhere)
     VoxelBuilder_SetAtlas(&builder, in->activeMap);
@@ -2295,6 +2301,21 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
         out->treeCount = count;
     }
     out->treesMs = VitaPerf_NowMs() - phaseStart;
+#ifdef PLATFORM_DECK
+    {
+        // debug aid for the grass phase: tufts and tree vertices per chunk, build ms, truncation
+        static unsigned sTuftLogs;
+        const uint32_t tufts = VoxelTree_TuftsEmitted() - tuftsBefore;
+        if (tufts > 0 && sTuftLogs < 150)
+        {
+            ++sTuftLogs;
+            DeckGl_Log("[GRASS] chunk %d,%d tufts %u treeVerts %u (built %u, cap %d) treesMs %.2f
+", x0, y0,
+                       (unsigned)tufts, (unsigned)out->treeCount, (unsigned)builder.count, CHUNK_TREE_CAP,
+                       out->treesMs);
+        }
+    }
+#endif
 
     // 3. Buildings & Indoor furniture across all overlapping instances
     phaseStart = VitaPerf_NowMs();
@@ -3909,9 +3930,15 @@ static inline uint32_t ChunkContentHash(const int32_t cx0, const int32_t cy0, co
 {
     const int32_t cx1 = cx0 + CHUNK_SIZE;
     const int32_t cy1 = cy0 + CHUNK_SIZE;
-    return indoor
+    uint32_t hash = indoor
         ? VoxelWorld_BlockHash(cx0 - 1, cy0 - VOXEL_CHUNK_MARGIN_NORTH - 1, cx1 + 1, cy1 + 2)
         : VoxelLighting_Hash(cx0, cy0, cx1, cy1);
+#ifdef PLATFORM_DECK
+    // standing tall grass changes the tree region of every outdoor chunk (voxel_grass)
+    if (!indoor && DeckGrass_Enabled())
+        hash ^= 0x9E3779B9u;
+#endif
+    return hash;
 }
 
 // Start of the frame: counters, the chunk worker's state, the map instances. False when
@@ -3923,6 +3950,19 @@ static bool Frame_Begin(VoxelFrame *const f)
     sFrameVertCount = 0;
     VitaDayNight_Update();
     sFrameCounter++;
+#ifdef PLATFORM_DECK
+    {
+        // a changed voxel_grass setting: every chunk checks its hash again (ChunkContentHash holds it)
+        static int sGrassSeen = -1;
+        const int grass = DeckGrass_Enabled() ? 1 : 0;
+        if (grass != sGrassSeen)
+        {
+            if (sGrassSeen >= 0)
+                sWorldEpoch++;
+            sGrassSeen = grass;
+        }
+    }
+#endif
 
     const bool inBattle3D = VoxelWorld_IsBattleMapAvailable()
         && VitaExtras_GetFast(FAST_EXTRA_VOXEL_BATTLE) != 0
@@ -4922,6 +4962,11 @@ static void Pass_Trees(const VoxelFrame *const f)
         glEnable(GL_ALPHA_TEST);
         glAlphaFunc(GL_GREATER, 0.0f);
 #ifdef PLATFORM_DECK
+        {
+            float walkers[DECK_SWAY_WALKERS][2];
+            DeckSway_SetWalkers((const float (*)[2])walkers, VitaExtras_GetFast(FAST_EXTRA_VOXEL_GRASS) != 0
+                                    ? VoxelEntities_GetWalkers(walkers, DECK_SWAY_WALKERS) : 0);
+        }
         const bool sway = DeckSway_Begin();
 #endif
         glBindTexture(GL_TEXTURE_2D, sTreeTex);
@@ -4939,7 +4984,8 @@ static void Pass_Trees(const VoxelFrame *const f)
 
 #ifdef PLATFORM_DECK
             if (sway)
-                DeckSway_SetChunkOffset(chunk->drawOffsetX - sSwayShiftX, chunk->drawOffsetZ - sSwayShiftZ);
+                DeckSway_SetChunkOffset(chunk->drawOffsetX - sSwayShiftX, chunk->drawOffsetZ - sSwayShiftZ,
+                                        chunk->drawOffsetX, chunk->drawOffsetZ);
 #endif
             ChunkOffsets_Apply(chunk);
             glDrawArrays(GL_TRIANGLES, (GLint)chunk->treeFirstVert, (GLsizei)count);

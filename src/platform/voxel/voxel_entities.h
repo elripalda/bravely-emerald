@@ -60,6 +60,10 @@ void VoxelEntities_Reset(void);
  * once per step no matter how smooth its damping is.
  */
 void VoxelEntities_GetPlayerWorldPos(float *worldX, float *worldZ);
+#ifdef PLATFORM_DECK
+/* The player and the nearest visible objects, tile centres (x, z), nearest first; returns the count (<= max <= 8). */
+int VoxelEntities_GetWalkers(float (*xz)[2], int max);
+#endif
 /* How high a bridge's deck carries the player, tiles (0 off one). */
 float VoxelEntities_PlayerDeck(void);
 /* The height, tiles, of the ground the player stands on, deck included: taken

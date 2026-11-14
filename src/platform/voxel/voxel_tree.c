@@ -3,6 +3,11 @@
 #include "voxel_tree.h"
 #include "voxel_relief.h"
 #include "voxel_regions.h"
+#include "voxel_world.h"
+#include "voxel_lighting.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_sway.h"
+#endif
 
 struct Tileset;
 extern const struct Tileset gTileset_Dewford;
@@ -346,6 +351,7 @@ static void EmitSmallCell(VoxelBuilder *builder, const VoxelMapInstance *inst, i
     builder->swayY0 = baseHeight;
     builder->swayRise = rise;
     builder->swayScale = grass ? 1.0f : 0.5f;
+    builder->swayBend = grass;
     VoxelBuilder_Quad(builder,
         &(VoxelVertex){wx,        baseHeight + rise, baseZ - run, TEX_U(cx),      TEX_V(cy),      1.0f},
         &(VoxelVertex){wx + 1.0f, baseHeight + rise, baseZ - run, TEX_U(cx + 16), TEX_V(cy),      1.0f},
@@ -353,7 +359,70 @@ static void EmitSmallCell(VoxelBuilder *builder, const VoxelMapInstance *inst, i
         &(VoxelVertex){wx,        baseHeight,        baseZ,       TEX_U(cx),      TEX_V(cy + 32), 1.0f});
     builder->rounded = false;
     builder->swayRise = 0.0f;
+    builder->swayBend = false;
 }
+
+/* Standing tall grass (Deck, phase 4 E1). Ordinary tall grass was only drawn flat, as the ground
+ * metatile; here the long grass's tuft (16:32 at 80,32 of the tree atlas) stands on it as well, leant
+ * back like the long grass's but shorter (TALL_GRASS_HEIGHT): the grass of the GBA is knee high. The
+ * ground under it is untouched, so behaviour, encounters and the ground pass do not change. */
+#define TALL_GRASS_HEIGHT 0.55f
+
+bool VoxelTree_TallGrassStands(int32_t x, int32_t y)
+{
+#ifdef PLATFORM_DECK
+    const VoxelMapInstance *inst = VoxelWorld_GetInstanceAt(x, y);
+
+    return inst != NULL && DeckGrass_Enabled() && VoxelWorld_UsesTreeSprites(inst)
+        && VoxelTree_Part(inst->secondaryTileset, VoxelWorld_GetMetatileId(x, y)) < 0
+        && VoxelWorld_IsTallGrassCell(x, y);
+#else
+    (void)x; (void)y;
+    return false;
+#endif
+}
+
+#ifdef PLATFORM_DECK
+static uint32_t sTufts;
+
+uint32_t VoxelTree_TuftsEmitted(void)
+{
+    return sTufts;
+}
+
+static void EmitTallGrass(VoxelBuilder *builder, int32_t x, int32_t y)
+{
+    const float rise = 1.532089f * TALL_GRASS_HEIGHT, run = 1.285575f * TALL_GRASS_HEIGHT;
+    const float baseHeight = -0.10f;
+    const float wx = (float)x, wz = (float)y;
+    const float baseZ = wz + 0.825f;
+    const float constant = builder->lightingConstant;
+
+    /* one light sample at the foot, as a sign takes (rays from every corner of every tuft would
+     * cost most of a chunk's build) */
+#if CTR_VOXEL_LIGHTING
+    if (builder->lighting && constant < 0.0f)
+        builder->lightingConstant = VoxelLighting_Sample(
+            wx + 0.5f, 0.3f + builder->lift + builder->base,
+            VoxelBuilder_StretchZ(builder, wz + 0.5f + builder->shift));
+#endif
+    builder->rounded = true;
+    builder->swayY0 = baseHeight;
+    builder->swayRise = rise;
+    builder->swayScale = 1.0f;
+    builder->swayBend = true;
+    VoxelBuilder_Quad(builder,
+        &(VoxelVertex){wx,        baseHeight + rise, baseZ - run, TEX_U(80),      TEX_V(32),      1.0f},
+        &(VoxelVertex){wx + 1.0f, baseHeight + rise, baseZ - run, TEX_U(80 + 16), TEX_V(32),      1.0f},
+        &(VoxelVertex){wx + 1.0f, baseHeight,        baseZ,       TEX_U(80 + 16), TEX_V(32 + 32), 1.0f},
+        &(VoxelVertex){wx,        baseHeight,        baseZ,       TEX_U(80),      TEX_V(32 + 32), 1.0f});
+    builder->rounded = false;
+    builder->swayRise = 0.0f;
+    builder->swayBend = false;
+    builder->lightingConstant = constant;
+    ++sTufts;
+}
+#endif
 
 /* A 2x2 tree's art: its crown (rows of `rowPx` texels), its trunk's ground,
  * and how far into the trunk row the crown's foot stands (`foot`, cells
@@ -578,6 +647,16 @@ void VoxelTree_EmitInstance(VoxelBuilder *builder, const VoxelMapInstance *inst,
                 builder->lift = 0.0f;
                 builder->shift = 0.0f;
             }
+#ifdef PLATFORM_DECK
+            else if (VoxelTree_TallGrassStands(x, y))
+            {
+                builder->lift = VoxelRelief_CellLift(inst, x, y);
+                builder->shift = VoxelRelief_CellShift(inst, x, y);
+                EmitTallGrass(builder, x, y);
+                builder->lift = 0.0f;
+                builder->shift = 0.0f;
+            }
+#endif
         }
 }
 

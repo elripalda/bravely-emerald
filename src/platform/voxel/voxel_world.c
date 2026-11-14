@@ -744,6 +744,11 @@ uint32_t VoxelWorld_GetMetatileBehavior(int32_t worldX, int32_t worldY)
     return UNPACK_BEHAVIOR(GetMetatileAttribute(inst, block & MAPGRID_METATILE_ID_MASK));
 }
 
+bool VoxelWorld_IsTallGrassCell(int32_t worldX, int32_t worldY)
+{
+    return MetatileBehavior_IsTallGrass((u8)VoxelWorld_GetMetatileBehavior(worldX, worldY));
+}
+
 bool VoxelWorld_IsVisibleReflectiveSurface(int32_t worldX, int32_t worldY)
 {
     const VoxelMapInstance *inst = NULL;
