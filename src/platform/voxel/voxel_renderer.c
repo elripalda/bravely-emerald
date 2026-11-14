@@ -36,6 +36,7 @@
 #include "../deck/deck_particles.h"
 #include "../deck/deck_chars.h"
 #include "../deck/deck_sunshadow.h"
+#include "../deck/deck_uiglow.h"
 #endif
 
 static int32_t sFrameDrawCalls = 0;
@@ -6354,6 +6355,25 @@ static void Pass_Overlay2D(const VoxelFrame *const f)
                 glEnableClientState(GL_TEXTURE_COORD_ARRAY);
                 glVertexPointer(2, GL_FLOAT, 0, uiVerts);
                 glTexCoordPointer(2, GL_FLOAT, 0, uiUvs);
+#ifdef PLATFORM_DECK
+                {
+                    // voxel_uiglow: the GBA overlay (dialogue, battle) black and faint around a short offset, under the real draw
+                    DeckUiGlow glow;
+
+                    if (DeckUiGlow_Get(&glow))
+                    {
+                        for (int t = 0; t < glow.count; t++)
+                        {
+                            glColor4f(0.0f, 0.0f, 0.0f, glow.alpha);
+                            glPushMatrix();
+                            glTranslatef(glow.dx[t] / 960.0f, glow.dy[t] / 544.0f, 0.0f);
+                            glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+                            glPopMatrix();
+                        }
+                        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                    }
+                }
+#endif
                 glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
                 glDisableClientState(GL_TEXTURE_COORD_ARRAY);
                 glDisableClientState(GL_VERTEX_ARRAY);

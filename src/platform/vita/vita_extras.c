@@ -119,6 +119,7 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_shafts") == 0) return FAST_EXTRA_VOXEL_SHAFTS;
         if (strcmp(key, "voxel_lut") == 0) return FAST_EXTRA_VOXEL_LUT;
         if (strcmp(key, "voxel_bump") == 0) return FAST_EXTRA_VOXEL_BUMP;
+        if (strcmp(key, "voxel_uiglow") == 0) return FAST_EXTRA_VOXEL_UIGLOW;
         if (strcmp(key, "voxel_groundrelief") == 0) return FAST_EXTRA_VOXEL_GROUNDRELIEF;
         if (strcmp(key, "voxel_battledim") == 0) return FAST_EXTRA_VOXEL_BATTLEDIM;
         if (strcmp(key, "voxel_sunshadow") == 0) return FAST_EXTRA_VOXEL_SUNSHADOW;
@@ -333,6 +334,7 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS", "3D RESOLUTION",    "voxel_res", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "LUT GRADE",        "voxel_lut", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "RELIEF (BUMP)",    "voxel_bump", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "UI DEPTH GLOW", "voxel_uiglow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "GROUND DETAIL", "voxel_groundrelief", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "BATTLE BACKDROP", "voxel_battledim", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "SUN SHADOWS", "voxel_sunshadow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },

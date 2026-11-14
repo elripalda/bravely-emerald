@@ -11,6 +11,9 @@
 #include "ui_internal.h"
 #include "platform/ui.h"
 #include "../vita/vita_perf.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_uiglow.h"
+#endif
 
 #ifdef PLATFORM_VITA
 #include <vitaGL.h>
@@ -88,6 +91,33 @@ void Ui_Render(int32_t viewWidth, int32_t viewHeight)
     // the last frames, so it is written in place without vitaGL's copy of the texture)
     glBindTexture(GL_TEXTURE_2D, sTexture);
     UiSpr_FlushUploads();
+#ifdef PLATFORM_DECK
+    {
+        // voxel_uiglow: the list again, black and faint, shifted around a short offset, under the real draw (raised look)
+        DeckUiGlow glow;
+
+        if (DeckUiGlow_Get(&glow))
+        {
+            static UiGlVertex sGlowVerts[UI_MAX_QUADS * 6];
+            const uint32_t n = list->vcount;
+
+            for (uint32_t i = 0; i < n; i++)
+            {
+                const uint32_t a = (uint32_t)((float)(list->verts[i].rgba >> 24) * glow.alpha + 0.5f);
+
+                sGlowVerts[i] = list->verts[i];
+                sGlowVerts[i].rgba = a << 24; // black with the element's own alpha x the tap opacity
+            }
+            for (int t = 0; t < glow.count; t++)
+            {
+                glPushMatrix();
+                glTranslatef(glow.dx[t] * ((float)UI_SCREEN_W / 960.0f), glow.dy[t] * ((float)UI_SCREEN_H / 544.0f), 0.0f);
+                Draw(sGlowVerts, n, sTexture);
+                glPopMatrix();
+            }
+        }
+    }
+#endif
     Draw(list->verts, list->vcount, sTexture);
 
 

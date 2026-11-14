@@ -94,6 +94,7 @@ typedef enum
     FAST_EXTRA_VOXEL_SUNSHADOW,   // Deck sun shadow map (casters: trees, buildings, characters; resolved in the composite)
     FAST_EXTRA_VOXEL_BATTLEDIM,   // Deck 3D battle backdrop: blur radius and black overlay opacity
     FAST_EXTRA_VOXEL_GROUNDRELIEF,   // Deck ground micro-relief: procedural height by ground kind plus undulation, shading only
+    FAST_EXTRA_VOXEL_UIGLOW,   // Deck UI depth glow: faint dark halo under the UI (UI passes only)
     FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume: 0 off (no DSP) to 10, default 6
 #endif
     FAST_EXTRA_COUNT
