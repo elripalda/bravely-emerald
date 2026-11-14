@@ -17,6 +17,7 @@
 #include "vita/vita_reset.h"
 #ifdef PLATFORM_DECK
 #include "deck/deck_ambient_game.h"
+#include "deck/deck_uifx.h"
 #endif
 // Catch-up game frames run their scanline events without being drawn (see the main loop).
 #define VITA_SKIP_CATCHUP_DRAW
@@ -306,6 +307,9 @@ static void ShowNativeUi(void)
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisableClientState(GL_VERTEX_ARRAY);
     glDepthMask(GL_FALSE);
+#ifdef PLATFORM_DECK
+    DeckUiFx_Margins(uiVerts[0], uiVerts[2]);   // voxel_uilayout: soft depth in the margins around the 4:3 menu
+#endif
 
 #ifdef PLATFORM_VITA
     eglSwapInterval(NULL, 1);

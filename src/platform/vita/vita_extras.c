@@ -125,6 +125,14 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_battledim") == 0) return FAST_EXTRA_VOXEL_BATTLEDIM;
         if (strcmp(key, "voxel_battlefx") == 0) return FAST_EXTRA_VOXEL_BATTLEFX;
         if (strcmp(key, "voxel_sunshadow") == 0) return FAST_EXTRA_VOXEL_SUNSHADOW;
+        if (strcmp(key, "voxel_uiglass") == 0) return FAST_EXTRA_VOXEL_UIGLASS;
+        if (strcmp(key, "voxel_uitint") == 0) return FAST_EXTRA_VOXEL_UITINT;
+        if (strcmp(key, "voxel_uitext") == 0) return FAST_EXTRA_VOXEL_UITEXT;
+        if (strcmp(key, "voxel_uisel") == 0) return FAST_EXTRA_VOXEL_UISEL;
+        if (strcmp(key, "voxel_uianim") == 0) return FAST_EXTRA_VOXEL_UIANIM;
+        if (strcmp(key, "voxel_uibars") == 0) return FAST_EXTRA_VOXEL_UIBARS;
+        if (strcmp(key, "voxel_uiglyphs") == 0) return FAST_EXTRA_VOXEL_UIGLYPHS;
+        if (strcmp(key, "voxel_uilayout") == 0) return FAST_EXTRA_VOXEL_UILAYOUT;
 #endif
         break;
     default:
@@ -167,6 +175,7 @@ static const char *const sVoxelQualityValues[] = { "LOW", "MEDIUM", "HIGH", NULL
 // Level rows (deck_levels.h): index = stored value. 1 = AUTO is what old files stored as ON, so 0/1 keys keep their meaning.
 static const char *const sVoxelLevelValues[] = { "OFF", "AUTO", "LOW", "MEDIUM", "HIGH", NULL };
 static const char *const sVoxelPitchValues[] = { "CLASSIC", "36", "32", "28", "24", NULL };
+static const char *const sUiGlyphValues[] = { "OFF", "GBA", "DECK", NULL };
 static const char *const sAmbientValues[] = { "OFF", "LOW", "MEDIUM", "HIGH", NULL };
 static const char *const sAmbientDensityValues[] = { "SPARSE", "NORMAL", "FREQUENT", NULL };
 #endif
@@ -311,6 +320,16 @@ const VitaExtra gVitaExtras[] = {
 #endif
     { VITA_TAB_GENERAL, "DISPLAY",    "2D SCALER",         "filter",           3, 0, sFilterValues,      NULL, NULL, NULL },
     { VITA_TAB_GENERAL, "DISPLAY",    "MENU COLOR",        "ui_theme",         5, 0, sUiThemeValues,     NULL, NULL, NULL },
+#ifdef PLATFORM_DECK
+    { VITA_TAB_GENERAL, "INTERFACE",  "PANEL GLASS",       "voxel_uiglass",    5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "INTERFACE",  "PANEL TINT",        "voxel_uitint",     5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "INTERFACE",  "TEXT CLARITY",      "voxel_uitext",     5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "INTERFACE",  "MENU CURSOR",       "voxel_uisel",      5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "INTERFACE",  "MENU ANIMATION",    "voxel_uianim",     5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "INTERFACE",  "HP BARS",           "voxel_uibars",     5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "INTERFACE",  "BUTTON ICONS",      "voxel_uiglyphs",   3, 2, sUiGlyphValues,     NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "INTERFACE",  "WIDE UI LAYOUT",    "voxel_uilayout",   5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
+#endif
 
     // ---- [WORLD] ----
     { VITA_TAB_WORLD,   "RENDERER",   "3D VOXEL DIORAMA",  "voxel_3d",         2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },

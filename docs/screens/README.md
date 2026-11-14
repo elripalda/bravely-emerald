@@ -13,3 +13,11 @@ Not captured (single test rule): OFF vs HIGH pairs for sun shadows, relief crops
 - battlefx_high_crit_motes.png: wild battle with voxel_battlefx HIGH after a critical hit: blurred backdrop with gold motes, UI crisp.
 - banding_far_house_switch_comparison.png: far house wall 3x at default settings; rows: default, bump off, sun shadow off (lines gone), tilt-shift off, res 4 (gone), LUT/grade off. banding_far_house_fixed_default.png: the same scene after the normal fix (no lines). banding_far_house_before_after_tapfix_note.png: default before, default after the rotated gather only (lines unchanged), all HIGH (none).
 - floor_indoor_cmp_8aa6f41_vs_head_vs_default.png: lab floor 3x: commit 8aa6f41 all HIGH, head all HIGH, head default.
+
+## UI polish (deck-ui branch)
+- ui_sign_off_default_high_2x.png: the map name popup (GBA overlay) cropped and enlarged 2x, OFF / default / HIGH stacked. Same size and the same crisp glyphs in all three (bbox x 101-526, y 42-190 at 1280, as in the pre-UI-work screen).
+- ui_sign_high_full.png: the full frame with every UI setting and every effect at HIGH.
+- ui_hub_off_default_high.png: the new UI START menu (ui_v2=1), OFF / default / HIGH. Original art; HIGH only adds a 1 px shadow under the white text on the red row.
+- ui_battle_off_default_high.png: new UI battle HUD and text box (ui_v2=1), OFF / default / HIGH (different wild Pokemon, the encounter is random). Same HUD, original HP bar colours.
+- ui_settings_high.png: port options menu (VitaUI canvas) at HIGH: side margins get a soft shadow; no footer text line exists, the group label is darker.
+- ui_party_high_after_fix.png: new UI party info at HIGH after the text shadow threshold fix (muted grey labels are clean).

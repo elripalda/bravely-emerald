@@ -80,13 +80,27 @@ typedef struct
     uint32_t rgba;
 } UiGlVertex;
 
+#ifdef PLATFORM_DECK
+#define UI_MAX_QUADS 16384   // text clarity draws each glyph up to 10 times
+#else
 #define UI_MAX_QUADS 4096
+#endif
+
+#ifdef PLATFORM_DECK
+#include "../deck/deck_uifx.h"
+#endif
 
 typedef struct
 {
     uint32_t vcount;           // vertices (6 per quad)
     uint32_t seq;
     float tickMs;              // Core 1 time spent building this list
+#ifdef PLATFORM_DECK
+    uint32_t panelCount;       // frosted panels of this list (voxel_uiglass / voxel_uitint), in draw order
+    DeckUiPanel panels[DECK_UI_MAX_PANELS];
+    float fade;                // menu animation (voxel_uianim): 1 = fully shown
+    float slideY;              // and the slide in logical px
+#endif
     UiGlVertex verts[UI_MAX_QUADS * 6];
 } UiDrawList;
 
@@ -103,6 +117,15 @@ void UiDraw_Sprite(uint16_t id, int32_t x, int32_t y, int32_t scale);
 void UiDraw_Poly4(const float *xs, const float *ys, uint32_t rgba);
 void UiDraw_Line(float x0, float y0, float x1, float y1, float width, uint32_t rgba);
 void UiDraw_Tri(float x0, float y0, float x1, float y1, float x2, float y2, uint32_t rgba);
+// Deck UI polish (no-ops elsewhere): a frosted panel starting at the next vertex (before its fill is emitted), the alpha
+// multiplier its fill takes (255 = none), the menu animation of the list, and the last published list (fade out of a closed menu)
+void UiDraw_AddPanel(int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, bool chamfer, uint32_t base);
+int32_t UiDraw_FillAlpha(void);
+void UiDraw_SetAnim(float fade, float slideY);
+uint32_t UiDraw_Clock(void);                  // lists begun so far (a clock for the animations, Core 1)
+void UiDraw_Snapshot(void);                   // keeps the list being built (an open menu, steady) for its fade out
+bool UiDraw_HasSnapshot(void);
+void UiDraw_AppendSnapshot(float fade, float slideY);   // the kept list into the one being built, faded
 void UiDraw_PushClip(int32_t x, int32_t y, int32_t w, int32_t h);
 void UiDraw_PopClip(void);
 void UiDraw_Publish(float tickMs);
@@ -224,6 +247,19 @@ void UiW_Arrow(int32_t x, int32_t y, uint32_t colour);      // ▶ cursor, 8x12
 void UiW_Stepper(int32_t x, int32_t y, int32_t value, int32_t *minusX, int32_t *plusX);   // [−] xNN [+], 40 px tall
 void UiW_ScrollBar(int32_t x, int32_t y, int32_t h, int32_t first, int32_t visible, int32_t total);
 void UiW_Toast(const char *text);
+
+// ---------- UI polish (ui_fx.c, Deck only; no-ops elsewhere or with the setting off) ----------
+bool UiFx_BarsOn(void);
+float UiFx_BarShown(int32_t x, int32_t y, int32_t w, float target);      // smoothed percent of the bar at x, y
+uint32_t UiFx_HpColour(float pct, int which);                              // gradient green > yellow > red (0 top, 1 bottom)
+void UiFx_BarGlow(int32_t x, int32_t y, int32_t w, int32_t h, float pct);  // low HP glow behind a bar
+void UiFx_SelRow(int32_t x, int32_t y, int32_t w, int32_t h);             // the selected row: pulse, and the sliding trail target
+void UiFx_SelFlush(void);                                                  // draws the trail (end of the build)
+void UiFx_AnimReset(void);                                                 // a screen opened or changed
+void UiFx_AnimApply(bool open);                                            // before publishing a screen's list
+void UiFx_AnimClosed(void);                                                // the menu closed
+bool UiFx_AnimClosing(void);                                               // no screen open: add the fading picture
+int UiFx_GlyphMode(void);                                                  // 0 PlayStation glyphs, 1 GBA, 2 Steam Deck
 
 // ---------- Screen kit (ui_kit.c) ----------
 void UiKit_Toast(const char *fmt, ...);      // short message over the screen (~2 s)

@@ -321,7 +321,7 @@ static void Build(void)
     {
         UiDraw_Rect(0, 0, UI_SCREEN_W, UI_SCREEN_H, UI_COL_DIM);
         UiW_Window(200, 100, 560, 400, sRemap == 2 ? "PRESS A BUTTON" : "BUTTON REMAPPING");
-        UiText_Draw(UI_FACE_PS2P, 16, 220, 482, "X: change  TRIANGLE: no button", UI_COL_INK_SOFT);
+        UiText_Draw(UI_FACE_PS2P, 16, 220, 482, UiFx_GlyphMode() == 2 ? "A: change  Y: no button" : "X: change  TRIANGLE: no button", UI_COL_INK_SOFT);
         for (int32_t i = 0; i <= VITA_ACTION_COUNT; i++)
         {
             const int32_t y = 150 + i * 36;

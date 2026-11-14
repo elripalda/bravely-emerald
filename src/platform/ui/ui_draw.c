@@ -9,9 +9,13 @@
 // Core 1 emits the final vertices (position, normalised texels, colour; two triangles per quad),
 // so Core 0 only binds the array and draws (it measured 0.79 ms converting quads on Core 0).
 
+#include <stdlib.h>
 #include <string.h>
 #include "ui_internal.h"
 #include "platform/ui.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_uifx.h"
+#endif
 
 #define UI_FRESH 4u
 #define UI_MAX_CLIP 8
@@ -28,12 +32,31 @@ static int32_t sClipDepth;
 
 static uint16_t sWhiteU, sWhiteV;
 static float sInvW = 1.0f, sInvH = 1.0f;
+#ifdef PLATFORM_DECK
+static uint32_t sTintA, sTintB;        // tint gradient colours of this list (theme + time of day)
+static int32_t sFillAlpha = 255;       // alpha multiplier of panel fills while the glass / tint is on
+#endif
+
+static uint32_t sFrameCount;
+
+uint32_t UiDraw_Clock(void)
+{
+    return sFrameCount;
+}
 
 void UiDraw_Begin(void)
 {
     UiDrawList *list = &sLists[sBack];
+    sFrameCount++;
     list->vcount = 0;
     UiTheme_Refresh();
+#ifdef PLATFORM_DECK
+    list->panelCount = 0;
+    list->fade = 1.0f;
+    list->slideY = 0.0f;
+    sFillAlpha = DeckUiFx_PanelsActive() ? DeckUiFx_FillAlpha() : 255;
+    DeckUiFx_TintColours(gUiTheme->tabTop, gUiTheme->capTop, &sTintA, &sTintB);
+#endif
     sClipDepth = 0;
     sClip[0] = (UiClip){ 0, 0, UI_SCREEN_W, UI_SCREEN_H };
     uint16_t wx = 0, wy = 0, tw = 1, th = 1;
@@ -43,6 +66,39 @@ void UiDraw_Begin(void)
     sWhiteV = (uint16_t)(wy + 1);
     sInvW = 1.0f / (float)(tw ? tw : 1);
     sInvH = 1.0f / (float)(th ? th : 1);
+}
+
+void UiDraw_AddPanel(int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, bool chamfer, uint32_t base)
+{
+#ifdef PLATFORM_DECK
+    UiDrawList *list = &sLists[sBack];
+
+    if (sFillAlpha >= 255 || list->panelCount >= DECK_UI_MAX_PANELS || w <= 0 || h <= 0)
+        return;
+    list->panels[list->panelCount++] = (DeckUiPanel){ (float)x, (float)y, (float)w, (float)h, (float)radius, chamfer ? 1u : 0u,
+                                                      base, sTintA, sTintB, list->vcount };
+#else
+    (void)x; (void)y; (void)w; (void)h; (void)radius; (void)chamfer; (void)base;
+#endif
+}
+
+int32_t UiDraw_FillAlpha(void)
+{
+#ifdef PLATFORM_DECK
+    return sFillAlpha;
+#else
+    return 255;
+#endif
+}
+
+void UiDraw_SetAnim(float fade, float slideY)
+{
+#ifdef PLATFORM_DECK
+    sLists[sBack].fade = fade;
+    sLists[sBack].slideY = slideY;
+#else
+    (void)fade; (void)slideY;
+#endif
 }
 
 void UiDraw_PushClip(int32_t x, int32_t y, int32_t w, int32_t h)
@@ -163,9 +219,70 @@ void UiDraw_Darken(int32_t num, int32_t den)
     }
 }
 
+#ifdef PLATFORM_DECK
+static UiGlVertex *sSnapVerts;
+static DeckUiPanel sSnapPanels[DECK_UI_MAX_PANELS];
+static uint32_t sSnapV, sSnapP;
+
+void UiDraw_Snapshot(void)
+{
+    const UiDrawList *list = &sLists[sBack];
+
+    if (sSnapVerts == NULL)
+        sSnapVerts = malloc(sizeof(UiGlVertex) * UI_MAX_QUADS * 6);
+    if (sSnapVerts == NULL || list->vcount == 0)
+        return;
+    memcpy(sSnapVerts, list->verts, sizeof(UiGlVertex) * list->vcount);
+    memcpy(sSnapPanels, list->panels, sizeof(DeckUiPanel) * list->panelCount);
+    sSnapV = list->vcount;
+    sSnapP = list->panelCount;
+}
+
+bool UiDraw_HasSnapshot(void)
+{
+    return sSnapV > 0;
+}
+
+void UiDraw_AppendSnapshot(float fade, float slideY)
+{
+    UiDrawList *list = &sLists[sBack];
+
+    if (sSnapV == 0 || list->vcount + sSnapV > UI_MAX_QUADS * 6 || list->panelCount + sSnapP > DECK_UI_MAX_PANELS)
+        return;
+    for (uint32_t i = 0; i < sSnapP; i++)
+    {
+        list->panels[list->panelCount] = sSnapPanels[i];
+        list->panels[list->panelCount].firstVert += list->vcount;
+        list->panelCount++;
+    }
+    memcpy(&list->verts[list->vcount], sSnapVerts, sizeof(UiGlVertex) * sSnapV);
+    list->vcount += sSnapV;
+    list->fade = fade;
+    list->slideY = slideY;
+}
+#else
+void UiDraw_Snapshot(void) {}
+bool UiDraw_HasSnapshot(void) { return false; }
+void UiDraw_AppendSnapshot(float fade, float slideY) { (void)fade; (void)slideY; }
+#endif
+
 void UiDraw_Publish(float tickMs)
 {
     UiDrawList *list = &sLists[sBack];
+#ifdef PLATFORM_DECK
+    if (list->fade < 0.999f)
+    {
+        // menu fade (voxel_uianim): every vertex alpha scales; the glass of the panels follows list->fade on Core 0
+        const uint32_t k = (uint32_t)(list->fade * 256.0f);
+
+        for (uint32_t i = 0; i < list->vcount; i++)
+        {
+            const uint32_t c = list->verts[i].rgba;
+
+            list->verts[i].rgba = (c & 0x00FFFFFFu) | ((((c >> 24) * k) >> 8) << 24);
+        }
+    }
+#endif
     list->seq = ++sSeq;
     list->tickMs = tickMs;
     UiStall_Published(list->seq);

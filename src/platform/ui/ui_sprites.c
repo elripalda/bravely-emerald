@@ -13,6 +13,9 @@
 
 #include <string.h>
 #include "ui_internal.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_uifx.h"
+#endif
 #include "global.h"
 #include "data.h"
 #include "decompress.h"
@@ -275,6 +278,11 @@ bool UiSpr_ItemIcon(uint16_t itemId, int32_t x, int32_t y, int32_t scale)
 {
     if (itemId == 0)
         return false;
+#ifdef PLATFORM_DECK
+    // voxel_uilayout: a slight soft shadow under the item icon (the same pixels, black, low opacity, shifted)
+    if (DeckUiFx_Level(FAST_EXTRA_VOXEL_UILAYOUT) >= 0)
+        DrawCell(KEY(KIND_ITEM, itemId), 0, 0, 24, 24, x + scale, y + 2 * scale, scale, 0x48000000u);
+#endif
     return DrawCell(KEY(KIND_ITEM, itemId), 0, 0, 24, 24, x, y, scale, 0xFFFFFFFFu);
 }
 

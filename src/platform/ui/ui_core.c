@@ -156,6 +156,7 @@ static bool CanOpenFromField(void)
 
 static void EnterTop(void)
 {
+    UiFx_AnimReset();
     sPrevHeld = ~0u;                  // buttons held across a screen change are not new presses
     sPrevTouch = true;
     sIgnoreTouch = true;              // a finger still down from the last screen is not a tap here
@@ -190,6 +191,7 @@ void UiNav_Pop(void)
         sPrevHeld = ~0u;
         sPrevTouch = true;
     sIgnoreTouch = true;              // a finger still down from the last screen is not a tap here
+        UiFx_AnimReset();
         if (sStack[sDepth - 1]->resume)
             sStack[sDepth - 1]->resume();
     }
@@ -280,6 +282,7 @@ static void Close(void)
     UiStall_Closed();
     UiDraw_Begin();
     UiDraw_Publish(0.0f);
+    UiFx_AnimClosed();
 }
 
 void Ui_Tick(void)
@@ -298,6 +301,7 @@ void Ui_Tick(void)
         any |= contest;
         if (!contest)
             any |= UiBattle_Active() ? UiBattle_Draw() : UiMirror_Draw();
+        any |= UiFx_AnimClosing();   // voxel_uianim: the menu that just closed fades out
         if (any || sOverlayShown)
             UiDraw_Publish(0.0f);
         sOverlayShown = any;
@@ -340,7 +344,9 @@ void Ui_Tick(void)
     UiDraw_Begin();
     UiSpr_BeginTick();
     sStack[sDepth - 1]->build();
+    UiFx_SelFlush();
     UiKit_DrawToast();
+    UiFx_AnimApply(true);
     const float ms = (float)(VitaPerf_NowMs() - t0);
     sAvgTickMs = sAvgTickMs * 0.9f + ms * 0.1f;
     UiDraw_Publish(ms);

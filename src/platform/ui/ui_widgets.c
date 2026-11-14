@@ -45,6 +45,54 @@ static void ShapeFill(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, boo
         UiDraw_RectV(x, y + r, w, h - 2 * r, top, bottom);
 }
 
+// Deck UI polish: while the glass / tint is on, a panel's fill is translucent (sTransA < 255) so the frosted layer under it
+// (deck_uifx.c) shows. Then the edge is drawn as a ring (not a full shape under the fill) and the hard shadow only outside the box.
+static int32_t sTransA = 255;
+
+static uint32_t Fa(uint32_t c)
+{
+    if (sTransA >= 255)
+        return c;
+    return (c & 0x00FFFFFFu) | ((uint32_t)(((c >> 24) * (uint32_t)sTransA + 127u) / 255u) << 24);
+}
+
+// Edge of thickness t of a shape, without its inside
+static void ShapeRing(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, bool chamfer, int32_t t, uint32_t col)
+{
+    const int32_t fr = r > t ? r - t : 0;
+    const int32_t kmax = r > t ? r : t;
+
+    if (t <= 0)
+        return;
+    if (h <= 2 * kmax || w <= 2 * kmax)
+    {
+        ShapeFill(x, y, w, h, r, chamfer, col, col);
+        return;
+    }
+    for (int32_t k = 0; k < kmax; k++)
+    {
+        const int32_t in = k < r ? CornerInset(r, k, chamfer) : 0;
+        if (k < t)
+        {
+            UiDraw_Rect(x + in, y + k, w - 2 * in, 1, col);
+            UiDraw_Rect(x + in, y + h - 1 - k, w - 2 * in, 1, col);
+        }
+        else
+        {
+            const int32_t ii = t + ((k - t) < fr ? CornerInset(fr, k - t, chamfer) : 0);
+            if (ii > in)
+            {
+                UiDraw_Rect(x + in, y + k, ii - in, 1, col);
+                UiDraw_Rect(x + w - ii, y + k, ii - in, 1, col);
+                UiDraw_Rect(x + in, y + h - 1 - k, ii - in, 1, col);
+                UiDraw_Rect(x + w - ii, y + h - 1 - k, ii - in, 1, col);
+            }
+        }
+    }
+    UiDraw_Rect(x, y + kmax, t, h - 2 * kmax, col);
+    UiDraw_Rect(x + w - t, y + kmax, t, h - 2 * kmax, col);
+}
+
 // Box of corner size r: hard shadow (sx, sy), edge of thickness t, vertical gradient fill, inner
 // highlight / shade of thickness b and an optional glass highlight on the upper half
 static void BevelBoxR(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, bool chamfer, int32_t t, uint32_t edge,
@@ -53,13 +101,25 @@ static void BevelBoxR(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, boo
 {
     if (r > h / 2) r = h / 2;
     if (r > w / 2) r = w / 2;
-    if (sx > 0 || sy > 0)
+    if (sTransA < 255)
+    {
+        if (sy > 0)
+            UiDraw_Rect(x + sx, y + h, w, sy, shadowCol);
+        if (sx > 0)
+            UiDraw_Rect(x + w, y + sy, sx, h, shadowCol);
+    }
+    else if (sx > 0 || sy > 0)
         ShapeFill(x + sx, y + sy, w, h, r, chamfer, shadowCol, shadowCol);
     if (t > 0)
-        ShapeFill(x, y, w, h, r, chamfer, edge, edge);
+    {
+        if (sTransA < 255)
+            ShapeRing(x, y, w, h, r, chamfer, t, edge);
+        else
+            ShapeFill(x, y, w, h, r, chamfer, edge, edge);
+    }
     const int32_t fx = x + t, fy = y + t, fw = w - 2 * t, fh = h - 2 * t;
     const int32_t fr = r > t ? r - t : 0;
-    ShapeFill(fx, fy, fw, fh, fr, chamfer, top, bottom);
+    ShapeFill(fx, fy, fw, fh, fr, chamfer, Fa(top), Fa(bottom));
     if (b > 0)
     {
         UiDraw_Rect(fx + fr, fy, fw - 2 * fr, b, hi);
@@ -82,6 +142,25 @@ static void BevelBox(int32_t x, int32_t y, int32_t w, int32_t h, int32_t t, uint
     const int32_t sy = shadow > 0 ? (shadow * T->shadow + 3) / 4 : 0;
     const int32_t sx = shadow > 0 ? (shadow * T->shadowR + 3) / 4 : 0;
     BevelBoxR(x, y, w, h, r, T->chamfer, t, edge, top, bottom, T->bevel ? b : 0, hi, shade, sx, sy, T->shadowCol, false);
+}
+
+// Starts a frosted panel (voxel_uiglass / voxel_uitint): registers it for the GL pass and makes the fill translucent until TransEnd.
+static void TransBegin(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t base)
+{
+    const int32_t a = UiDraw_FillAlpha();
+    int32_t r = T->radius;
+
+    if (a >= 255)
+        return;
+    if (h < 12) r = 0;
+    else if (h < 24 && r > 3) r = T->chamfer ? 4 : 3;
+    UiDraw_AddPanel(x, y, w, h, r, T->chamfer, base);
+    sTransA = a;
+}
+
+static void TransEnd(void)
+{
+    sTransA = 255;
 }
 
 // Glass highlight of the theme (CRYSTAL) on a box already drawn
@@ -130,7 +209,9 @@ void UiW_ThemeBox(int32_t x, int32_t y, int32_t w, int32_t h, int32_t t, uint32_
 // dark rounded edge and a soft drop shadow
 void UiW_DialogBox(int32_t x, int32_t y, int32_t w, int32_t h)
 {
+    TransBegin(x, y, w, h, T->dlgTop);
     BevelBox(x, y, w, h, T->edge > 3 ? T->edge : 3, T->dlgEdge, T->dlgTop, T->dlgBot, 2, C_WHITE, T->dlgShade, 6);
+    TransEnd();
     if (T->accent)
         UiDraw_Rect(x, y + (T->chamfer ? T->radius : 0), 8, h - (T->chamfer ? 2 * T->radius : 0), T->accent);
 }
@@ -202,8 +283,45 @@ static void Disc(int32_t cx, int32_t cy, int32_t r, uint32_t colour)
     UiDraw_Rect(cx - runHw, cy + runStart, runHw * 2 + 1, r + 1 - runStart, colour);
 }
 
+// voxel_uiglyphs: the button circle as a letter. Deck: A (cross position), B (circle), X (square), Y (triangle), each in its colour.
+// GBA: A and B only (the GBA has no other face buttons; the square and triangle keep the port's own shapes).
+static bool LetterGlyph(int32_t x, int32_t y, uint8_t kind, int mode)
+{
+    static const char *const kDeckLetter[4] = { "A", "B", "Y", "X" };   // by UI_GLYPH_*: cross, circle, triangle, square
+    static const uint32_t kDeckRing[4] = { UI_RGBA(76, 160, 84, 255), UI_RGBA(214, 81, 81, 255), UI_RGBA(214, 168, 40, 255), UI_RGBA(91, 127, 214, 255) };
+    static const uint32_t kDeckInk[4] = { UI_RGBA(140, 236, 150, 255), UI_RGBA(255, 122, 122, 255), UI_RGBA(255, 220, 100, 255), UI_RGBA(143, 180, 255, 255) };
+    const int32_t cx = x + 12, cy = y + 12;
+    uint32_t ring, ink;
+    const char *letter;
+
+    kind &= 3;
+    if (mode == 1)
+    {
+        if (kind != UI_GLYPH_CROSS && kind != UI_GLYPH_CIRCLE)
+            return false;
+        letter = kind == UI_GLYPH_CROSS ? "A" : "B";
+        ring = UI_RGBA(150, 70, 140, 255);
+        ink = UI_RGBA(240, 190, 235, 255);
+    }
+    else
+    {
+        letter = kDeckLetter[kind];
+        ring = kDeckRing[kind];
+        ink = kDeckInk[kind];
+    }
+    Disc(cx, cy + 2, 12, C_SHADOW);
+    Disc(cx, cy, 12, ring);
+    Disc(cx, cy, 10, UI_RGBA(27, 30, 36, 255));
+    UiText_Draw(UI_FACE_PS2P, 16, cx - UiText_Width(UI_FACE_PS2P, 16, letter) / 2, y + 5, letter, ink);
+    return true;
+}
+
 void UiW_Glyph(int32_t x, int32_t y, uint8_t kind)
 {
+    const int glyphMode = UiFx_GlyphMode();
+
+    if (glyphMode > 0 && LetterGlyph(x, y, kind, glyphMode))
+        return;
     static const uint32_t ring[4] = { UI_RGBA(91, 127, 214, 255), UI_RGBA(214, 81, 81, 255), UI_RGBA(47, 167, 126, 255), UI_RGBA(194, 102, 168, 255) };
     static const uint32_t ink[4] = { UI_RGBA(143, 180, 255, 255), UI_RGBA(255, 122, 122, 255), UI_RGBA(95, 224, 176, 255), UI_RGBA(244, 155, 216, 255) };
     const int32_t cx = x + 12, cy = y + 12;
@@ -248,7 +366,13 @@ void UiW_Glyph(int32_t x, int32_t y, uint8_t kind)
 void UiW_FullFrame(void)
 {
     // Translucent frame over the 3D world (decision D3), then the bars with their shadows
-    UiDraw_Rect(0, HEADER_H, UI_SCREEN_W, UI_SCREEN_H - HEADER_H - FOOTER_H, UI_COL_FRAME0_A);
+    if (UiDraw_FillAlpha() < 255)
+    {
+        UiDraw_AddPanel(0, HEADER_H, UI_SCREEN_W, UI_SCREEN_H - HEADER_H - FOOTER_H, 0, false, UI_COL_FRAME0_A);
+        sTransA = 255;   // the frame keeps its own opacity; only what is behind it is blurred
+    }
+    UiDraw_Rect(0, HEADER_H, UI_SCREEN_W, UI_SCREEN_H - HEADER_H - FOOTER_H, Fa(UI_COL_FRAME0_A));
+    TransEnd();
     if (T->stripes)
     {
         // Diagonal stripes: 14 px bands every 28 px, clipped to the body
@@ -417,13 +541,17 @@ static void AccentBar(int32_t x, int32_t y, int32_t h)
 
 void UiW_Panel(int32_t x, int32_t y, int32_t w, int32_t h)
 {
+    TransBegin(x, y, w, h, T->paper0);
     BevelBox(x, y, w, h, T->edge, T->paperEdge, T->paper0, T->paper0, 2, C_WHITE, T->paperShade, 4);
+    TransEnd();
     AccentBar(x, y, h);
 }
 
 void UiW_PanelDark(int32_t x, int32_t y, int32_t w, int32_t h)
 {
+    TransBegin(x, y, w, h, T->darkTop);
     BevelBox(x, y, w, h, T->edge > 3 ? T->edge : 3, T->darkEdge, T->darkTop, T->darkBot, 1, T->darkHi, T->darkBot, 4);
+    TransEnd();
     Gloss(x, y, w, h, 3);
     AccentBar(x, y, h);
 }
@@ -447,7 +575,9 @@ void UiW_PanelHead(int32_t x, int32_t y, int32_t w, const char *label, const cha
 void UiW_Window(int32_t x, int32_t y, int32_t w, int32_t h, const char *title)
 {
     const int32_t e = T->edge;
+    TransBegin(x, y, w, h, T->paper0);
     BevelBox(x, y, w, h, e, T->paperEdge, T->paper0, T->paper0, 2, C_WHITE, T->paperShade, 6);
+    TransEnd();
     // Title bar: same corner shape as the window on top, square below
     const int32_t r = T->radius > e ? T->radius - e : 0;
     ShapeFill(x + e, y + e, w - 2 * e, 2 * r + 2, r, T->chamfer, T->winTop, T->winTop);
@@ -505,6 +635,7 @@ void UiW_Row(int32_t x, int32_t y, int32_t w, int32_t h, bool selected, int32_t 
             UiDraw_Rect(x, y + h - 2, w, 2, T->selEdge);
             UiW_Arrow(x + 8, y + (h - 12) / 2, T->selArrow);
         }
+        UiFx_SelRow(x, y, w, h);   // voxel_uisel: pulse and slide trail
     }
     else
     {
@@ -529,11 +660,23 @@ void UiW_Bar(int32_t x, int32_t y, int32_t w, int32_t h, int32_t percent, uint32
 {
     if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
+    int32_t fillW = (w - 4) * percent / 100;
+    if (UiFx_BarsOn())
+    {
+        // voxel_uibars: the fill follows the value smoothly; HP bars (the three HP colours) take the green > yellow > red
+        // gradient of the shown value and glow at low HP
+        const bool hp = bottom == UI_COL_HP_HIGH || bottom == UI_COL_HP_MID || bottom == UI_COL_HP_LOW;
+        const float shown = UiFx_BarShown(x, y, w, (float)percent);
+
+        fillW = (int32_t)((float)(w - 4) * shown / 100.0f + 0.5f);
+        if (hp)
+            UiFx_BarGlow(x, y, w, h, shown);   // the bar keeps its own colours; only a faint glow at low HP
+    }
     UiDraw_Rect(x + 1, y, w - 2, h, UI_RGBA(26, 38, 32, 255));
     UiDraw_Rect(x, y + 1, w, h - 2, UI_RGBA(26, 38, 32, 255));
     UiDraw_Rect(x + 2, y + 2, w - 4, h - 4, UI_COL_BAR_BG);
     UiDraw_Rect(x + 2, y + 2, w - 4, 1, UI_RGBA(255, 255, 255, 26));
-    UiDraw_RectV(x + 2, y + 2, (w - 4) * percent / 100, h - 4, top, bottom);
+    UiDraw_RectV(x + 2, y + 2, fillW, h - 4, top, bottom);
 }
 
 void UiW_Button(int32_t x, int32_t y, int32_t w, const char *label, uint8_t colour, bool pressed)
