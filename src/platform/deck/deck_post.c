@@ -26,7 +26,7 @@ static const float kBloomGain[3] = { 1.5f, 3.0f, 5.0f };
 // Share of the diorama blur at the band edges by level (MEDIUM and HIGH are the old look).
 static const float kBlurMul[3] = { 0.5f, 1.0f, 1.0f };
 // Light shaft gain by level (times the frame's sun amount).
-static const float kShaftGain[3] = { 0.35f, 0.65f, 0.9f };
+static const float kShaftGain[3] = { 0.25f, 0.47f, 0.65f };
 // Beam layers by level (item 5), and the colours: warm day, golden dawn and dusk, pale blue moon.
 static const float kShaftLayers[3] = { 3.0f, 4.0f, 6.0f };
 static const float kShaftDay[3] = { 1.0f, 0.92f, 0.74f };
@@ -98,12 +98,13 @@ static const char kBlurFs[] =
     "}\n";
 
 // Light shafts (item 5): procedural beams at half resolution, not a march over the scene. Layers of slanted bands along the
-// light direction (aspect corrected, constant along x + slant * y), each with its own density, drift speed and breathing,
+// light direction (aspect corrected, the lines run along uDir = the projected sun or moon direction), each with its own density, drift speed and breathing,
 // strongest at the top of the picture, with dust sparkles inside the beams. uCol carries the colour (warm by day, golden at
 // dawn and dusk, pale blue for the moon); uMotion is 1 for the sun and about 0.45 for the slower moon.
 static const char kShaftFs[] =
     "#version 120\n"
-    "uniform vec2 uSun;\n"         // x of the focus point above the picture (the slant follows it)
+    "uniform vec2 uDir;\n"         // unit screen direction toward the light (x right, y up), from the real camera
+    "uniform float uLen;\n"        // falloff exponent: small (long beams) for a low sun
     "uniform float uTime;\n"
     "uniform float uAsp;\n"
     "uniform float uCount;\n"      // layers (3, 4 or 6)
@@ -112,8 +113,8 @@ static const char kShaftFs[] =
     "varying vec2 vPos;\n"
     "float hh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
     "void main() {\n"
-    "    float slant = (0.5 - uSun.x) * 1.8;\n"
-    "    float a = vPos.x * uAsp + vPos.y * slant * uAsp;\n"
+    "    vec2 dir = normalize(uDir);\n"
+    "    float a = dot(vec2(vPos.x * uAsp, vPos.y), vec2(dir.y, -dir.x));\n"   // across the beams (x for vertical ones)
     "    float t = uTime * uMotion;\n"
     "    float acc = 0.0;\n"
     "    for (int i = 0; i < 6; i++) {\n"
@@ -130,7 +131,7 @@ static const char kShaftFs[] =
     "        float breath = 0.55 + 0.45 * sin(t * (0.30 + 0.19 * fi) + h1 * 6.2831);\n"    // slow intensity breathing
     "        acc += prof * breath * (1.0 - 0.07 * fi);\n"
     "    }\n"
-    "    float fall = pow(clamp(vPos.y, 0.0, 1.0), 1.25);\n"                                // strong at the top, gone at the bottom
+    "    float fall = pow(clamp(vPos.y, 0.0, 1.0), uLen);\n"                                // strong at the top, gone at the bottom
     "    float beam = clamp(acc * 0.55, 0.0, 1.0) * fall;\n"
     "    float dust = step(0.955, hh(floor(vPos * vec2(190.0, 108.0)) + floor(t * 2.5))) * beam * 1.6;\n"  // shimmering motes
     "    gl_FragColor = vec4(uCol * (beam + dust), 1.0);\n"
@@ -293,7 +294,7 @@ static GLint sCBack;
 static GLint sCSunMap, sCInvVP, sCSunVP, sCSunA, sCSunB, sCSunL;
 static bool sShaftOk;  // the shaft program built and the composite has POST_X
 static DeckGlProgram sShaft;
-static GLint sShaftSun, sShaftTime, sShaftAsp, sShaftCount, sShaftMotion, sShaftCol, sCShafts, sCShaft;
+static GLint sShaftSun, sShaftLen, sShaftTime, sShaftAsp, sShaftCount, sShaftMotion, sShaftCol, sCShafts, sCShaft;
 static bool sLutOk;    // the LUT texture exists and the composite has POST_X
 static GLuint sLutTex;
 static float sLutDay = -1.0f, sLutGlow = -1.0f;   // the parameters the table was last built for
@@ -415,7 +416,8 @@ static bool BuildPrograms(void)
     sShaftOk = sXOk && DeckGl_BuildProgram(&sShaft, "post_shaft", kFullscreenVs, kShaftFs);
     if (sShaftOk)
     {
-        sShaftSun = DeckGl_Uniform(&sShaft, "uSun");
+        sShaftSun = DeckGl_Uniform(&sShaft, "uDir");
+        sShaftLen = DeckGl_Uniform(&sShaft, "uLen");
         sShaftTime = DeckGl_Uniform(&sShaft, "uTime");
         sShaftAsp = DeckGl_Uniform(&sShaft, "uAsp");
         sShaftCount = DeckGl_Uniform(&sShaft, "uCount");
@@ -794,7 +796,8 @@ void DeckPost_Run(const DeckPostFrame *in)
         }
         BeginTarget(&sHalf[3]);
         DeckGl_UseProgram(&sShaft);
-        DeckGl_Set2f(sShaftSun, in->sunX, 1.3f);
+        DeckGl_Set2f(sShaftSun, in->beamX, in->beamY);
+        DeckGl_Set1f(sShaftLen, Clamp01((in->beamElev - 0.45f) / 0.5f) * 0.5f + 0.85f); // elevation 0.59 (dawn) -> 0.92, 0.88 (noon) -> 1.34
         DeckGl_Set1f(sShaftTime, in->time);
         DeckGl_Set1f(sShaftAsp, (float)in->renderW / (float)in->renderH);
         DeckGl_Set1f(sShaftCount, kShaftLayers[cfg.shaftLvl]);

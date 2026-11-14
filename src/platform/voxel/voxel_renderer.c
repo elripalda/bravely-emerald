@@ -5869,6 +5869,56 @@ static void Pass_DepthOfField(const VoxelFrame *const f)
 }
 
 #ifdef PLATFORM_DECK
+// Screen direction of a light ray source (light shafts): the direction toward the light, in square screen units (x right, y up,
+// unit length), at the screen centre. The light is a world direction L (toward the sun or moon); the target sits on the view axis
+// at depth `len`, so the picture of target + s L through the same pinhole the scene uses (vertical fov, aspect cancels in
+// square units) gives how a beam runs on screen for the real camera: pitch (voxel_pitch), yaw and distance included.
+static void BeamScreenDir(const float L[3], float *const ox, float *const oy)
+{
+    float fw[3] = {sCamera.targetX - sCamera.x, sCamera.targetY - sCamera.y, sCamera.targetZ - sCamera.z};
+    float len = sqrtf(fw[0] * fw[0] + fw[1] * fw[1] + fw[2] * fw[2]);
+    float side[3], up[3];
+    float f, s, vx, vy, vz, sx, sy, n;
+
+    *ox = 0.0f;
+    *oy = 1.0f;
+    if (len < 1e-4f)
+        return;
+    for (int i = 0; i < 3; i++)
+        fw[i] /= len;
+    side[0] = -fw[2]; side[1] = 0.0f; side[2] = fw[0];
+    n = sqrtf(side[0] * side[0] + side[2] * side[2]);
+    if (n < 1e-4f)
+        return;
+    side[0] /= n; side[2] /= n;
+    up[0] = side[1] * fw[2] - side[2] * fw[1];
+    up[1] = side[2] * fw[0] - side[0] * fw[2];
+    up[2] = side[0] * fw[1] - side[1] * fw[0];
+    f = 1.0f / tanf(sCamera.fov * (3.14159265f / 360.0f));
+    n = sqrtf(L[0] * L[0] + L[1] * L[1] + L[2] * L[2]);
+    if (n < 1e-4f)
+        return;
+    s = 0.05f * len / n; // a small step: the direction at the centre, not a vanishing point (stable when the light is behind)
+    vx = s * (L[0] * side[0] + L[1] * side[1] + L[2] * side[2]);
+    vy = s * (L[0] * up[0] + L[1] * up[1] + L[2] * up[2]);
+    vz = len - s * (L[0] * fw[0] + L[1] * fw[1] + L[2] * fw[2]); // depth in front of the eye
+    if (vz < 0.2f * len)
+        vz = 0.2f * len;
+    sx = f * vx / vz;
+    sy = f * vy / vz;
+    n = sqrtf(sx * sx + sy * sy);
+    if (n < 1e-5f)
+        return;
+    sx /= n; sy /= n;
+    if (sy < 0.35f) // light from the bottom of the picture or behind: keep the beams slanted, coming from the top
+    {
+        sy = 0.35f;
+        sx = sx < 0.0f ? -0.9367f : 0.9367f;
+    }
+    *ox = sx;
+    *oy = sy;
+}
+
 // Deck post chain on the RGBA8 scene target; replaces Pass_DepthOfField when f->postActive.
 static void Pass_DeckPost(const VoxelFrame *const f)
 {
@@ -5884,7 +5934,9 @@ static void Pass_DeckPost(const VoxelFrame *const f)
     in.glow = (isIndoor || dn == NULL) ? 0.0f : dn->glow;
     in.sunAmount = 0.0f;
     in.moonAmount = 0.0f;
-    in.sunX = 0.5f;
+    in.beamX = 0.0f;
+    in.beamY = 1.0f;
+    in.beamElev = 0.88f;
     {
         // Beams (item 5): outdoors only. Weather scales them: haze and fog strongest, sun and clear full, shade (overcast)
         // weaker, none in rain. Day amount follows the sun and the daylight (dawn and dusk go golden in the post pass);
@@ -5912,10 +5964,31 @@ static void Pass_DeckPost(const VoxelFrame *const f)
             d = d > 1.0f ? 1.0f : (d < 0.0f ? 0.0f : d);
             in.sunAmount = a * d * wf;
             in.moonAmount = (1.0f - d) * 0.5f * wf;
-            // The real sun lies above and beside the frustum at these pitches: a fixed point above the picture,
-            // east (dx < 0 at dawn) on the right.
-            in.sunX = 0.5f - sun->dx * 0.25f;
-            in.sunX = in.sunX < 0.05f ? 0.05f : (in.sunX > 0.95f ? 0.95f : in.sunX);
+            // Beam direction: the light is the real sun (day) or moon (night) from the clock, crossfaded like the colour
+            // and the amount. World toward-the-light vector (-dx, 1, -dz), the convention of the baked rays and the shadow
+            // map; projected through the real camera (BeamScreenDir). The two vectors are blended by the moon share, so the
+            // beams turn smoothly through the dusk and dawn crossfade.
+            {
+                float L[3] = {-sun->dx, 1.0f, -sun->dz};
+                unsigned beamMs;
+                const float tot = in.sunAmount + in.moonAmount;
+                const float moonK = tot > 0.0001f ? in.moonAmount / tot : 0.0f;
+
+                if (VitaDayNight_BeamTime(&beamMs))
+                {
+                    const VitaDayNightSun sp = VitaDayNight_SunPathAt(beamMs);
+                    const VitaDayNightSun mp = VitaDayNight_MoonPathAt(beamMs);
+
+                    L[0] = (-sp.dx) * (1.0f - moonK) + (-mp.dx) * moonK;
+                    L[2] = (-sp.dz) * (1.0f - moonK) + (-mp.dz) * moonK;
+                }
+                BeamScreenDir(L, &in.beamX, &in.beamY);
+                {
+                    const float ll = sqrtf(L[0] * L[0] + 1.0f + L[2] * L[2]);
+
+                    in.beamElev = 1.0f / ll; // sin of the light's elevation: 1 overhead, low at dawn and dusk (longer beams)
+                }
+            }
         }
     }
     in.time = f->seconds;

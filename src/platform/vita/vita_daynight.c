@@ -22,6 +22,7 @@ static bool sEnabled;
 static bool sResume;
 static bool sValid;
 static int64_t sWallSeconds;
+static uint32_t sBeamMs = 0xFFFFFFFFu; // time of day the light shafts follow (the clock, or the DECK_FORCE_TIME hour); invalid = none
 
 uint32_t VitaDayNight_Speed(const int32_t index)
 {
@@ -160,6 +161,47 @@ VitaDayNightSun VitaDayNight_SunAt(const uint32_t timeMs)
     return sun;
 }
 
+// Continuous sun and moon paths for the light shafts (Deck). Same shape as VitaDayNight_SunAt (dx = -1.35 cos(p pi): east,
+// negative dx, at the start of the path; dz = 0.35 + 0.20 sin(p pi)) but with no 15 minute steps and no gap at night.
+// Sun: 04:00 to 20:00, held on the horizon point outside it. Moon: 18:00 to 06:00, rises in the east and sets in the west,
+// held on the horizon point outside it. Both are only seen through the crossfade amounts of the renderer.
+static VitaDayNightSun PathPoint(const float p)
+{
+    const float c = p < 0.0f ? 0.0f : (p > 1.0f ? 1.0f : p);
+    const float alt = sinf(c * 3.141592654f);
+    VitaDayNightSun s = {-1.35f * cosf(c * 3.141592654f), 0.35f + 0.20f * alt, alt, 0};
+
+    return s;
+}
+
+VitaDayNightSun VitaDayNight_SunPathAt(const uint32_t timeMs)
+{
+    const float minute = (float)(timeMs % VITA_DAYNIGHT_DAY_MS) / 60000.0f;
+
+    return PathPoint((minute - 240.0f) / 960.0f);
+}
+
+VitaDayNightSun VitaDayNight_MoonPathAt(const uint32_t timeMs)
+{
+    float minute = (float)(timeMs % VITA_DAYNIGHT_DAY_MS) / 60000.0f;
+
+    if (minute < 360.0f)
+    {
+        minute += 1440.0f;
+    }
+    return PathPoint((minute - 1080.0f) / 720.0f);
+}
+
+bool VitaDayNight_BeamTime(uint32_t *const timeMs)
+{
+    if (sBeamMs == 0xFFFFFFFFu)
+    {
+        return false;
+    }
+    *timeMs = sBeamMs;
+    return true;
+}
+
 void VitaDayNight_Resume(void)
 {
     sResume = true;
@@ -174,6 +216,7 @@ void VitaDayNight_Update(void)
 
     sLight = (VitaDayNightLight){{1.0f, 1.0f, 1.0f}, 1.0f, 0.0f};
     sSun = (VitaDayNightSun){0.85f, 0.55f, 1.0f, 0};
+    sBeamMs = 0xFFFFFFFFu;
 
     if (!sSampled || !sEnabled || now < sSampleMs || (now - sSampleMs) >= 1000)
     {
@@ -210,6 +253,7 @@ void VitaDayNight_Update(void)
     {
         sLight = VitaDayNight_At(sClock.timeMs);
         sSun = VitaDayNight_SunAt(sClock.timeMs);
+        sBeamMs = sClock.timeMs;
     }
 #ifdef PLATFORM_DECK
     // Debug aid (Deck only): env DECK_FORCE_TIME=dawn|noon|dusk|night holds the light and sun of the scene at that hour
@@ -235,6 +279,7 @@ void VitaDayNight_Update(void)
         {
             sLight = VitaDayNight_At(sHoursMs[sForced]);
             sSun = VitaDayNight_SunAt(sHoursMs[sForced]);
+            sBeamMs = sHoursMs[sForced];
         }
     }
 #endif

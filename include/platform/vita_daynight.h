@@ -54,6 +54,11 @@ void VitaDayNight_Update(void);
 void VitaDayNight_Resume(void);
 const VitaDayNightLight *VitaDayNight_Get(void);
 const VitaDayNightSun *VitaDayNight_GetSun(void);
+// Light shafts (Deck): continuous sun (04:00-20:00) and moon (18:00-06:00) paths, and the time of day the scene is lit for
+// (the clock, or the DECK_FORCE_TIME hour; false when the day/night cycle is off or the scene is indoors).
+VitaDayNightSun VitaDayNight_SunPathAt(uint32_t timeMs);
+VitaDayNightSun VitaDayNight_MoonPathAt(uint32_t timeMs);
+bool VitaDayNight_BeamTime(uint32_t *timeMs);
 bool VitaDayNight_Time(unsigned *seconds, unsigned *rate);
 bool VitaDayNight_IsShifted(void);
 bool VitaDayNight_Active(void);

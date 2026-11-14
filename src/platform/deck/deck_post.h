@@ -14,7 +14,8 @@ typedef struct
     float fade;            // f->fadeAmount: grade, vignette and bloom fade out with it
     float bloom;           // f->light.bloom (per weather, BaseLightFor)
     float daylight, glow;  // VitaDayNight_Get(); indoor passes 1 and 0 (neutral day)
-    float sunX;            // screen x (0..1) of the shafts' focus point, from the sun direction
+    float beamX, beamY;    // unit screen direction (x right, y up) toward the light (sun or moon) at the screen centre, from the real camera
+    float beamElev;        // sin of the light elevation (1 overhead): low light makes longer beams
     float moonAmount;      // 0..1 moon ray strength at night (pale blue, slower)
     float time;            // animation clock, seconds
     float sunAmount;       // 0..1 shaft strength: sun and daylight, 0 at night, indoors, in rain, fog, sand, ash
