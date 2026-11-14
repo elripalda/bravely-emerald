@@ -79,7 +79,7 @@ static const char *kPartVs =
     "        size = 0.05 + 0.035 * r.z;\n"
     "    } else if (uKind < 1.5) {\n"
     "        vel = vec2(0.05, 0.03) * (r.x - 0.5);\n"
-    "        size = 0.11;\n"
+    "        size = 0.16;\n"
     "    } else {\n"
     "        vel = vec2(0.55 + 0.3 * r.x, 0.35 * r.y);\n"       // the wind direction of DeckGl_SetFrameUniforms, a little off
     "        size = 0.10 + 0.04 * r.z;\n"
@@ -97,7 +97,7 @@ static const char *kPartVs =
     "        y = 0.35 + seed.y * 1.4 + 0.25 * sin(uTime * 0.9 + r.x * 6.2832);\n"
     "        w.xz += 0.7 * vec2(sin(uTime * 0.6 + r.y * 6.2832), cos(uTime * 0.5 + r.z * 6.2832));\n"
     "        float b = 0.5 + 0.5 * sin(uTime * (0.9 + 0.6 * r.x) + r.z * 40.0);\n"
-    "        a = edge * (0.06 + 0.94 * smoothstep(0.55, 0.95, b));\n"
+    "        a = edge * (0.10 + 0.90 * smoothstep(0.30, 0.75, b));\n"
     "    } else {\n"
     "        float py = fract(seed.y - uTime * (0.30 + 0.2 * r.x) / 5.0);\n"
     "        y = py * 5.0;\n"
