@@ -854,7 +854,17 @@ void DeckPost_Run(const DeckPostFrame *in)
     }
     else
         DeckGl_Set4f(sCSunA, 0.0f, 0.0f, 0.0f, 1.0f);
-    DeckGl_Set4f(sCShaft, doShafts ? shaftAmt * kShaftGain[cfg.shaftLvl] * keep : 0.0f, 0.0f, 0.0f, 0.0f);
+    {
+        static float sGainDbg = -1.0f; // debug aid: env DECK_SHAFT_GAIN=<multiplier> (to see the beam angles in a screenshot)
+
+        if (sGainDbg < 0.0f)
+        {
+            const char *e = getenv("DECK_SHAFT_GAIN");
+
+            sGainDbg = e != NULL ? (float)atof(e) : 1.0f;
+        }
+        DeckGl_Set4f(sCShaft, doShafts ? shaftAmt * kShaftGain[cfg.shaftLvl] * keep * sGainDbg : 0.0f, 0.0f, 0.0f, 0.0f);
+    }
     {
         const int tl = doTilt ? cfg.tiltLvl : 0;
         DeckGl_Set4f(sCTilt, doTilt ? 1.0f : 0.0f, in->focusDist, kTiltRadius[tl], kTiltTaps[tl]);
