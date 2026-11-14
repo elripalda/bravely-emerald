@@ -35,7 +35,7 @@ All in the SDD ledger (`.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/p
 
 ## Open items
 
-- Phase 1 Tasks 4 to 8, then phases 2 to 8 of the visual upgrade design.
+- Phase 1 Tasks 1-8 implemented and reviewed (Sonnet, PASS with minors). Deferred to one end pass with DECK_GL_DEBUG: perf compare (legacy/low/medium/high, plan Task 7 Step 3), tuning by eye (see DECK_NOTES "Phase 1: post presets"), warp fade-tint check, Vita build (no VitaSDK here). Then phases 2 to 8.
 - Unproven: real vsync, 30 FPS mode, trap on interrupted runs.
 - The 415 MB of root-owned leftovers in `SD512/emerald-deck/containers` need `sudo` to remove.
 - Intro-edge slivers may need a rebuild of the generated assets (Pillow was installed later).
