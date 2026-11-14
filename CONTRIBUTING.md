@@ -40,7 +40,7 @@ columns). Format only the lines you change; don't mix formatting with logic in o
 ## Workflow
 
 1. Work on a branch from `main`; one topic per branch.
-2. Build with `build_vita.ps1` (see [docs/BUILD.md](docs/BUILD.md)). The build must finish with no
+2. Build for the Deck or Windows (see [docs/BUILD.md](docs/BUILD.md)). The build must finish with no
    new warnings.
 3. Test on hardware with the smoke list below; for performance work, compare
    `perf_frames.csv` before and after ([docs/DEBUGGING.md](docs/DEBUGGING.md)).

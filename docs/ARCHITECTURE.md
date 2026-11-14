@@ -84,7 +84,7 @@ is decided in `sdl2.c` from `VoxelWorld_IsMapAvailable()` (field callbacks, shop
 | 16:9 handling of GBA screens | `widescreen.c`, `vita/vita_stage.c` | [SCENES_16_9.md](SCENES_16_9.md) |
 | Voxel world | `src/platform/voxel/` | [VOXEL_ENGINE.md](VOXEL_ENGINE.md) |
 | Native UI | `src/platform/vita/vita_ui*.c` | [VITA_UI.md](VITA_UI.md) |
-| Build and packaging | `CMakeLists.txt`, `build_vita.*`, `vita/` | [BUILD.md](BUILD.md) |
+| Build | `CMakeLists.txt`, `build_*`, `vita/` | [BUILD.md](BUILD.md) |
 | Data files | `assets/`, `tools/ui_gen/` | [ASSETS.md](ASSETS.md) |
 | Logs, telemetry, crash dumps | `vita/vita_perf.c`, `vita/vita_platform.c` | [DEBUGGING.md](DEBUGGING.md) |
 

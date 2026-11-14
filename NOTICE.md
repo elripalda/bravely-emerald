@@ -9,7 +9,7 @@ code and a few third-party components. Each part keeps its own terms. This file 
 Pokémon Emerald's code, data, graphics, audio and text are © Nintendo, Creatures Inc. and
 GAME FREAK inc. The decompiled form of that material in this tree (`src/` outside
 `src/platform/`, `include/`, `asm/`, `data/`, `graphics/`, `sound/`, `constants/`) is not licensed
-by this project. A built VPK, Steam Deck or Windows build contains it: do not distribute builds.
+by this project. A Steam Deck or Windows build contains it: do not distribute builds.
 
 ## Upstream decompilation
 

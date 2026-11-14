@@ -1,6 +1,6 @@
 # Assets
 
-Three kinds of data end up in the VPK.
+Three kinds of data end up in the build.
 
 ## 1. Game data from the decompilation
 

@@ -5,7 +5,7 @@ does everything: it creates a build container, builds the libraries and the game
 launcher you can add to Steam. It needs no root password and changes nothing on SteamOS itself.
 
 Legal note first: this repository holds no game data and no ROM. The script checks your dump and
-downloads the decompilation's game files (see [BUILD_YOUR_OWN.md](BUILD_YOUR_OWN.md)). The build you
+downloads the decompilation's game files ([pret/pokeemerald](https://github.com/pret/pokeemerald), through [pokeemerald-multiplatform](https://github.com/gradenGnostic/pokeemerald-multiplatform), each file checked against `tools/assets/manifest.txt`). The build you
 get contains Nintendo's data. Use it for yourself and **do not share it**.
 
 ## What you need
