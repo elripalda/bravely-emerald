@@ -122,7 +122,7 @@ void UiDraw_Tri(float x0, float y0, float x1, float y1, float x2, float y2, uint
 void UiDraw_AddPanel(int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, bool chamfer, uint32_t base);
 int32_t UiDraw_FillAlpha(void);
 void UiDraw_SetAnim(float fade, float slideY);
-uint32_t UiDraw_Frame(void);                  // lists begun so far (a clock for the animations, Core 1)
+uint32_t UiDraw_Clock(void);                  // lists begun so far (a clock for the animations, Core 1)
 void UiDraw_Snapshot(void);                   // keeps the list being built (an open menu, steady) for its fade out
 bool UiDraw_HasSnapshot(void);
 void UiDraw_AppendSnapshot(float fade, float slideY);   // the kept list into the one being built, faded

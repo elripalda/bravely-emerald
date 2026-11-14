@@ -49,7 +49,7 @@ bool UiFx_BarsOn(void)
 float UiFx_BarShown(int32_t x, int32_t y, int32_t w, float target)
 {
     const int lvl = DeckUiFx_Level(FAST_EXTRA_VOXEL_UIBARS);
-    const uint32_t f = UiDraw_Frame();
+    const uint32_t f = UiDraw_Clock();
     int slot = -1;
 
     if (lvl < 0)
@@ -137,7 +137,7 @@ static struct
 void UiFx_SelRow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
     const int lvl = DeckUiFx_Level(FAST_EXTRA_VOXEL_UISEL);
-    const uint32_t f = UiDraw_Frame();
+    const uint32_t f = UiDraw_Clock();
 
     if (lvl < 0)
         return;
@@ -173,7 +173,7 @@ void UiFx_SelFlush(void)
 {
     const int lvl = DeckUiFx_Level(FAST_EXTRA_VOXEL_UISEL);
 
-    if (lvl < 0 || !sSel.has || UiDraw_Frame() - sSel.frame > 1)
+    if (lvl < 0 || !sSel.has || UiDraw_Clock() - sSel.frame > 1)
         return;
     const float dist = fabsf(sSel.y - sSel.ty) + fabsf(sSel.x - sSel.tx);
 

@@ -39,7 +39,7 @@ static int32_t sFillAlpha = 255;       // alpha multiplier of panel fills while 
 
 static uint32_t sFrameCount;
 
-uint32_t UiDraw_Frame(void)
+uint32_t UiDraw_Clock(void)
 {
     return sFrameCount;
 }
