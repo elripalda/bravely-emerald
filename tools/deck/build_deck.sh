@@ -100,7 +100,7 @@ note "install dir: $DIR, container: $CONTAINER, jobs: $JOBS"
 
 # run a command string inside the container; heavy ones at the lowest priority
 inbox() { distrobox enter --name "$CONTAINER" --no-tty -- bash -lc "$1"; }
-heavy() { inbox "nice -n 19 $1"; }
+heavy() { distrobox enter --name "$CONTAINER" --no-tty -- nice -n 19 bash -lc "$1"; }
 
 # ------------------------------------------------------------------ 2. container
 say "2/6 Build container ($CONTAINER)"
