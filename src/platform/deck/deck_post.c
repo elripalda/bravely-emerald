@@ -4,6 +4,7 @@
 #include "deck_levels.h"
 #include "platform/vita_extras.h"
 #include "../vita/vita_perf.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +25,10 @@ static const float kBloomGain[3] = { 1.5f, 3.0f, 5.0f };
 // Share of the diorama blur at the band edges by level (MEDIUM and HIGH are the old look).
 static const float kBlurMul[3] = { 0.5f, 1.0f, 1.0f };
 // Light shaft gain by level (times the frame's sun amount).
-static const float kShaftGain[3] = { 1.6f, 3.0f, 4.2f };
+static const float kShaftGain[3] = { 0.35f, 0.65f, 0.9f };
+// LUT: gentle S-curve strength by time of day (day, dusk, night) and the level factor.
+static const float kLutCurve[3] = { 0.20f, 0.32f, 0.14f };
+static const float kLutLevel[3] = { 0.5f, 1.0f, 1.3f };
 // Tilt-shift by level: largest gather radius (fraction of the picture height at full circle of confusion) and taps.
 static const float kTiltRadius[3] = { 0.6f * 0.014f, 0.014f, 1.4f * 0.014f };
 static const float kTiltTaps[3] = { 8.0f, 12.0f, 16.0f };
@@ -92,14 +96,14 @@ static const char kShaftFs[] =
     "varying vec2 vPos;\n"
     "void main() {\n"
     "    vec2 delta = (uSun - vPos) * (0.6 / 24.0);\n"
-    "    vec2 uv = vPos;\n"
+    "    vec2 uv = vPos + delta * fract(sin(dot(vPos, vec2(12.9898, 78.233))) * 43758.5453);\n"
     "    vec3 acc = vec3(0.0);\n"
     "    float decay = 1.0;\n"
     "    for (int i = 0; i < 24; i++) {\n"
     "        uv += delta;\n"
     "        vec3 s = texture2D(uScene, uv).rgb;\n"
     "        float l = dot(s, vec3(0.299, 0.587, 0.114));\n"
-    "        acc += s * smoothstep(0.35, 0.85, l) * decay;\n"
+    "        acc += s * smoothstep(0.62, 0.95, l) * decay;\n"
     "        decay *= 0.95;\n"
     "    }\n"
     "    gl_FragColor = vec4(acc * (1.0 / 24.0), 1.0);\n"
@@ -127,6 +131,8 @@ static const char kCompositeBody[] =
     "uniform vec4 uTilt;   // x on, y focus distance, z max radius (fraction of the height), w taps\n"
     "uniform vec2 uZ;      // near, far\n"
     "uniform sampler2D uShafts;\n"
+    "uniform sampler2D uLut;\n"
+    "uniform vec2 uLutOn;  // x on, y strength (the fade)\n"
     "uniform vec4 uShaft;  // x amount\n"
     "#endif\n"
     "varying vec2 vPos;\n"
@@ -167,10 +173,23 @@ static const char kCompositeBody[] =
     "    if (uShaft.x > 0.0)\n"
     "        c += texture2D(uShafts, vPos).rgb * uShaft.x * vec3(1.0, 0.92, 0.74);\n"
     "#endif\n"
-    "    float l = dot(c, vec3(0.299, 0.587, 0.114));\n"
-    "    vec3 tint = mix(uShadowTint, uHighTint, smoothstep(0.15, 0.75, l));\n"
-    "    vec3 g = mix(vec3(l), c * tint, uSaturation);\n"
-    "    c = mix(c, g, uGradeAmt);\n"
+    "#ifdef POST_X\n"
+    "    if (uLutOn.x > 0.5) {\n"
+    "        vec3 q = clamp(c, 0.0, 1.0) * 15.0;\n"
+    "        float s0 = floor(q.b);\n"
+    "        float s1 = min(s0 + 1.0, 15.0);\n"
+    "        float f = q.b - s0;\n"
+    "        vec2 uv0 = vec2((s0 * 16.0 + q.r + 0.5) / 256.0, (q.g + 0.5) / 16.0);\n"
+    "        vec2 uv1 = vec2((s1 * 16.0 + q.r + 0.5) / 256.0, (q.g + 0.5) / 16.0);\n"
+    "        c = mix(c, mix(texture2D(uLut, uv0).rgb, texture2D(uLut, uv1).rgb, f), uLutOn.y);\n"
+    "    } else\n"
+    "#endif\n"
+    "    {\n"
+    "        float l = dot(c, vec3(0.299, 0.587, 0.114));\n"
+    "        vec3 tint = mix(uShadowTint, uHighTint, smoothstep(0.15, 0.75, l));\n"
+    "        vec3 g = mix(vec3(l), c * tint, uSaturation);\n"
+    "        c = mix(c, g, uGradeAmt);\n"
+    "    }\n"
     "    vec2 d = (vPos - 0.5) * vec2(uAspect, 1.0);\n"
     "    float v = 1.0 - smoothstep(0.35, 0.95, length(d));\n"
     "    c *= mix(1.0, v, uVignette);\n"
@@ -182,10 +201,15 @@ static const char kCompositeBody[] =
 
 static bool sReady;
 static void DeleteTargets(void);
+static bool CreateLut(void);
 static bool sXOk;      // the composite with POST_X built
 static bool sShaftOk;  // the shaft program built and the composite has POST_X
 static DeckGlProgram sShaft;
 static GLint sShaftScene, sShaftSun, sCShafts, sCShaft;
+static bool sLutOk;    // the LUT texture exists and the composite has POST_X
+static GLuint sLutTex;
+static float sLutDay = -1.0f, sLutGlow = -1.0f;   // the parameters the table was last built for
+static int sLutGradeLvl = -2, sLutLvl = -2;
 static bool sTiltOk;   // tilt-shift can run: POST_X composite and a depth texture on the scene target
 static bool sSizeWarned;
 static int sFailW;     // a scene width that could not be created (not tried again)
@@ -193,7 +217,7 @@ static DeckGlTarget sScene;
 static DeckGlTarget sHalf[4]; // 0 bloom, 1 blur scratch, 2 DoF / tilt-shift copy, 3 light shafts
 static DeckGlProgram sBright, sCopy, sBlur, sComposite;
 static GLint sBrightScene, sBrightThreshold, sCopyScene, sBlurSrc, sBlurStep;
-static GLint sCScene, sCBloom, sCBlur, sCBloomAmt, sCBlurOn, sCDof, sCGradeAmt, sCShadow, sCHigh, sCSat, sCVignette, sCAspect, sCDepth, sCTilt, sCZ;
+static GLint sCScene, sCBloom, sCBlur, sCBloomAmt, sCBlurOn, sCDof, sCGradeAmt, sCShadow, sCHigh, sCSat, sCVignette, sCAspect, sCDepth, sCTilt, sCZ, sCLut, sCLutOn;
 
 static const float kQuad[8] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f };
 
@@ -217,11 +241,13 @@ DeckPostConfig DeckPost_ReadConfig(void)
     c.blurLvl = DeckLevel(FAST_EXTRA_VOXEL_BLUR);
     c.tiltLvl = DeckLevel(FAST_EXTRA_VOXEL_TILTSHIFT);
     c.shaftLvl = DeckLevel(FAST_EXTRA_VOXEL_SHAFTS);
+    c.lutLvl = DeckLevel(FAST_EXTRA_VOXEL_LUT);
     c.grade = c.gradeLvl >= 0;
     c.bloom = c.bloomLvl >= 0;
     c.blur = c.blurLvl >= 0;
     c.tilt = c.tiltLvl >= 0;
     c.shafts = c.shaftLvl >= 0;
+    c.lut = c.lutLvl >= 0;
     return c;
 }
 
@@ -271,6 +297,8 @@ static bool BuildPrograms(void)
     sCZ = DeckGl_Uniform(&sComposite, "uZ");
     sCShafts = DeckGl_Uniform(&sComposite, "uShafts");
     sCShaft = DeckGl_Uniform(&sComposite, "uShaft");
+    sCLut = DeckGl_Uniform(&sComposite, "uLut");
+    sCLutOn = DeckGl_Uniform(&sComposite, "uLutOn");
     // The shaft pass is optional: a failed build only switches the shafts off.
     sShaftOk = sXOk && DeckGl_BuildProgram(&sShaft, "post_shaft", kFullscreenVs, kShaftFs);
     if (sShaftOk)
@@ -289,6 +317,12 @@ void DeckPost_Shutdown(void)
     DeckGl_DeleteProgram(&sComposite);
     DeckGl_DeleteProgram(&sShaft);
     sShaftOk = false;
+    if (sLutTex)
+        glDeleteTextures(1, &sLutTex);
+    sLutTex = 0;
+    sLutOk = false;
+    sLutDay = sLutGlow = -1.0f;
+    sLutGradeLvl = sLutLvl = -2;
     DeleteTargets();
     DeckGl_TimerShutdown();
     sReady = false;
@@ -362,10 +396,11 @@ void DeckPost_Init(int sceneW, int sceneH)
     DeckGl_TimerInit();
     sReady = true;
     sTiltOk = sXOk && sScene.depth == DECK_GL_DEPTH_TEXTURE24;
+    sLutOk = sXOk && CreateLut();
     const DeckPostConfig c = DeckPost_ReadConfig();
-    DeckGl_Log("[POST] ready: scene %dx%d RGBA8 depth=%s extended=%d tilt=%d shafts=%d | config quality=%d shaders=%d grade=%d bloom=%d blur=%d tiltlvl=%d\n",
+    DeckGl_Log("[POST] ready: scene %dx%d RGBA8 depth=%s extended=%d tilt=%d shafts=%d lut=%d | config quality=%d shaders=%d grade=%d bloom=%d blur=%d tiltlvl=%d\n",
                sScene.w, sScene.h, sScene.depth == DECK_GL_DEPTH_TEXTURE24 ? "texture24" : "renderbuffer24",
-               (int)sXOk, (int)sTiltOk, (int)sShaftOk, c.quality, (int)c.shaders, (int)c.grade, (int)c.bloom, (int)c.blur, (int)c.tilt);
+               (int)sXOk, (int)sTiltOk, (int)sShaftOk, (int)sLutOk, c.quality, (int)c.shaders, (int)c.grade, (int)c.bloom, (int)c.blur, (int)c.tilt);
 }
 
 // A changed voxel_res: delete and create the scene and half-res targets at the new size (GL thread, between frames).
@@ -420,7 +455,7 @@ bool DeckPost_WantScene(int renderW, int renderH, bool indoor)
     const DeckPostConfig c = DeckPost_ReadConfig();
     if (!c.shaders)
         return false;
-    return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor) || (c.shafts && sShaftOk);
+    return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor) || (c.shafts && sShaftOk) || (c.lut && sLutOk);
 }
 
 void DeckPost_BindScene(void)
@@ -471,17 +506,87 @@ static void Blur(const DeckGlTarget *t, const DeckGlTarget *tmp, int passes)
     }
 }
 
-static void GradeTints(float daylight, float glow, float shadow[3], float high[3])
+static void GradeTints(float daylight, float glow, float shadow[3], float high[3], float w[3])
 {
     const float dusk = Clamp01(glow * 4.0f) * Clamp01(daylight / 0.35f);
     const float night = Clamp01(1.0f - daylight / 0.35f);
     const float day = Clamp01(1.0f - dusk - night);
     const float sum = day + dusk + night; // >= 1 by construction
+    w[0] = day / sum;
+    w[1] = dusk / sum;
+    w[2] = night / sum;
     for (int i = 0; i < 3; i++)
     {
         shadow[i] = (kShadowTint[0][i] * day + kShadowTint[1][i] * dusk + kShadowTint[2][i] * night) / sum;
         high[i] = (kHighTint[0][i] * day + kHighTint[1][i] * dusk + kHighTint[2][i] * night) / sum;
     }
+}
+
+static bool CreateLut(void)
+{
+    GLint prevTex = 0;
+
+    DeckGl_ActiveTexture(GL_TEXTURE0 + 4);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
+    glGenTextures(1, &sLutTex);
+    glBindTexture(GL_TEXTURE_2D, sLutTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 256, 16, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)prevTex);
+    DeckGl_ActiveTexture(GL_TEXTURE0);
+    return sLutTex != 0;
+}
+
+static float Smooth01(float x)
+{
+    x = Clamp01(x);
+    return x * x * (3.0f - 2.0f * x);
+}
+
+// 16x16x16 strip, 16 slices of blue side by side (x = slice * 16 + red, y = green). Each texel is the procedural grade
+// (tint by luminance, saturation, at the preset strength; none when the grade is off) plus a gentle S-curve.
+static void BuildLut(float daylight, float glow, const DeckPostPreset *pr, bool gradeOn, int lutLvl)
+{
+    static unsigned char px[16 * 256 * 3];
+    float shadow[3], high[3], w[3];
+    GLint prevTex = 0;
+    float amt;
+
+    GradeTints(daylight, glow, shadow, high, w);
+    amt = (kLutCurve[0] * w[0] + kLutCurve[1] * w[1] + kLutCurve[2] * w[2]) * kLutLevel[lutLvl];
+    for (int b = 0; b < 16; b++)
+    {
+        for (int g = 0; g < 16; g++)
+        {
+            for (int r = 0; r < 16; r++)
+            {
+                const float c[3] = { (float)r / 15.0f, (float)g / 15.0f, (float)b / 15.0f };
+                const float l = 0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2];
+                const float t = Smooth01((l - 0.15f) / 0.60f);
+                unsigned char *const o = &px[(g * 256 + b * 16 + r) * 3];
+
+                for (int k = 0; k < 3; k++)
+                {
+                    const float tint = shadow[k] + (high[k] - shadow[k]) * t;
+                    const float graded = l + (c[k] * tint - l) * pr->saturation;
+                    float v = gradeOn ? c[k] + (graded - c[k]) * pr->grade : c[k];
+
+                    v = Clamp01(v);
+                    v += amt * (Smooth01(v) - v);
+                    o[k] = (unsigned char)(Clamp01(v) * 255.0f + 0.5f);
+                }
+            }
+        }
+    }
+    DeckGl_ActiveTexture(GL_TEXTURE0 + 4);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
+    glBindTexture(GL_TEXTURE_2D, sLutTex);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 16, GL_RGB, GL_UNSIGNED_BYTE, px);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)prevTex);
+    DeckGl_ActiveTexture(GL_TEXTURE0);
 }
 
 void DeckPost_Run(const DeckPostFrame *in)
@@ -494,10 +599,24 @@ void DeckPost_Run(const DeckPostFrame *in)
     const float keep = 1.0f - Clamp01(in->fade);
     const bool doBloom = cfg.bloom && in->bloom > 0.0f && bloomGain > 0.0f;
     const bool doTilt = cfg.tilt && sTiltOk && !in->indoor && in->focusDist > 0.0f; // replaces the band blur
+    const bool doLut = cfg.lut && sLutOk;
     const bool doShafts = cfg.shafts && sShaftOk && in->sunAmount > 0.01f;
     const bool doBlur = cfg.blur && !in->indoor && !doTilt;
     float shadow[3], high[3];
 
+    if (doLut)
+    {
+        // Rebuilt only when the time of day, the grade level or the LUT level moved (4096 texels, microseconds).
+        if (sLutDay < 0.0f || fabsf(in->daylight - sLutDay) > 0.004f || fabsf(in->glow - sLutGlow) > 0.004f
+            || cfg.gradeLvl != sLutGradeLvl || cfg.lutLvl != sLutLvl)
+        {
+            BuildLut(in->daylight, in->glow, pr, cfg.grade, cfg.lutLvl);
+            sLutDay = in->daylight;
+            sLutGlow = in->glow;
+            sLutGradeLvl = cfg.gradeLvl;
+            sLutLvl = cfg.lutLvl;
+        }
+    }
     VitaPerf_DeckMarkPostStart();
     DeckGl_TimerBegin();
     VitaPerf_DeckSetPostGpuMs(DeckGl_TimerLastMs());
@@ -550,6 +669,7 @@ void DeckPost_Run(const DeckPostFrame *in)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     DeckGlViewport(0, 0, in->renderW, in->renderH);
     BindTex(5, doShafts ? sHalf[3].color : 0);
+    BindTex(4, doLut ? sLutTex : 0);
     BindTex(3, doTilt ? sScene.depthTex : 0);
     BindTex(2, (doBlur || doTilt) ? sHalf[2].color : 0);
     BindTex(1, doBloom ? sHalf[0].color : 0);
@@ -565,6 +685,8 @@ void DeckPost_Run(const DeckPostFrame *in)
     DeckGl_Set1i(sCBlur, 2);
     DeckGl_Set1i(sCDepth, 3);
     DeckGl_Set1i(sCShafts, 5);
+    DeckGl_Set1i(sCLut, 4);
+    DeckGl_Set2f(sCLutOn, doLut ? 1.0f : 0.0f, keep);
     DeckGl_Set4f(sCShaft, doShafts ? in->sunAmount * kShaftGain[cfg.shaftLvl] * keep : 0.0f, 0.0f, 0.0f, 0.0f);
     {
         const int tl = doTilt ? cfg.tiltLvl : 0;
@@ -586,6 +708,7 @@ void DeckPost_Run(const DeckPostFrame *in)
     // Leave the state Pass_DepthOfField leaves (see deck_post.h).
     DeckGl_UseProgram(NULL);
     BindTex(5, 0);
+    BindTex(4, 0);
     BindTex(3, 0);
     BindTex(2, 0);
     BindTex(1, 0);

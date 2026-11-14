@@ -86,6 +86,7 @@ typedef enum
     FAST_EXTRA_VOXEL_MIST,     // Deck rain mist (opacity)
     FAST_EXTRA_VOXEL_SPLASH,   // Deck rain splash rings (count)
     FAST_EXTRA_VOXEL_GLINT,    // Deck water glints (density)
+    FAST_EXTRA_VOXEL_LUT,      // Deck LUT colour grade (16x16x16 table built per time of day); off = the procedural grade
     FAST_EXTRA_VOXEL_SHAFTS,   // Deck light shafts (screen-space radial blur toward the sun, strength)
     FAST_EXTRA_VOXEL_TILTSHIFT, // Deck depth-based tilt-shift with bokeh (strength); off = the band blur
     FAST_EXTRA_VOXEL_PITCH,    // Deck camera tilt: 0 classic 40 deg, 1 36, 2 32 (default), 3 28, 4 24

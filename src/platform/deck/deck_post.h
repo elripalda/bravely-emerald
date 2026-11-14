@@ -29,7 +29,8 @@ typedef struct
     bool blur;     // voxel_blur on
     bool tilt;     // voxel_tiltshift on (needs the depth texture, else the band blur runs)
     bool shafts;   // voxel_shafts on
-    int gradeLvl, bloomLvl, blurLvl, tiltLvl, shaftLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
+    bool lut;      // voxel_lut on (a generated colour table replaces the procedural grade)
+    int gradeLvl, bloomLvl, blurLvl, tiltLvl, shaftLvl, lutLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
 } DeckPostConfig;
 
 void DeckPost_Init(int sceneW, int sceneH); // the size arguments are replaced by voxel_res

@@ -211,11 +211,23 @@ Every Deck effect has its own row in WORLD > EFFECTS (ambient volume stays in GE
 | WATER GLINTS | voxel_glint | none | strength x0.5 | x1 |
 | CHARACTER OUTLINE | voxel_outline | none | strength x0.5 | x1 |
 | SOFT SHADOWS | voxel_shadow | silhouette only | blob alpha x0.5 | x1 |
+| 3D RESOLUTION | voxel_res | 960x544 | 960 wide | MEDIUM 1120x636, HIGH 1280x726 (AUTO follows the preset) |
+| TILT-SHIFT | voxel_tiltshift | the old band blur | radius x0.6, 8 taps | x1 12 taps / x1.4 16 taps |
+| LIGHT SHAFTS | voxel_shafts | none | gain 0.35 | gain 0.65 / 0.9 |
+| LUT GRADE | voxel_lut | the procedural grade | S-curve x0.5 | x1 / x1.3 |
 | CAMERA TILT | voxel_pitch | CLASSIC 40, 36, 32 (default), 28, 24 degrees (own values, not levels) | | |
 
 MEDIUM equals the look before the levels, HIGH equals MEDIUM except for bloom and grade (which had presets). Bloom LOW is a weak glow instead of none (the LOW preset used to have no bloom).
 
 Camera tilt: `CtrSettings_VoxelPitch()` (voxel_platform stub header, Deck branch) reads `voxel_pitch` every frame through `AdaptDistance`, so a change applies live. The horizontal camera distance is multiplied by cos(pitch)/cos(40) to keep the eye-to-target length (tile size on screen); the chunk rows north of the target grow with the pitch (the top ray of a low camera reaches further): `northTiles` in the chunk scan, max 46. Battle pitch (30) and the swoop (lands at 45 from whatever pitch it starts) are untouched. The DoF band rows (226 top, 127 bottom, tuned at 40) are left as they are.
+
+## Phase 7: tilt-shift, scene resolution, light shafts, LUT grade
+Plan: docs/superpowers/plans/2026-11-13-deck-phase7-post2.md. All in `deck_post.c`. The composite shader is one body with `#ifdef POST_X`; it is built with POST_X first and, if that fails, without (the phase 1 composite). Env `DECK_POST_NO_X=1` forces the plain composite (fallback test), `DECK_POST_FORCE_FAIL` the whole legacy path. Texture units: 0 scene, 1 bloom, 2 blur or tilt copy, 3 scene depth, 4 LUT, 5 shafts.
+- Tilt-shift: circle of confusion from the linearised scene depth (`2nf/(f+n-(2d-1)(f-n))`, near 1, far 62) around the eye to target distance, `smoothstep(0.06, 0.40, |z-zf|/zf)` with the near side x1.4; gather of 8/12/16 golden-angle taps on the half-res copy weighted by `1 + 3 lum^2`, radius up to 1.4 percent of the height. Because it uses the real depth it follows `voxel_pitch` (no screen rows). Replaces the band blur when on and the scene target has a depth texture, outdoors; indoors both are off.
+- 3D resolution: scene target 960 / 1120 / 1280 wide (height 544 / 636 / 726), recreated by `DeckPost_WantScene` when `voxel_res` changes (a failed create goes back to the old size and is not retried). The 3D viewport takes the target size, the projection aspect stays 960/544, so every mapping of the logical 960x544 (UI mirrors, tags) and `deck_shot.c` (reads the window) are unchanged. At 960 the composite samples NEAREST, above that LINEAR. The half-res blur steps scale with the width. UI and 2D stay 960x544.
+- Light shafts: half-res radial march (24 taps, decay 0.95, bright part above luminance 0.62, jittered start) toward a fixed point above the picture (x = 0.5 - sun dx x 0.25, y = 1.3), added warm in the composite before the grade. Amount = max(sun strength, glow) x clamp(daylight / 0.25); zero in rain, fog (density 0.05), sand, ash, indoors, underground and at night. The true sun position is above and beside the frustum at these pitches, so a projection would be unstable.
+- LUT grade: 256x16 RGB8 strip (16 slices of blue) built on the CPU: the procedural grade (tint by luminance, saturation, strength of the preset) plus an S-curve (0.20 day, 0.32 dusk, 0.14 night, x level); rebuilt when daylight or glow moved more than 0.004 or a level changed. Sampled with two bilinear taps; the fade stays a mix in the shader; the vignette stays analytic. `voxel_lut` off: the old grade code, unchanged.
+- Verified: see HANDOFF "Phase 7 status".
 
 ### Adding a setting
 A leveled row is three edits: (1) a `FAST_EXTRA_VOXEL_<NAME>` id in `include/platform/vita_extras.h` (Deck block), (2) one `if (strcmp(key, "voxel_<name>") == 0) return ...` in `LookupFastId` (vita_extras.c, case 'v'), (3) one row in `gVitaExtras` with `5, 1, sVoxelLevelValues` (count 5, default AUTO). In the reader include `deck_levels.h` and use `DeckLevel(id)` (-1 off, else 0..2) or `DeckLevelPick(id, low, medium, high)` (0 when off). Labels: at most about 18 characters (the label column is 156 px of the 320 px menu); values at most 8. Tab row arrays hold 48 rows (vita_ui_options.c) and 64 (ui_scr_options.c).
