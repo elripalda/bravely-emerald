@@ -2,6 +2,7 @@
 #include "deck_gl_shader.h"
 #include "deck_video.h"
 #include "deck_levels.h"
+#include "deck_reveal.h"
 #include "platform/vita_extras.h"
 #include <SDL2/SDL.h>
 #include <math.h>
@@ -100,6 +101,7 @@ static GLint sBrightScene, sBrightThr, sCopyScene, sBlurSrc, sBlurStep;
 static GLint sCScene, sCBloom, sCGlow, sCA, sCB, sCShadow, sCHigh, sCC;
 static bool sActive;            // between Begin and End
 static int sLvl;                // level of the active frame
+static float sK = 1.0f;         // reveal amount of the active frame (0 flat .. 1 full)
 static int sLoggedLvl = -9;
 static const float kQuad[8] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f };
 
@@ -228,6 +230,9 @@ bool DeckFlat_Begin(void)
     }
     if (sLvl < 0)
         return false;
+    sK = DeckReveal_Amount();
+    if (sK <= 0.001f)
+        return false;   // the reveal has not fired yet: the plain flat picture, exactly as without this pass
     if (!sInit)
     {
         sInit = true;
@@ -314,8 +319,8 @@ void DeckFlat_End(void)
     DeckGl_Set1i(sCScene, 0);
     DeckGl_Set1i(sCBloom, 1);
     DeckGl_Set1i(sCGlow, 2);
-    DeckGl_Set4f(sCA, kBloomAmt[l] * (1.0f + kPulse[l] * 20.0f * pulse), kGlowAmt[l], kVignette[l], kGrade[l]);
-    DeckGl_Set4f(sCB, kSaturation[l], kContrast[l], kGrain[l], 1.0f + kPulse[l] * pulse);
+    DeckGl_Set4f(sCA, sK * kBloomAmt[l] * (1.0f + kPulse[l] * 20.0f * pulse), sK * kGlowAmt[l], sK * kVignette[l], sK * kGrade[l]);
+    DeckGl_Set4f(sCB, 1.0f + sK * (kSaturation[l] - 1.0f), sK * kContrast[l], sK * kGrain[l], 1.0f + sK * kPulse[l] * pulse);
     DeckGl_Set3f(sCShadow, kShadowTint[0], kShadowTint[1], kShadowTint[2]);
     DeckGl_Set3f(sCHigh, kHighTint[0], kHighTint[1], kHighTint[2]);
     DeckGl_Set3f(sCC, (float)sCap.w / (float)sCap.h, t, (float)sCap.h);

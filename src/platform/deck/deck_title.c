@@ -9,8 +9,8 @@
 #include "deck_levels.h"
 #include "global.h"
 #include "palette.h"
-#include "fonts.h"
-#include "text.h"
+#include "deck_reveal.h"
+#include "deck_title_font.h"
 #include "platform/vita_extras.h"
 
 // Written by src/title_screen.c: 0 off the title, 1 logo shine, 2 version banner, 3 PRESS START, 4 leaving.
@@ -109,8 +109,16 @@ static const char kFrontFs[] =
     "uniform vec2 uRad;\n"         // glow radius in uv
     "uniform float uMode;\n"
     "uniform float uAmt;\n"
+    "uniform vec4 uBanner;\n"     // uv rect of the EMERALD VERSION sprites
+    "uniform float uBMode;\n"     // 0 no banner logic, 1 draw all but the banner, 2 draw only the banner
     "varying vec3 vT;\n"
     "varying vec4 vC;\n"
+    "bool isBanner(vec2 uv, vec3 c) {\n"
+    "    if (uBMode < 0.5 || uv.x < uBanner.x || uv.x > uBanner.z || uv.y < uBanner.y || uv.y > uBanner.w) return false;\n"
+    "    float mx = max(c.r, max(c.g, c.b));\n"
+    "    float mn = min(c.r, min(c.g, c.b));\n"
+    "    return (mx - mn) < 0.2 * mx + 0.02;\n"      // white, grey and the black outline; the logo is yellow and blue
+    "}\n"
     "float opaque(vec2 uv) { vec3 c = texture2D(uTex, uv).rgb; return step(0.04, length(c - vec3(1.0, 0.0, 1.0))); }\n"
     "void main() {\n"
     "    vec2 uv = vT.xy;\n"
@@ -121,13 +129,15 @@ static const char kFrontFs[] =
     "            float r = (mod(float(i), 2.0) < 0.5) ? 0.55 : 1.0;\n"
     "            vec2 o = vec2(cos(a), sin(a)) * uRad * r;\n"
     "            vec3 c = texture2D(uTex, uv + o).rgb;\n"
-    "            acc += c * step(0.04, length(c - vec3(1.0, 0.0, 1.0)));\n"
+    "            acc += c * step(0.04, length(c - vec3(1.0, 0.0, 1.0))) * (isBanner(uv + o, c) ? 0.0 : 1.0);\n"
     "        }\n"
     "        gl_FragColor = vec4(acc / 12.0 * uAmt, 1.0);\n"
     "        return;\n"
     "    }\n"
     "    vec3 c = texture2D(uTex, uv).rgb;\n"
     "    if (length(c - vec3(1.0, 0.0, 1.0)) < 0.04) discard;\n"
+    "    bool bn = isBanner(uv, c);\n"
+    "    if ((uBMode > 1.5 && !bn) || (uBMode > 0.5 && uBMode < 1.5 && bn)) discard;\n"
     "    float edge = 1.0 - opaque(uv + vec2(-uTexel.x, -uTexel.y));\n"
     "    float edge2 = 1.0 - opaque(uv + vec2(0.0, -uTexel.y));\n"
     "    c += vec3(1.0, 0.96, 0.8) * max(edge, edge2) * 0.28;\n"
@@ -191,8 +201,9 @@ static const char kRaysFs[] =
 static bool sInit, sFailed, sEnvRead, sEnvOrig, sArtOk;
 static DeckGlProgram sLayer, sRay, sFront, sShine, sSoft, sRays;
 static GLint sLyTex, sLyBias, sRyTex, sRyMark, sRySize, sRyScale, sRyMarkCol, sRyRim;
-static GLint sFrTex, sFrTexel, sFrRad, sFrMode, sFrAmt, sShTex, sShPos, sShAmt, sRaysT, sRaysAmt;
-static GLuint sSkyTex, sRayTex, sMarkTex, sCloudTex;
+static GLint sFrBanner, sFrBMode, sFrTex, sFrTexel, sFrRad, sFrMode, sFrAmt, sShTex, sShPos, sShAmt, sRaysT, sRaysAmt;
+static GLuint sSkyTex, sRayTex, sMarkTex, sCloudTex, sPlateTex, sCrestTex;
+static int sPlateW, sPlateH, sCrestW, sCrestH;
 static int sPrevPhase;
 static double sStart, sPhase3At = -1.0;
 static unsigned sFrames;
@@ -356,154 +367,281 @@ fail:
     return false;
 }
 
-// --------------------------------------------------------------------- badge with the game's own font
-// Glyph ids of the Latin font are the game's character codes: 0xA1.. digits, 0xBB.. capitals, 0xAE '-', 0xAD '.'.
-static int GlyphId(char c)
+// ------------------------------------------------------------------------ serif plate and crest
+// The two words come from deck_title_font.h (Cinzel masks rendered once offline by tools/deck/gen_title_font.py).
+static unsigned char *DecodeRle(const unsigned char *rle, size_t n, int w, int h)
 {
-    if (c >= 'A' && c <= 'Z') return 0xBB + (c - 'A');
-    if (c >= '0' && c <= '9') return 0xA1 + (c - '0');
-    if (c == '-') return 0xAE;
-    if (c == '.') return 0xAD;
-    return 0;   // space
+    unsigned char *m = (unsigned char *)malloc((size_t)w * (size_t)h);
+    size_t o = 0;
+
+    if (m == NULL)
+        return NULL;
+    for (size_t i = 0; i + 1 < n && o < (size_t)w * (size_t)h; i += 2)
+        for (int k = 0; k < rle[i + 1] && o < (size_t)w * (size_t)h; k++)
+            m[o++] = rle[i];
+    while (o < (size_t)w * (size_t)h)
+        m[o++] = 0;
+    return m;
 }
 
-// Decodes one 8x16 glyph (four 8x8 tiles of 2bpp rows: 1 face, 2 the game shadow, 0 and 3 clear) straight from the font data, so it
-// does not depend on the text engine's current colours. Returns its advance in texels.
-static int Glyph(char c, uint8_t out[16][16])
+// bilinear sample of a mask, coordinates in mask texels
+static float MaskAt(const unsigned char *m, int w, int h, float x, float y)
 {
-    const int id = GlyphId(c);
-    const u16 *g = gFontNormalLatinGlyphs + 0x20 * id;
+    const int x0 = (int)floorf(x), y0 = (int)floorf(y);
+    const float fx = x - (float)x0, fy = y - (float)y0;
+    float v[4];
 
-    memset(out, 0, 16 * 16);
-    if (id == 0)
-        return 5;
-    for (int t = 0; t < 4; t++)
-        for (int y = 0; y < 8; y++)
-        {
-            const uint16_t r = g[t * 8 + y];
-
-            for (int x = 0; x < 8; x++)
-                out[(t / 2) * 8 + y][(t % 2) * 8 + x] = (((x < 4) ? (r >> 8) : r) >> (6 - 2 * (x & 3))) & 3;   // high byte = left four pixels, leftmost in the top bits
-        }
-    return gFontNormalLatinGlyphWidths[id];
-}
-
-typedef struct { GLuint tex; int w, h; } TextTex;
-static TextTex sBravely, sHd;
-
-// Lettering from the game's own font, scaled with nearest sampling, outlined like the logo art: style 0 is the EMERALD VERSION
-// look (white face, grey underside, dark navy outline), style 1 the POKEMON logo look (yellow face, blue outline).
-static bool BuildText(TextTex *tt, const char *text, int sc, int style)
-{
-    const int pad = 3 * sc + 3;
-    int adv[16], total = 0, n = (int)strlen(text);
-    uint8_t glyphs[16][16][16];
-    uint8_t *mask, *rgba;
-    int w, h;
-
-    for (int i = 0; i < n; i++)
+    for (int k = 0; k < 4; k++)
     {
-        adv[i] = Glyph(text[i], glyphs[i]) + 1;
-        total += adv[i];
+        const int xx = x0 + (k & 1), yy = y0 + (k >> 1);
+
+        v[k] = (xx < 0 || yy < 0 || xx >= w || yy >= h) ? 0.0f : (float)m[yy * w + xx] / 255.0f;
     }
-    w = total * sc + 2 * pad;
-    h = 16 * sc + 2 * pad;
-    mask = (uint8_t *)calloc((size_t)w * h, 1);
-    rgba = (uint8_t *)calloc((size_t)w * h * 4, 1);
-    if (!mask || !rgba)
+    return (v[0] * (1.0f - fx) + v[1] * fx) * (1.0f - fy) + (v[2] * (1.0f - fx) + v[3] * fx) * fy;
+}
+
+static void OverPx(float *px, float r, float g, float b, float a)   // premultiplied float RGBA
+{
+    const float ia = 1.0f - a;
+
+    px[0] = r * a + px[0] * ia;
+    px[1] = g * a + px[1] * ia;
+    px[2] = b * a + px[2] * ia;
+    px[3] = a + px[3] * ia;
+}
+
+static float SdRoundRect(float px, float py, float hx, float hy, float r)
+{
+    const float qx = fabsf(px) - hx + r, qy = fabsf(py) - hy + r;
+    const float ox = qx > 0.0f ? qx : 0.0f, oy = qy > 0.0f ? qy : 0.0f;
+
+    return sqrtf(ox * ox + oy * oy) + fminf(fmaxf(qx, qy), 0.0f) - r;
+}
+
+static GLuint FloatToTexture(const float *f, int w, int h)
+{
+    uint8_t *b = (uint8_t *)malloc((size_t)w * h * 4);
+    GLuint t;
+
+    if (b == NULL)
+        return 0;
+    for (int i = 0; i < w * h * 4; i++)
+        b[i] = (uint8_t)(Clamp01(f[i]) * 255.0f + 0.5f);
+    t = MakeTexture(b, w, h, GL_RGBA, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, false);
+    free(b);
+    return t;
+}
+
+// BRAVELY: dark ink in Trajan-like capitals on a soft light translucent plate (pale grey-white, slight gradient, rim, shadow).
+static bool BuildPlate(void)
+{
+    const int w = 560, h = 168;
+    unsigned char *m = DecodeRle(kBravelyRle, sizeof(kBravelyRle), KBRAVELYRLE_W, KBRAVELYRLE_H);
+    float *f = (float *)calloc((size_t)w * h * 4, sizeof(float));
+    const float tw = 430.0f, sc = tw / (float)KBRAVELYRLE_W, th = (float)KBRAVELYRLE_H * sc;
+
+    if (m == NULL || f == NULL)
     {
-        free(mask);
-        free(rgba);
+        free(m);
+        free(f);
         return false;
-    }
-    {
-        int x0 = pad;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int y = 0; y < 16; y++)
-                for (int x = 0; x < 8; x++)
-                    if (glyphs[i][y][x] == 1)
-                        for (int dy = 0; dy < sc; dy++)
-                            for (int dx = 0; dx < sc; dx++)
-                                mask[(pad + y * sc + dy) * w + x0 + x * sc + dx] = 1;
-            x0 += adv[i] * sc;
-        }
-    }
-    {
-        // embolden: the game font strokes are one texel wide, the logo lettering is chunky
-        uint8_t *fat = (uint8_t *)calloc((size_t)w * h, 1);
-        const int e = sc / 2 + 1;
-
-        if (fat != NULL)
-        {
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    for (int dy = -e; dy <= e && !fat[y * w + x]; dy++)
-                        for (int dx = -e; dx <= e; dx++)
-                        {
-                            const int xx = x + dx, yy = y + dy;
-
-                            if (xx >= 0 && xx < w && yy >= 0 && yy < h && mask[yy * w + xx] && dx * dx + dy * dy <= e * e + 1)
-                            {
-                                fat[y * w + x] = 1;
-                                break;
-                            }
-                        }
-            memcpy(mask, fat, (size_t)w * h);
-            free(fat);
-        }
     }
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
         {
-            uint8_t *o = &rgba[((size_t)y * w + x) * 4];
-            const int r = sc + sc / 2 + 1;
-            int outline = 0;
+            float *px = &f[((size_t)y * w + x) * 4];
+            const float d = SdRoundRect((float)x + 0.5f - w * 0.5f, (float)y + 0.5f - h * 0.5f, w * 0.5f - 14.0f, h * 0.5f - 14.0f, 14.0f);
+            const float v = (float)y / (float)h;
 
-            for (int dy = -r; dy <= r && !outline; dy++)
-                for (int dx = -r; dx <= r; dx++)
-                {
-                    const int xx = x + dx, yy = y + dy;
-
-                    if (xx >= 0 && xx < w && yy >= 0 && yy < h && mask[yy * w + xx] && dx * dx + dy * dy <= r * r + 1)
-                    {
-                        outline = 1;
-                        break;
-                    }
-                }
-            if (mask[y * w + x])
+            if (d > 0.0f && d < 12.0f)
             {
-                const bool low = (y - pad) / sc >= 11;
-                const uint8_t fr = style == 0 ? (low ? 190 : 255) : 255, fg = style == 0 ? (low ? 190 : 255) : (low ? 200 : 244);
-                const uint8_t fb = style == 0 ? (low ? 205 : 255) : (low ? 20 : 40);
-
-                o[0] = fr;
-                o[1] = fg;
-                o[2] = fb;
-                o[3] = 255;
+                const float a = 0.30f * expf(-d / 4.5f);
+                OverPx(px, 0.02f, 0.05f, 0.08f, a);   // soft shadow outside
             }
-            else if (outline)
+            if (d < 1.0f)
             {
-                o[0] = style == 0 ? 20 : 40;
-                o[1] = style == 0 ? 24 : 48;
-                o[2] = style == 0 ? 52 : 176;
-                o[3] = 255;
+                const float cov = Clamp01(0.5f - d);
+                const float a = (0.90f - 0.14f * v) * cov;
+                const float lum = 0.985f - 0.17f * v;
+
+                OverPx(px, lum, lum + 0.01f, lum + 0.03f, a);
+                if (d > -3.0f)
+                    OverPx(px, 1.0f, 1.0f, 1.0f, 0.55f * cov * Clamp01((d + 3.0f) / 3.0f));   // bright rim
+                if (d < -3.0f && d > -5.0f)
+                    OverPx(px, 0.55f, 0.58f, 0.66f, 0.18f * cov);                        // inner fine line
             }
         }
-    if (tt->tex)
-        glDeleteTextures(1, &tt->tex);
-    tt->tex = MakeTexture(rgba, w, h, GL_RGBA, GL_LINEAR, GL_NEAREST, GL_CLAMP_TO_EDGE, false);
-    tt->w = w;
-    tt->h = h;
-    free(mask);
-    free(rgba);
-    return tt->tex != 0;
+    // text: embossed (white above-left under the ink, soft shadow below-right), ink on top
+    for (int pass = 0; pass < 3; pass++)
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                const float ox = (float)w * 0.5f - tw * 0.5f, oy = (float)h * 0.5f - th * 0.5f;
+                const float off = pass == 0 ? -1.2f : (pass == 1 ? 1.4f : 0.0f);
+                const float a = MaskAt(m, KBRAVELYRLE_W, KBRAVELYRLE_H, ((float)x - ox - off) / sc, ((float)y - oy - off) / sc);
+                float *px = &f[((size_t)y * w + x) * 4];
+
+                if (a <= 0.0f)
+                    continue;
+                if (pass == 0)
+                    OverPx(px, 1.0f, 1.0f, 1.0f, 0.75f * a);
+                else if (pass == 1)
+                    OverPx(px, 0.35f, 0.38f, 0.48f, 0.35f * a);
+                else
+                    OverPx(px, 0.08f, 0.09f, 0.15f, 0.96f * a);
+            }
+    sPlateTex = FloatToTexture(f, w, h);
+    sPlateW = w;
+    sPlateH = h;
+    free(m);
+    free(f);
+    return sPlateTex != 0;
+}
+
+static float H2(int a, int b, int c)
+{
+    unsigned n = (unsigned)(a * 73856093) ^ (unsigned)(b * 19349663) ^ (unsigned)(c * 83492791);
+
+    n = (n << 13) ^ n;
+    return (float)((n * (n * n * 15731u + 789221u) + 1376312589u) & 0x7fffffffu) / 2147483648.0f;
+}
+
+// HD-2D crest: a rounded shield, white with pale blue triangular facets like a cut crystal, a white rim, "HD-2D" in dark serif caps.
+static bool BuildCrest(void)
+{
+    const int w = 240, h = 280;
+    unsigned char *m = DecodeRle(kHd2dRle, sizeof(kHd2dRle), KHD2DRLE_W, KHD2DRLE_H);
+    float *f = (float *)calloc((size_t)w * h * 4, sizeof(float));
+    unsigned char *in = (unsigned char *)calloc((size_t)w * h, 1);
+    const float tw = 150.0f, sc = tw / (float)KHD2DRLE_W, th = (float)KHD2DRLE_H * sc;
+
+    if (m == NULL || f == NULL || in == NULL)
+    {
+        free(m);
+        free(f);
+        free(in);
+        return false;
+    }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            const float nx = ((float)x + 0.5f - w * 0.5f) / 108.0f, ny = ((float)y + 0.5f - h * 0.5f) / 128.0f;
+            const float ax = fabsf(nx);
+            const float top = -0.93f + 0.13f * nx * nx + (ax < 0.12f ? 0.05f : 0.0f);
+            const float bot = 0.12f + 0.88f * (1.0f - powf(fminf(ax, 1.0f), 1.7f));
+
+            in[y * w + x] = (ax <= 1.0f && ny >= top && ny <= bot) ? 1 : 0;
+        }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            float *px = &f[((size_t)y * w + x) * 4];
+            int near = 99;
+
+            if (!in[y * w + x])
+            {
+                // soft grey-blue shadow just outside the rim
+                for (int dy = -3; dy <= 3 && near > 3; dy++)
+                    for (int dx = -3; dx <= 3; dx++)
+                        if (x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < h && in[(y + dy) * w + x + dx])
+                        {
+                            near = 3;
+                            break;
+                        }
+                if (near == 3)
+                    OverPx(px, 0.25f, 0.35f, 0.55f, 0.35f);
+                continue;
+            }
+            for (int r = 1; r <= 7 && near == 99; r++)
+                for (int dy = -r; dy <= r && near == 99; dy++)
+                    for (int dx = -r; dx <= r; dx++)
+                    {
+                        const int xx = x + dx, yy = y + dy;
+
+                        if (xx < 0 || xx >= w || yy < 0 || yy >= h || !in[yy * w + xx])
+                        {
+                            near = r;
+                            break;
+                        }
+                    }
+            {
+                // triangular facets: a lattice of cells, each split into two triangles, a shade per triangle
+                const float cs = 30.0f, gx = (float)x / cs, gy = (float)y / cs;
+                const int cx = (int)floorf(gx), cy = (int)floorf(gy);
+                const float fx = gx - (float)cx, fy = gy - (float)cy;
+                const int tri = (fx + fy > 1.0f) ? 1 : 0;
+                const float hv = H2(cx, cy, tri);
+                const float edgeD = fminf(fminf(fx, fy), fminf(1.0f - fx, 1.0f - fy));
+                const float diag = fabsf(fx + fy - 1.0f) * 0.7071f;
+                const float lineD = fminf(edgeD, diag) * cs;
+                float r, g, b;
+
+                if (hv < 0.40f)
+                {
+                    const float k = hv / 0.40f;
+
+                    r = 0.60f + 0.22f * k;
+                    g = 0.80f + 0.12f * k;
+                    b = 0.97f;
+                }
+                else
+                {
+                    const float k = (hv - 0.40f) / 0.60f;
+
+                    r = 0.90f + 0.10f * k;
+                    g = 0.94f + 0.06f * k;
+                    b = 1.0f;
+                }
+                if (lineD < 1.1f)
+                {
+                    r *= 0.84f;
+                    g *= 0.90f;
+                    b *= 0.97f;
+                }
+                OverPx(px, r, g, b, 1.0f);
+                if (near <= 5)
+                    OverPx(px, 1.0f, 1.0f, 1.0f, 0.95f * (1.0f - (float)(near - 1) / 5.0f * 0.4f));   // white rim
+            }
+        }
+    // "HD-2D": a pale halo, then dark ink
+    for (int pass = 0; pass < 2; pass++)
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                const float ox = (float)w * 0.5f - tw * 0.5f, oy = (float)h * 0.52f - th * 0.5f;
+                float a = 0.0f;
+                float *px = &f[((size_t)y * w + x) * 4];
+
+                if (pass == 0)
+                {
+                    for (int k = 0; k < 8; k++)
+                    {
+                        const float ang = (float)k * 0.7854f;
+
+                        a = fmaxf(a, MaskAt(m, KHD2DRLE_W, KHD2DRLE_H, ((float)x - ox + 2.6f * cosf(ang)) / sc, ((float)y - oy + 2.6f * sinf(ang)) / sc));
+                    }
+                    if (a > 0.0f)
+                        OverPx(px, 1.0f, 1.0f, 1.0f, 0.85f * a);
+                }
+                else
+                {
+                    a = MaskAt(m, KHD2DRLE_W, KHD2DRLE_H, ((float)x - ox) / sc, ((float)y - oy) / sc);
+                    if (a > 0.0f)
+                        OverPx(px, 0.10f, 0.12f, 0.22f, 0.97f * a);
+                }
+            }
+    sCrestTex = FloatToTexture(f, w, h);
+    sCrestW = w;
+    sCrestH = h;
+    free(m);
+    free(f);
+    free(in);
+    return sCrestTex != 0;
 }
 
 static bool BuildBadge(void)
 {
-    return BuildText(&sBravely, "BRAVELY", 4, 0) && BuildText(&sHd, "2D-HD", 3, 1);
+    return BuildPlate() && BuildCrest();
 }
 
 static bool Build(void)
@@ -527,6 +665,8 @@ static bool Build(void)
     sFrRad = DeckGl_Uniform(&sFront, "uRad");
     sFrMode = DeckGl_Uniform(&sFront, "uMode");
     sFrAmt = DeckGl_Uniform(&sFront, "uAmt");
+    sFrBanner = DeckGl_Uniform(&sFront, "uBanner");
+    sFrBMode = DeckGl_Uniform(&sFront, "uBMode");
     sShTex = DeckGl_Uniform(&sShine, "uTex");
     sShPos = DeckGl_Uniform(&sShine, "uPos");
     sShAmt = DeckGl_Uniform(&sShine, "uAmt");
@@ -569,6 +709,8 @@ bool DeckTitle_Wanted(void)
     }
     if (sEnvOrig || sFailed || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || VitaExtras_GetFast(FAST_EXTRA_VOXEL_TITLE) == 0)
         return false;
+    if (!DeckReveal_Hd())
+        return false;   // the reveal has not flashed yet: the plain original title is drawn
     if (!sInit)
     {
         sInit = true;
@@ -577,7 +719,7 @@ bool DeckTitle_Wanted(void)
             Fail("build failed");
             return false;
         }
-        DeckGl_Log("[TITLE] ready (BRAVELY EMERALD 2D-HD)\n");
+        DeckGl_Log("[TITLE] ready (HD-2D title)\n");
     }
     if (sPrevPhase == 0)
     {
@@ -635,6 +777,17 @@ static void Disc(float x, float y, float rad, float r, float g, float b, float a
     glEnd();
 }
 
+static void DiscXY(float x, float y, float rx, float ry, float r, float g, float b, float a, float hard)
+{
+    glColor4f(r, g, b, a);
+    glBegin(GL_QUADS);
+    glTexCoord3f(-1.0f, -1.0f, hard); glVertex2f(x - rx, y - ry);
+    glTexCoord3f(1.0f, -1.0f, hard); glVertex2f(x + rx, y - ry);
+    glTexCoord3f(1.0f, 1.0f, hard); glVertex2f(x + rx, y + ry);
+    glTexCoord3f(-1.0f, 1.0f, hard); glVertex2f(x - rx, y + ry);
+    glEnd();
+}
+
 typedef struct { float x, y, sp, amp, ph, size, depth; } Mote;
 #define N_MOTES 64
 static Mote sMotes[N_MOTES];
@@ -669,7 +822,10 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
     const int phase = gDeckTitlePhase;
     const float camX = sinf(t * 0.10f) * 0.9f + sinf(t * 0.043f + 1.7f) * 0.5f;
     const float camY = sinf(t * 0.07f + 1.0f) * 0.7f;
-    const float intro = Smooth(0.0f, 1.8f, t);
+    const float intro = DeckReveal_On() ? DeckReveal_Amount() : Smooth(0.0f, 1.8f, t);
+    const float tf = DeckReveal_SinceFlip(), tb = DeckReveal_SinceBadge();
+    const float dropU = Clamp01((tf - 0.12f) / 0.95f), bannerU = Clamp01((tf - 0.05f) / 1.0f);
+    const float bannerShift = 52.0f * (bannerU * bannerU * (3.0f - 2.0f * bannerU));
     const float p3 = sPhase3At >= 0.0 ? Smooth(0.0f, 1.6f, (float)(now - sPhase3At)) : 0.0f;
     const int fadeY = gPaletteFade.y;
     float fade = (float)fadeY / 16.0f;
@@ -786,22 +942,6 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         glEnd();
     }
 
-    // ---- lettering "BRAVELY" (left of EMERALD, EMERALD VERSION style) and the "2D-HD" badge (right of VERSION, POKEMON logo
-    // style), drawn from the game's own font; they appear with the banner and fade with the game's palette fade
-    if (phase >= 2)
-    {
-        const float a = (phase >= 3 ? 1.0f : Smooth(0.0f, 1.0f, t - 4.8f)) * (1.0f - fade);
-
-        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        DeckGl_UseProgram(&sLayer);
-        DeckGl_Set1i(sLyTex, 0);
-        DeckGl_Set1f(sLyBias, 0.0f);
-        glBindTexture(GL_TEXTURE_2D, sBravely.tex);
-        QuadT(318.0f - (float)sBravely.w, 244.0f - (float)sBravely.h * 0.5f, 318.0f, 244.0f + (float)sBravely.h * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, a);
-        glBindTexture(GL_TEXTURE_2D, sHd.tex);
-        QuadT(690.0f, 262.0f - (float)sHd.h * 0.5f, 690.0f + (float)sHd.w, 262.0f + (float)sHd.h * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, a);
-    }
-
     // ---- front layer: soft glow behind, the picture (rim lit), a shine sweep
     {
         const float fw = vx1 - vx0, fu = u1 - u0;
@@ -812,6 +952,9 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         DeckGl_Set1i(sFrTex, 0);
         DeckGl_Set2f(sFrTexel, 1.0f / 288.0f, 1.0f / 160.0f);
         DeckGl_Set2f(sFrRad, 7.0f / fw * fu, 7.0f / SH);
+        // EMERALD VERSION (low saturation texels inside this uv rect) is drawn separately so it can be pushed down
+        DeckGl_Set4f(sFrBanner, (24.0f + 96.0f) / 288.0f, 0.0f, (24.0f + 228.0f) / 288.0f, 92.0f / 160.0f);
+        DeckGl_Set1f(sFrBMode, phase >= 2 ? 1.0f : 0.0f);
         glBlendFunc(GL_ONE, GL_ONE);
         DeckGl_Set1f(sFrMode, 0.0f);
         DeckGl_Set1f(sFrAmt, 0.35f * intro);
@@ -820,6 +963,12 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         DeckGl_Set1f(sFrMode, 1.0f);
         DeckGl_Set1f(sFrAmt, 1.0f);
         QuadT(vx0, 0.0f, vx1, SH, u0, 0.0f, u1, 1.0f, 0, 0, 1, 1, 1, 1);
+        if (phase >= 2)
+        {
+            DeckGl_Set1f(sFrBMode, 2.0f);
+            QuadT(vx0, bannerShift, vx1, SH + bannerShift, u0, 0.0f, u1, 1.0f, 0, 0, 1, 1, 1, 1);
+            DeckGl_Set1f(sFrBMode, 1.0f);
+        }
         if (shinePhase < 1.0f)
         {
             glBlendFunc(GL_ONE, GL_ONE);
@@ -828,6 +977,46 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
             DeckGl_Set1f(sShPos, shinePhase * 1.5f - 0.3f);
             DeckGl_Set1f(sShAmt, 0.7f * sinf(shinePhase * 3.1416f));
             QuadT(vx0, 0.0f, vx1, SH, u0, 0.0f, u1, 1.0f, 0.0f, 1.0f, 1, 1, 1, 1);
+        }
+    }
+
+    // ---- BRAVELY plate: drops in from above over the logo's lower edge (the banner has moved down for it); then the
+    // HD-2D crest in the top right with a sparkle. Both after the front layer, both fade with the game's palette fade.
+    if (phase >= 2 && tf > 0.0f)
+    {
+        const float u = dropU, back = 1.2f, v = u - 1.0f;
+        const float ease = 1.0f + (back + 1.0f) * v * v * v + back * v * v;
+        const float pw = (float)sPlateW * 0.46f, ph = (float)sPlateH * 0.46f;
+        const float cx = 480.0f - camX * 3.0f, cy = 199.0f - (1.0f - ease) * 120.0f;
+
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        DeckGl_UseProgram(&sLayer);
+        DeckGl_Set1i(sLyTex, 0);
+        DeckGl_Set1f(sLyBias, 0.0f);
+        glBindTexture(GL_TEXTURE_2D, sPlateTex);
+        QuadT(cx - pw * 0.5f, cy - ph * 0.5f, cx + pw * 0.5f, cy + ph * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, Smooth(0.0f, 0.45f, u) * (1.0f - fade));
+        if (tb > 0.0f)
+        {
+            const float bu = Clamp01(tb / 0.6f), bv = bu - 1.0f;
+            const float be = 1.0f + 2.4f * bv * bv * bv + 1.4f * bv * bv;
+            const float k = 0.5f + 0.5f * be;
+            const float bw = (float)sCrestW * 0.40f * k, bh = (float)sCrestH * 0.40f * k;
+            const float bx = 888.0f, by = 100.0f + sinf(t * 0.8f) * 1.2f;
+            const float sp = sinf(3.1416f * Clamp01(tb / 1.2f));
+
+            glBindTexture(GL_TEXTURE_2D, sCrestTex);
+            QuadT(bx - bw * 0.5f, by - bh * 0.5f, bx + bw * 0.5f, by + bh * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, Smooth(0.0f, 0.3f, tb) * (1.0f - fade));
+            if (sp > 0.01f)
+            {
+                // four-point sparkle on the crest's upper left facet
+                const float sx = bx - 22.0f, sy = by - 30.0f;
+
+                glBlendFunc(GL_ONE, GL_ONE);
+                DeckGl_UseProgram(&sSoft);
+                DiscXY(sx, sy, 40.0f * sp, 3.5f * sp, 1.0f, 0.97f, 0.85f, 0.9f * sp, 0.0f);
+                DiscXY(sx, sy, 3.5f * sp, 40.0f * sp, 1.0f, 0.97f, 0.85f, 0.9f * sp, 0.0f);
+                DiscXY(sx, sy, 11.0f * sp, 11.0f * sp, 1.0f, 1.0f, 0.95f, 0.8f * sp, 0.3f);
+            }
         }
     }
 

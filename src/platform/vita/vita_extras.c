@@ -126,6 +126,7 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_sunshadow") == 0) return FAST_EXTRA_VOXEL_SUNSHADOW;
         if (strcmp(key, "voxel_flatfx") == 0) return FAST_EXTRA_VOXEL_FLATFX;
         if (strcmp(key, "voxel_title") == 0) return FAST_EXTRA_VOXEL_TITLE;
+        if (strcmp(key, "voxel_reveal") == 0) return FAST_EXTRA_VOXEL_REVEAL;
 #endif
         break;
     default:
@@ -170,7 +171,7 @@ static const char *const sVoxelLevelValues[] = { "OFF", "AUTO", "LOW", "MEDIUM",
 static const char *const sVoxelPitchValues[] = { "CLASSIC", "36", "32", "28", "24", NULL };
 static const char *const sAmbientValues[] = { "OFF", "LOW", "MEDIUM", "HIGH", NULL };
 static const char *const sAmbientDensityValues[] = { "SPARSE", "NORMAL", "FREQUENT", NULL };
-static const char *const sTitleValues[] = { "ORIGINAL", "BRAVELY", NULL };
+static const char *const sTitleValues[] = { "ORIGINAL", "HD-2D", NULL };
 #endif
 static const char *const sSaveSlotValues[] = { "SLOT 1", "SLOT 2", "SLOT 3", NULL };
 static const char *const sDayNightValues[] = { "OFF", "AUTO", NULL };
@@ -346,8 +347,9 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS", "SUN SHADOWS", "voxel_sunshadow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "LIGHT SHAFTS",     "voxel_shafts", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "TILT-SHIFT",       "voxel_tiltshift", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS", "INTRO & MENU EFFECTS", "voxel_flatfx", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "INTRO EFFECTS", "voxel_flatfx", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "TITLE SCREEN",     "voxel_title", 2, 1, sTitleValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "REVEAL FLASH",     "voxel_reveal", 2, 1, gVitaExtrasOffOn, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "CAMERA TILT",       "voxel_pitch",      5, 2, sVoxelPitchValues,   NULL, NULL, NULL },
 #endif
     { VITA_TAB_WORLD,   "TIME & SKY", "DAY / NIGHT CYCLE", "day_night",        2, 1, sDayNightValues,    NULL, NULL, NULL },

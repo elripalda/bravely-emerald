@@ -19,6 +19,7 @@
 #include "deck/deck_ambient_game.h"
 #include "deck/deck_flatfx.h"
 #include "deck/deck_title.h"
+#include "deck/deck_reveal.h"
 #endif
 // Catch-up game frames run their scanline events without being drawn (see the main loop).
 #define VITA_SKIP_CATCHUP_DRAW
@@ -426,6 +427,7 @@ static void RenderGameTexture(void)
         glBindTexture(GL_TEXTURE_2D, sGameTextureRing[sGameTextureUploadIdx]);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         DeckTitle_Draw(sGameTextureRing[sGameTextureUploadIdx], vx0, vx1, u0, u1);
+        DeckReveal_DrawFlash();
         if (flatFx)
             DeckFlat_End();
         glDepthMask(GL_FALSE);
@@ -554,6 +556,7 @@ static void RenderGameTexture(void)
     }
 #endif
 #ifdef PLATFORM_DECK
+    DeckReveal_DrawFlash();
     if (flatFx)
         DeckFlat_End();
 #endif
@@ -1308,6 +1311,7 @@ void VDraw(SDL_Texture *texture)
     // New UI battle HUD: the GBA text box and menus (BG0, BG1 while the level-up box shows) are its
     gFastDrawDispcntClear = Ui_BattleDispcntClear();
 #ifdef PLATFORM_DECK
+    DeckReveal_Frame();
     if (DeckTitle_Wanted())
     {
         // title: draw only BG2 + sprites over a magenta backdrop (key), deck_title.c supplies the sky, Rayquaza and clouds
