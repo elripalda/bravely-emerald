@@ -45,7 +45,7 @@ static const char *kBumpGlsl =
     "    float g = dgNoise(w * 5.0) * 0.65 + (dgNoise(w * 12.0) * a2 + 0.5 * (1.0 - a2)) * 0.35;\n"
     "    float r = sin((w.x * 0.6 + w.y) * 15.0 + dgNoise(w * 3.0) * 4.0) * 0.5 + 0.5;\n"
     "    float p = dgNoise(w * 18.0) * 0.7 + (dgNoise(w * 29.0) * a3 + 0.5 * (1.0 - a3)) * 0.3;\n"
-    "    return k.x * g * 0.8 + k.y * r + k.z * p;\n"
+    "    return k.x * g * 0.65 + k.y * r + k.z * p;\n"
     "}\n"
     "float dgUndulation(vec2 w) { return (dgNoise(w * 0.16) * 2.2 + dgNoise(w * 0.07 + 5.0) * 1.2) * 0.25; }\n"
     "float deckGroundMul(vec2 w, vec3 base, vec3 vcol, vec3 eye) {\n"
@@ -61,7 +61,7 @@ static const char *kBumpGlsl =
     "    float sand = (1.0 - grass) * smoothstep(0.08, 0.20, base.r - base.b) * smoothstep(0.45, 0.70, lum);\n"
     "    float path = max(0.0, 1.0 - grass - sand);\n"
     "    float water = clamp((base.b - max(base.r, base.g * 0.8) - 0.05) * 5.0, 0.0, 1.0);\n"
-    "    vec3 k = vec3(grass, sand, path);\n"
+    "    vec3 k = mix(vec3(grass, sand, path), vec3(0.0, 0.0, 1.0), uGroundP.y);\n"
     "    float fp = max(length(dFdx(w)), length(dFdy(w)));\n"
     "    float e = 0.02;\n"
     "    float h = dgHeight(w, k, fp);\n"
@@ -172,7 +172,7 @@ void DeckBump_ApplyIndoor(const DeckBumpUniforms *u)
         return;
     {
         const float amp = DeckBump_Enabled() ? 0.12f * DeckLevelPick(FAST_EXTRA_VOXEL_BUMP, 0.18f, 0.30f, 0.45f) : 0.0f;
-        const float gAmp = DeckBump_GroundOn() ? 0.35f * DeckLevelPick(FAST_EXTRA_VOXEL_GROUNDRELIEF, 0.20f, 0.35f, 0.50f) : 0.0f;
+        const float gAmp = DeckBump_GroundOn() ? 0.2f * DeckLevelPick(FAST_EXTRA_VOXEL_GROUNDRELIEF, 0.20f, 0.35f, 0.50f) : 0.0f;
 
         DeckGl_Set4f(u->par, amp, sSunW, 0.0f, 0.0f);
         DeckGl_Set4f(u->ground, gAmp, 1.0f, 0.0f, 0.0f);
