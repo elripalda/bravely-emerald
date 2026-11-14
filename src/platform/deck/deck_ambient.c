@@ -63,6 +63,7 @@ static Wave sWave[2];
 static Cricket sCricket[MAX_CRICKETS];
 static Bird sBird[MAX_BIRDS];
 static float sBirdWait;
+static float sDensity = 1.0f;   // one-shot rate multiplier (DeckAmbient_SetDensity)
 static Pole2 sCaveLp[2];
 static float sCavePhaseA, sCavePhaseB;
 static Drip sDrip[MAX_DRIPS];
@@ -152,6 +153,11 @@ static void StartDrip(float level)
             }
         }
     }
+}
+
+void DeckAmbient_SetDensity(float density)
+{
+    sDensity = density < 0.2f ? 0.2f : (density > 3.0f ? 3.0f : density);
 }
 
 void DeckAmbient_Init(unsigned rate, unsigned seed)
@@ -396,7 +402,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                             break;
                         }
                     }
-                    sBirdWait = Rr(0.8f, 4.5f) * sRate / (0.25f + lv);
+                    sBirdWait = Rr(0.8f, 4.5f) * sRate / ((0.25f + lv) * sDensity);
                 }
                 for (int i = 0; i < MAX_BIRDS; i++)
                 {
@@ -448,7 +454,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                 if (sDripWait <= 0.0f)
                 {
                     StartDrip(lv);
-                    sDripWait = Rr(1.5f, 6.0f) * sRate;
+                    sDripWait = Rr(1.5f, 6.0f) * sRate / sDensity;
                 }
                 for (int i = 0; i < MAX_DRIPS; i++)
                 {

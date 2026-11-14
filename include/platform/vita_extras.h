@@ -95,7 +95,8 @@ typedef enum
     FAST_EXTRA_VOXEL_BATTLEDIM,   // Deck 3D battle backdrop: blur radius and black overlay opacity
     FAST_EXTRA_VOXEL_GROUNDRELIEF,   // Deck ground micro-relief: procedural height by ground kind plus undulation, shading only
     FAST_EXTRA_VOXEL_UIGLOW,   // Deck UI depth glow: faint dark halo under the UI (UI passes only)
-    FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume: 0 off (no DSP) to 10, default 6
+    FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume, key ambient_level: 0 OFF (no DSP), 1 LOW, 2 MEDIUM (default), 3 HIGH
+    FAST_EXTRA_AMBIENT_DENSITY, // Deck ambient one-shot rate, key ambient_density: 0 SPARSE (default), 1 NORMAL, 2 FREQUENT
 #endif
     FAST_EXTRA_COUNT
 } FastExtraId;

@@ -147,13 +147,19 @@ static void UpdateTargets(void)
 
 void DeckAmbient_Frame(float *stereo, int frames, unsigned rate, float masterVolume, bool mute, uint32_t queuedBytes)
 {
+    // ambient_level: 0 OFF, 1 LOW, 2 MEDIUM (default), 3 HIGH. Gains are x0.25 / 0.5 / 0.8 of the old default level (old setting 6 =
+    // 0.6): 0.15 / 0.30 / 0.48 (MEDIUM is 6 dB under the old default). ambient_density scales the one-shot rates (DeckAmbient_SetDensity).
+    static const float kLevelGain[4] = { 0.0f, 0.15f, 0.30f, 0.48f };
+    static const float kDensity[3] = { 0.6f, 1.0f, 1.5f };
     int setting = VitaExtras_GetFast(FAST_EXTRA_AMBIENT_VOLUME);
+    int dens = VitaExtras_GetFast(FAST_EXTRA_AMBIENT_DENSITY);
     float gain;
 
     if (stereo == NULL || frames <= 0)
         return;
-    setting = setting < 0 ? 0 : (setting > 10 ? 10 : setting);
-    gain = ((float)setting / 10.0f) * masterVolume;
+    setting = setting < 0 ? 0 : (setting > 3 ? 3 : setting);
+    dens = dens < 0 ? 0 : (dens > 2 ? 2 : dens);
+    gain = kLevelGain[setting] * masterVolume;
 
     if (!sReady)
     {
@@ -161,6 +167,7 @@ void DeckAmbient_Frame(float *stereo, int frames, unsigned rate, float masterVol
         sReady = true;
     }
 
+    DeckAmbient_SetDensity(kDensity[dens]);
     if (gain > 0.0f)
     {
         if (mute)

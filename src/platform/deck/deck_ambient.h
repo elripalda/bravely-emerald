@@ -21,6 +21,8 @@ void DeckAmbient_Init(unsigned rate, unsigned seed);
 void DeckAmbient_SetTargets(const DeckAmbientTargets *targets);
 // A thunder rumble starts after a random 0.3 to 1.5 s delay.
 void DeckAmbient_Thunder(void);
+// Rate multiplier of the one-shot events (bird calls, cave drips): 1 = the original rate, 0.6 = sparse. The beds are untouched.
+void DeckAmbient_SetDensity(float density);
 // Adds the bed into an interleaved stereo float buffer. gain <= 0 returns at once (the hard off switch:
 // no DSP, no state change). The number of frames is never changed.
 void DeckAmbient_Mix(float *stereo, int frames, float gain);

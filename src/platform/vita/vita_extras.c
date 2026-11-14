@@ -44,7 +44,8 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "auto_run") == 0) return FAST_EXTRA_AUTO_RUN;
         if (strcmp(key, "always_catch") == 0) return FAST_EXTRA_ALWAYS_CATCH;
 #ifdef PLATFORM_DECK
-        if (strcmp(key, "ambient_volume") == 0) return FAST_EXTRA_AMBIENT_VOLUME;
+        if (strcmp(key, "ambient_level") == 0) return FAST_EXTRA_AMBIENT_VOLUME;
+        if (strcmp(key, "ambient_density") == 0) return FAST_EXTRA_AMBIENT_DENSITY;
 #endif
         break;
     case 'b':
@@ -165,7 +166,8 @@ static const char *const sVoxelQualityValues[] = { "LOW", "MEDIUM", "HIGH", NULL
 // Level rows (deck_levels.h): index = stored value. 1 = AUTO is what old files stored as ON, so 0/1 keys keep their meaning.
 static const char *const sVoxelLevelValues[] = { "OFF", "AUTO", "LOW", "MEDIUM", "HIGH", NULL };
 static const char *const sVoxelPitchValues[] = { "CLASSIC", "36", "32", "28", "24", NULL };
-static const char *const sAmbientValues[] = { "OFF", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", NULL };
+static const char *const sAmbientValues[] = { "OFF", "LOW", "MEDIUM", "HIGH", NULL };
+static const char *const sAmbientDensityValues[] = { "SPARSE", "NORMAL", "FREQUENT", NULL };
 #endif
 static const char *const sSaveSlotValues[] = { "SLOT 1", "SLOT 2", "SLOT 3", NULL };
 static const char *const sDayNightValues[] = { "OFF", "AUTO", NULL };
@@ -303,7 +305,8 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_GENERAL, "PACING",     "FAST FWD SPEED",    "speed",            4, 1, sSpeedValues,       NULL, NULL, NULL },
     { VITA_TAB_GENERAL, "PACING",     "FF BUTTON MODE",    "ff_button",        2, 0, sFFButtonValues,    NULL, NULL, NULL },
 #ifdef PLATFORM_DECK
-    { VITA_TAB_GENERAL, "SOUND",      "AMBIENT VOLUME",    "ambient_volume",   11, 6, sAmbientValues,    NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "SOUND",      "AMBIENT VOLUME",    "ambient_level",    4, 2, sAmbientValues,     NULL, NULL, NULL },
+    { VITA_TAB_GENERAL, "SOUND",      "AMBIENT FREQUENCY", "ambient_density",  3, 0, sAmbientDensityValues, NULL, NULL, NULL },
 #endif
     { VITA_TAB_GENERAL, "DISPLAY",    "2D SCALER",         "filter",           3, 0, sFilterValues,      NULL, NULL, NULL },
     { VITA_TAB_GENERAL, "DISPLAY",    "MENU COLOR",        "ui_theme",         5, 0, sUiThemeValues,     NULL, NULL, NULL },
@@ -453,6 +456,15 @@ static void MigrateLevelSettings(const bool fileExisted)
         if (SettingValue("voxel_particles", 1) == 0)
             SettingForce("voxel_glint", 0);
     }
+    // The ambient volume row was 0 OFF, 1..10 (default 6, key ambient_volume); it is now ambient_level 0 OFF, 1 LOW, 2 MEDIUM, 3 HIGH.
+    // An old file (no "amb_levels" key) maps 0 to OFF, 1..3 to LOW, 4..7 to MEDIUM (the old default 6 is MEDIUM), 8..10 to HIGH.
+    if (SettingValue("amb_levels", 0) == 0 && fileExisted && SettingValue("ambient_volume", -1) >= 0)
+    {
+        const int32_t o = SettingValue("ambient_volume", 6);
+
+        SettingForce("ambient_level", o <= 0 ? 0 : (o <= 3 ? 1 : (o <= 7 ? 2 : 3)));
+    }
+    SettingForce("amb_levels", 1);
     SettingForce("fx_levels", 1);
 }
 #endif
