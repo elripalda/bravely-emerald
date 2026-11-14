@@ -15,6 +15,8 @@ typedef struct
     float bloom;           // f->light.bloom (per weather, BaseLightFor)
     float daylight, glow;  // VitaDayNight_Get(); indoor passes 1 and 0 (neutral day)
     float sunX;            // screen x (0..1) of the shafts' focus point, from the sun direction
+    float moonAmount;      // 0..1 moon ray strength at night (pale blue, slower)
+    float time;            // animation clock, seconds
     float sunAmount;       // 0..1 shaft strength: sun and daylight, 0 at night, indoors, in rain, fog, sand, ash
     float zNear, zFar;     // projection planes of the scene (depth texture linearisation)
     float focusDist;       // eye to target distance (view-space depth of the focus plane), 0 = unknown

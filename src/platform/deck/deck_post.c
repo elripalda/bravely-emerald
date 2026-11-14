@@ -27,6 +27,11 @@ static const float kBloomGain[3] = { 1.5f, 3.0f, 5.0f };
 static const float kBlurMul[3] = { 0.5f, 1.0f, 1.0f };
 // Light shaft gain by level (times the frame's sun amount).
 static const float kShaftGain[3] = { 0.35f, 0.65f, 0.9f };
+// Beam layers by level (item 5), and the colours: warm day, golden dawn and dusk, pale blue moon.
+static const float kShaftLayers[3] = { 3.0f, 4.0f, 6.0f };
+static const float kShaftDay[3] = { 1.0f, 0.92f, 0.74f };
+static const float kShaftGold[3] = { 1.0f, 0.72f, 0.38f };
+static const float kShaftMoon[3] = { 0.52f, 0.66f, 1.0f };
 // LUT: gentle S-curve strength by time of day (day, dusk, night) and the level factor.
 static const float kLutCurve[3] = { 0.20f, 0.32f, 0.14f };
 static const float kLutLevel[3] = { 0.5f, 1.0f, 1.3f };
@@ -92,26 +97,43 @@ static const char kBlurFs[] =
     "    gl_FragColor = vec4(c, 1.0);\n"
     "}\n";
 
-// Light shafts: radial march from each pixel toward the focus point uSun (uv, above the picture), summing the bright
-// part of the scene with a decay. 24 taps at half resolution.
+// Light shafts (item 5): procedural beams at half resolution, not a march over the scene. Layers of slanted bands along the
+// light direction (aspect corrected, constant along x + slant * y), each with its own density, drift speed and breathing,
+// strongest at the top of the picture, with dust sparkles inside the beams. uCol carries the colour (warm by day, golden at
+// dawn and dusk, pale blue for the moon); uMotion is 1 for the sun and about 0.45 for the slower moon.
 static const char kShaftFs[] =
     "#version 120\n"
-    "uniform sampler2D uScene;\n"
-    "uniform vec2 uSun;\n"
+    "uniform vec2 uSun;\n"         // x of the focus point above the picture (the slant follows it)
+    "uniform float uTime;\n"
+    "uniform float uAsp;\n"
+    "uniform float uCount;\n"      // layers (3, 4 or 6)
+    "uniform float uMotion;\n"
+    "uniform vec3 uCol;\n"
     "varying vec2 vPos;\n"
+    "float hh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
     "void main() {\n"
-    "    vec2 delta = (uSun - vPos) * (0.6 / 24.0);\n"
-    "    vec2 uv = vPos + delta * fract(sin(dot(vPos, vec2(12.9898, 78.233))) * 43758.5453);\n"
-    "    vec3 acc = vec3(0.0);\n"
-    "    float decay = 1.0;\n"
-    "    for (int i = 0; i < 24; i++) {\n"
-    "        uv += delta;\n"
-    "        vec3 s = texture2D(uScene, uv).rgb;\n"
-    "        float l = dot(s, vec3(0.299, 0.587, 0.114));\n"
-    "        acc += s * smoothstep(0.62, 0.95, l) * decay;\n"
-    "        decay *= 0.95;\n"
+    "    float slant = (0.5 - uSun.x) * 1.8;\n"
+    "    float a = vPos.x * uAsp + vPos.y * slant * uAsp;\n"
+    "    float t = uTime * uMotion;\n"
+    "    float acc = 0.0;\n"
+    "    for (int i = 0; i < 6; i++) {\n"
+    "        if (float(i) >= uCount) break;\n"
+    "        float fi = float(i);\n"
+    "        float dir = mod(fi, 2.0) < 0.5 ? 1.0 : -1.0;\n"
+    "        float pos = a * (1.1 + fi * 0.55) + fi * 13.1 + t * dir * (0.020 + 0.013 * fi);\n"
+    "        float cell = floor(pos);\n"
+    "        float fr = pos - cell;\n"
+    "        float h1 = hh(vec2(cell, fi));\n"
+    "        float h2 = hh(vec2(cell + 7.0, fi * 3.0));\n"
+    "        float width = 0.05 + 0.13 * h2;\n"
+    "        float prof = step(0.40, h1) * (1.0 - smoothstep(0.0, width, abs(fr - (0.25 + 0.5 * h1))));\n"
+    "        float breath = 0.55 + 0.45 * sin(t * (0.30 + 0.19 * fi) + h1 * 6.2831);\n"    // slow intensity breathing
+    "        acc += prof * breath * (1.0 - 0.07 * fi);\n"
     "    }\n"
-    "    gl_FragColor = vec4(acc * (1.0 / 24.0), 1.0);\n"
+    "    float fall = pow(clamp(vPos.y, 0.0, 1.0), 1.25);\n"                                // strong at the top, gone at the bottom
+    "    float beam = clamp(acc * 0.55, 0.0, 1.0) * fall;\n"
+    "    float dust = step(0.955, hh(floor(vPos * vec2(190.0, 108.0)) + floor(t * 2.5))) * beam * 1.6;\n"  // shimmering motes
+    "    gl_FragColor = vec4(uCol * (beam + dust), 1.0);\n"
     "}\n";
 
 // Composite body. Built twice (BuildPrograms): with POST_X defined (tilt-shift and the other phase 7 features)
@@ -234,7 +256,7 @@ static const char kCompositeBody[] =
     "    }\n"
     "#ifdef POST_X\n"
     "    if (uShaft.x > 0.0)\n"
-    "        c += texture2D(uShafts, vPos).rgb * uShaft.x * vec3(1.0, 0.92, 0.74);\n"
+    "        c += texture2D(uShafts, vPos).rgb * uShaft.x;\n"
     "#endif\n"
     "#ifdef POST_X\n"
     "    if (uLutOn.x > 0.5) {\n"
@@ -271,7 +293,7 @@ static GLint sCBack;
 static GLint sCSunMap, sCInvVP, sCSunVP, sCSunA, sCSunB, sCSunL;
 static bool sShaftOk;  // the shaft program built and the composite has POST_X
 static DeckGlProgram sShaft;
-static GLint sShaftScene, sShaftSun, sCShafts, sCShaft;
+static GLint sShaftSun, sShaftTime, sShaftAsp, sShaftCount, sShaftMotion, sShaftCol, sCShafts, sCShaft;
 static bool sLutOk;    // the LUT texture exists and the composite has POST_X
 static GLuint sLutTex;
 static float sLutDay = -1.0f, sLutGlow = -1.0f;   // the parameters the table was last built for
@@ -393,8 +415,12 @@ static bool BuildPrograms(void)
     sShaftOk = sXOk && DeckGl_BuildProgram(&sShaft, "post_shaft", kFullscreenVs, kShaftFs);
     if (sShaftOk)
     {
-        sShaftScene = DeckGl_Uniform(&sShaft, "uScene");
         sShaftSun = DeckGl_Uniform(&sShaft, "uSun");
+        sShaftTime = DeckGl_Uniform(&sShaft, "uTime");
+        sShaftAsp = DeckGl_Uniform(&sShaft, "uAsp");
+        sShaftCount = DeckGl_Uniform(&sShaft, "uCount");
+        sShaftMotion = DeckGl_Uniform(&sShaft, "uMotion");
+        sShaftCol = DeckGl_Uniform(&sShaft, "uCol");
     }
     return true;
 }
@@ -708,7 +734,8 @@ void DeckPost_Run(const DeckPostFrame *in)
     const bool doBloom = cfg.bloom && in->bloom > 0.0f && bloomGain > 0.0f;
     const bool doTilt = cfg.tilt && sTiltOk && !in->indoor && in->focusDist > 0.0f; // replaces the band blur
     const bool doLut = cfg.lut && sLutOk;
-    const bool doShafts = cfg.shafts && sShaftOk && in->sunAmount > 0.01f;
+    const float shaftAmt = in->sunAmount + in->moonAmount;
+    const bool doShafts = cfg.shafts && sShaftOk && shaftAmt > 0.01f;
     const bool doBlur = cfg.blur && !in->indoor && !doTilt;
     const DeckSunResolve *const sun = (cfg.sun && sSunOk && in->sun != NULL && in->sun->active) ? in->sun : NULL;
     float shadow[3], high[3];
@@ -755,11 +782,24 @@ void DeckPost_Run(const DeckPostFrame *in)
     }
     if (doShafts)
     {
-        BindTex(0, sScene.color);
+        const float moonK = in->moonAmount / shaftAmt;
+        const float goldK = Clamp01(in->glow * 4.0f) * (1.0f - moonK);
+        float col[3];
+
+        for (int k = 0; k < 3; k++)
+        {
+            const float sun = kShaftDay[k] + (kShaftGold[k] - kShaftDay[k]) * goldK;
+
+            col[k] = sun + (kShaftMoon[k] - sun) * moonK;
+        }
         BeginTarget(&sHalf[3]);
         DeckGl_UseProgram(&sShaft);
-        DeckGl_Set1i(sShaftScene, 0);
         DeckGl_Set2f(sShaftSun, in->sunX, 1.3f);
+        DeckGl_Set1f(sShaftTime, in->time);
+        DeckGl_Set1f(sShaftAsp, (float)in->renderW / (float)in->renderH);
+        DeckGl_Set1f(sShaftCount, kShaftLayers[cfg.shaftLvl]);
+        DeckGl_Set1f(sShaftMotion, 1.0f - 0.55f * moonK);
+        DeckGl_Set3f(sShaftCol, col[0], col[1], col[2]);
         DrawQuad();
     }
     if (doBlur || doTilt || doBack)
@@ -811,7 +851,7 @@ void DeckPost_Run(const DeckPostFrame *in)
     }
     else
         DeckGl_Set4f(sCSunA, 0.0f, 0.0f, 0.0f, 1.0f);
-    DeckGl_Set4f(sCShaft, doShafts ? in->sunAmount * kShaftGain[cfg.shaftLvl] * keep : 0.0f, 0.0f, 0.0f, 0.0f);
+    DeckGl_Set4f(sCShaft, doShafts ? shaftAmt * kShaftGain[cfg.shaftLvl] * keep : 0.0f, 0.0f, 0.0f, 0.0f);
     {
         const int tl = doTilt ? cfg.tiltLvl : 0;
         DeckGl_Set4f(sCTilt, doTilt ? 1.0f : 0.0f, in->focusDist, kTiltRadius[tl], kTiltTaps[tl]);

@@ -5882,24 +5882,42 @@ static void Pass_DeckPost(const VoxelFrame *const f)
     in.daylight = (isIndoor || dn == NULL) ? 1.0f : dn->daylight;
     in.glow = (isIndoor || dn == NULL) ? 0.0f : dn->glow;
     in.sunAmount = 0.0f;
+    in.moonAmount = 0.0f;
     in.sunX = 0.5f;
     {
-        // Shafts: only in clear or sunny weather outdoors; the sun strength and the daylight carry dawn, noon and dusk.
+        // Beams (item 5): outdoors only. Weather scales them: haze and fog strongest, sun and clear full, shade (overcast)
+        // weaker, none in rain. Day amount follows the sun and the daylight (dawn and dusk go golden in the post pass);
+        // at night the moon gives pale blue rays at half strength.
         const VitaDayNightSun *const sun = VitaDayNight_GetSun();
-        const bool clear = (f->weather == VOXEL_WEATHER_CLEAR || f->weather == VOXEL_WEATHER_SUN) && f->fogDensity < 0.05f;
-        if (clear && !isIndoor && !f->underground && sun != NULL && dn != NULL)
+        float wf = 0.7f;
+
+        switch (f->weather)
+        {
+        case VOXEL_WEATHER_SUN: wf = 1.0f; break;
+        case VOXEL_WEATHER_CLEAR: wf = 0.8f; break;
+        case VOXEL_WEATHER_FOG: wf = 1.4f; break;
+        case VOXEL_WEATHER_SHADE: wf = 0.45f; break;
+        case VOXEL_WEATHER_SAND: wf = 0.5f; break;
+        case VOXEL_WEATHER_RAIN: wf = 0.0f; break;
+        default: wf = 0.35f; break;
+        }
+        if (f->fogDensity >= 0.05f && f->weather != VOXEL_WEATHER_RAIN && wf < 1.4f)
+            wf = 1.4f;
+        if (!isIndoor && !f->underground && sun != NULL && dn != NULL && wf > 0.0f)
         {
             float a = sun->strength > dn->glow ? sun->strength : dn->glow;
             float d = dn->daylight / 0.25f;
             a = a > 1.0f ? 1.0f : (a < 0.0f ? 0.0f : a);
             d = d > 1.0f ? 1.0f : (d < 0.0f ? 0.0f : d);
-            in.sunAmount = a * d;
+            in.sunAmount = a * d * wf;
+            in.moonAmount = (1.0f - d) * 0.5f * wf;
             // The real sun lies above and beside the frustum at these pitches: a fixed point above the picture,
             // east (dx < 0 at dawn) on the right.
             in.sunX = 0.5f - sun->dx * 0.25f;
             in.sunX = in.sunX < 0.05f ? 0.05f : (in.sunX > 0.95f ? 0.95f : in.sunX);
         }
     }
+    in.time = f->seconds;
     in.battle = f->inBattle3D;
     in.sun = DeckSunShadow_Resolve();
     in.zNear = VOXEL_PERSP_NEAR;
