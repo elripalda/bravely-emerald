@@ -6,6 +6,7 @@
 #include "deck_gl_shader.h"
 #include "deck_levels.h"
 #include "global.h"
+#include "main.h"
 #include "sprite.h"
 #include "battle.h"
 #include "battle_anim.h"
