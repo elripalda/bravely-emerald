@@ -4386,10 +4386,8 @@ static void Deck_ForceWeather(VoxelFrame *const f)
         f->weatherAmount = sMode == 2 ? 1.0f : 0.8f;
         if (sMode == 2)
         {
-            static uint64_t sStart = 0;
-            if (sStart == 0)
-                sStart = SDL_GetPerformanceCounter();
-            const float t = fmodf((float)((double)(SDL_GetPerformanceCounter() - sStart) / (double)SDL_GetPerformanceFrequency()), 8.0f);
+            // On the DECK_SHOT clock (ms since start), so a shot at 8000 k + 100 ms lands inside a flash
+            const float t = (float)(VitaPlatform_GetMilliseconds() % 8000u) / 1000.0f;
             f->bolt = t < 0.35f ? 1.0f - t / 0.35f : 0.0f;
         }
         break;
