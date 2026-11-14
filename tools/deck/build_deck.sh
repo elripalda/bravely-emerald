@@ -133,8 +133,14 @@ else
     inbox "sudo bash -c 'grep -q \"^\\[multilib\\]\" /etc/pacman.conf || printf \"\\n[multilib]\\nInclude = /etc/pacman.d/mirrorlist\\n\" >> /etc/pacman.conf; pacman -Syu --noconfirm && pacman -S --needed --noconfirm $PKGS'" \
         || die "package install failed. Run the script again; if it repeats, see docs/BUILD_DECK.md, Troubleshooting."
 fi
-inbox 'cd /tmp && printf "#include <stdio.h>\nint main(void){printf(\"%zu\\n\",sizeof(void*));return 0;}\n" > t32.c && gcc -m32 t32.c -o t32 && [ "$(./t32)" = 4 ]' \
+T32="$DIR/.t32.c"
+cat > "$T32" <<'T32SRC'
+#include <stdio.h>
+int main(void) { printf("%u\n", (unsigned)sizeof(void *)); return 0; }
+T32SRC
+inbox "gcc -m32 '$T32' -o '$DIR/.t32' && [ \"\$('$DIR/.t32')\" = 4 ]" \
     || die "the 32-bit compiler does not work in the container"
+rm -f "${DIR:?}/.t32.c" "${DIR:?}/.t32"
 note "32-bit compiler works"
 
 # ------------------------------------------------------------------ 3. SDL2 (32-bit, static)
