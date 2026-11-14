@@ -5408,6 +5408,23 @@ static void Pass_Atmosphere3D(const VoxelFrame *const f)
             DrawFogBanks(sSandBanks, weatherAmount, 224, 190, 136, seconds);
         }
 
+#ifdef PLATFORM_DECK
+        // Rain mist (C5): the fog sheets again, grey-blue and low, in heavy rain
+        if (weather == VOXEL_WEATHER_RAIN)
+        {
+            const float mist = DeckRain_Mist(weatherAmount);
+
+            if (mist > 0.005f)
+            {
+                float l[3];
+
+                Deck_RainLight(l);
+                DrawFogBanks(sFogBanks, mist, (uint8_t)(172.0f * fminf(l[0], 1.0f)), (uint8_t)(184.0f * fminf(l[1], 1.0f)),
+                             (uint8_t)(200.0f * fminf(l[2], 1.0f)), seconds);
+            }
+        }
+#endif
+
         // ---- PASS 5.6: 3D Sunlit Dust Motes ----
         if (f->light.motes > 0.005f)
         {

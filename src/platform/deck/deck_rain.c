@@ -291,6 +291,15 @@ void DeckRain_Shutdown(void)
     sReady = false;
 }
 
+float DeckRain_Mist(float weatherAmount)
+{
+    float t = (Clamp01(weatherAmount) - 0.35f) / 0.65f;
+
+    if (!DeckRain_Enabled() || Off("mist") || t <= 0.0f)
+        return 0.0f;
+    return t * t * (3.0f - 2.0f * t) * 0.5f * sWet;
+}
+
 bool DeckRain_Enabled(void)
 {
     return sReady && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0 && VitaExtras_GetFast(FAST_EXTRA_VOXEL_RAIN) != 0;

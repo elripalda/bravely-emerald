@@ -32,4 +32,7 @@ void DeckRain_WetChunk(float worldX, float worldZ);
 void DeckRain_WetEnd(void);
 float DeckRain_Wetness(void);
 
+// C5: opacity (0..1, to give DrawFogBanks) of the low rain mist: grows with the weather amount and the wetness ramp.
+float DeckRain_Mist(float weatherAmount);
+
 #endif
