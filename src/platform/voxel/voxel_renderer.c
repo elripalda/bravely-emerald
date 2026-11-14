@@ -4365,8 +4365,7 @@ static void Deck_ForceWeather(VoxelFrame *const f)
             else if (strcmp(e, "fog") == 0) sMode = 4;
             else if (strcmp(e, "sand") == 0) sMode = 5;
             if (sMode != 0)
-                DeckGl_Log("[WEATHER] forced by DECK_FORCE_WEATHER=%s
-", e);
+                DeckGl_Log("[WEATHER] forced by DECK_FORCE_WEATHER=%s\n", e);
         }
     }
     if (sMode == 0)
