@@ -4,8 +4,11 @@
 #include "deck_gl_shader.h"
 #include "platform/vita_extras.h"
 #include "deck_levels.h"
+#include "deck_bump.h"
+#include "../voxel/voxel_tree.h"
 
 static DeckGlProgram sProg;
+static DeckBumpUniforms sBump;
 static GLint sAmp = -1;
 static GLint sTex = -1, sChunk = -1, sFrame = -1, sBend[DECK_SWAY_WALKERS] = { -1, -1, -1, -1 };
 static float sWalk[DECK_SWAY_WALKERS][2];
@@ -28,6 +31,7 @@ static const char *kVs =
     "uniform vec3 uBend3;\n"
     "varying vec2 vUv;\n"
     "varying vec3 vCol;\n"
+    "varying vec3 vEye;\n"
     "void main() {\n"
     "    float raw = 255.0 - floor(gl_Color.a * 255.0 + 0.5);\n"
     "    float bendFlag = mod(raw, 2.0);\n"   // byte = 2 * round(95 * w * scale) + bend (voxel_mesh_builder.c)
@@ -52,6 +56,7 @@ static const char *kVs =
     "            p.y -= 0.3 * k;\n"
     "        }\n"
     "    }\n"
+    "    vEye = (gl_ModelViewMatrix * p).xyz;\n"
     "    gl_Position = gl_ModelViewProjectionMatrix * p;\n"
     "    vUv = gl_MultiTexCoord0.xy;\n"
     "    vCol = gl_Color.rgb;\n"
@@ -62,16 +67,21 @@ static const char *kFs =
     "uniform sampler2D uTex;\n"
     "varying vec2 vUv;\n"
     "varying vec3 vCol;\n"
+    "varying vec3 vEye;\n"
     "void main() {\n"
     "    vec4 t = texture2D(uTex, vUv);\n"
     "    if (t.a <= 0.0) discard;\n"
-    "    gl_FragColor = vec4(t.rgb * vCol, t.a);\n"
+    "    vec3 rgb = t.rgb * vCol;\n"
+    "#ifdef DECK_BUMP\n"
+    "    rgb *= deckBumpMul(uTex, vUv, t.rgb, vCol, vEye);\n"
+    "#endif\n"
+    "    gl_FragColor = vec4(rgb, t.a);\n"
     "}\n";
 
 void DeckSway_Init(void)
 {
     sReady = false;
-    if (!DeckGl_BuildProgram(&sProg, "sway", kVs, kFs))
+    if (!DeckBump_Build(&sProg, &sBump, "sway", kVs, kFs))
     {
         DeckGl_Log("[SWAY] shader build failed: tree pass stays fixed-function\n");
         return;
@@ -98,14 +108,18 @@ void DeckSway_Shutdown(void)
 bool DeckSway_Begin(void)
 {
     // OFF = the tree pass keeps its fixed-function look (no sway, and no grass bend either)
-    if (!sReady || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || DeckLevel(FAST_EXTRA_VOXEL_SWAY) < 0)
+    // The program also runs for the relief with the sway OFF: amplitude 0 and no bend, the vertices stay where they were.
+    const bool swayOn = DeckLevel(FAST_EXTRA_VOXEL_SWAY) >= 0;
+
+    if (!sReady || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || (!swayOn && !(sBump.ok && DeckBump_Enabled())))
         return false;
     DeckGl_UseProgram(&sProg);
     DeckGl_Set1f(sAmp, DeckLevelPick(FAST_EXTRA_VOXEL_SWAY, 0.5f, 1.0f, 1.0f));
     DeckGl_Set1i(sTex, 0);
+    DeckBump_Set(&sBump, (float)VOXEL_TREE_TEXTURE_DIM, (float)VOXEL_TREE_TEXTURE_DIM, 0.0f);
     for (int i = 0; i < DECK_SWAY_WALKERS; ++i)
     {
-        if (i < sWalkN)
+        if (swayOn && i < sWalkN)
             DeckGl_Set3f(sBend[i], sWalk[i][0], sWalk[i][1], 1.0f);
         else
             DeckGl_Set3f(sBend[i], 0.0f, 0.0f, 0.0f);
