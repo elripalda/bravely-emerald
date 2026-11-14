@@ -41,9 +41,19 @@ All in the SDD ledger (`.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/p
 - Intro-edge slivers may need a rebuild of the generated assets (Pillow was installed later).
 - Task 8 of the stage 1 plan (host-native run without the container) is not done; the user launched it from Desktop Mode only.
 
+## Phase 2 status (wind sway)
+
+Done and verified on the Deck (0 GLERR, screenshots read): see docs/DECK_NOTES.md "Phase 2". Plan: docs/superpowers/plans/2026-11-13-deck-phase2-wind.md. Visual pass: judge amplitude, check a map crossing and Route 119/120 grass.
+
 ## Autonomous run (user asleep, from 2026-11-13 night)
 
 User ruling: full autonomy through all remaining phases (2 to 8) of `docs/superpowers/specs/2026-11-13-deck-visual-upgrade-design.md`; ask nothing, decide and record below; visual checks, tuning and the perf compare happen when the user wakes. Reviews use Sonnet only. Ledger: `.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/progress.md` (git-ignored). Rules: one Deck run at a time, no detached loops, absolute outdirs for `run_autoplay.sh`, exactly one normal game instance at the end.
 
 ### Autonomous decisions
 (append: date, phase, decision, why, cost if wrong)
+- 2026-11-13, phase 2: Sway weight lives in a parallel byte array in the builder (`swayW`), not in `VoxelVertex`. Why: building model files are `fread` straight into `VoxelVertex` (`voxel_building.c:517`), so the struct cannot grow. Cost if wrong: none visible; one more scratch array.
+- 2026-11-13, phase 2: Weight packed into the tree vertices' alpha as 255 - w (65..255), so untouched geometry and legacy path stay alpha 255. Why: no vertex format change, and alpha test GREATER 0 with blending off ignores it. Cost: if a later pass blends trees, they would turn translucent on the legacy path.
+- 2026-11-13, phase 2: Wave phase uses world position (vertex + chunk draw offset - total map-crossing shifts). Why: the frame is re-based on each crossing, so frame coordinates would jump the phase. Cost: float drift is negligible; untested across a real crossing.
+- 2026-11-13, phase 2: New setting `voxel_sway` (0/1, default on), gated by `voxel_shaders`. Why: spec asks for an off switch, same pattern as `voxel_bloom`. Cost: one more menu row in EFFECTS.
+- 2026-11-13, phase 2: Amplitude: crowns top 0.5 x 0.8 tile x strength, long grass 1.0 x; rain damped by half. Why: spec says "a couple of texels" for trees, more for grass; no tuning rounds per ruling. Cost: may be too weak or strong; constants in `deck_sway.c`.
+- 2026-11-13, phase 2: Added `tools/deck/autoplay/still.txt` (continue save, then stand still) for static-camera screenshot pairs. Why: field.txt walks, so pairs are not comparable.

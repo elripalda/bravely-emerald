@@ -147,3 +147,11 @@ To judge later (Marcos):
 - No noon shot has been taken yet.
 - The warp fade-to-black and fade-to-white tint check is not done (the autoplay script has no warp).
 - Rain with lightning: bloom spike following `bolt` not observed.
+
+## Phase 2: wind sway (tree crowns, long grass)
+
+- Weights are baked at chunk build: `VoxelBuilder.swayW` (parallel byte array, `voxel_mesh_builder.h`), written in `VoxelBuilder_Tri` from the input vertex height over the crown foot; packed as alpha = 255 - weight in the tree-phase `PackVoxelVertices`. 255 = still. `VoxelVertex` itself is unchanged (building model files are read into it).
+- Shader `src/platform/deck/deck_sway.c`: phase from world position (`gl_Vertex.xz + uChunkOffset`, offset = chunk draw offset minus map-crossing shifts), wind from `uWind`/`uTime`. Amplitude constants (to tune by eye): 0.8 tile x strength, damped `0.25 + (s-0.25)*0.5`; weight top 0.5 for crowns, 1.0 for long grass.
+- Setting `voxel_sway` (0/1, default 1, EFFECTS group); also off with `voxel_shaders=0` or if the program fails to build (old fixed-function path).
+- Verified (field.txt, still.txt, DECK_GL_DEBUG=1): 0 GLERR, `[SWAY] ready`; static camera screenshot pairs differ in the tree rows (13k and 7.5k of 51k samples over 2 to 4 s); crowns intact over trunks and between rows.
+- Not checked: crossing a map border (phase continuity), long grass on Route 119/120, rain/sand amplitude, sway with `voxel_sway=0` picture.
