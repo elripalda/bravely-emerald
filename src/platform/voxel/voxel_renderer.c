@@ -2309,8 +2309,7 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
         if (tufts > 0 && sTuftLogs < 150)
         {
             ++sTuftLogs;
-            DeckGl_Log("[GRASS] chunk %d,%d tufts %u treeVerts %u (built %u, cap %d) treesMs %.2f
-", x0, y0,
+            DeckGl_Log("[GRASS] chunk %d,%d tufts %u treeVerts %u (built %u, cap %d) treesMs %.2f\n", x0, y0,
                        (unsigned)tufts, (unsigned)out->treeCount, (unsigned)builder.count, CHUNK_TREE_CAP,
                        out->treesMs);
         }
