@@ -5831,6 +5831,25 @@ static void Pass_DeckPost(const VoxelFrame *const f)
     in.bloom = f->light.bloom;
     in.daylight = (isIndoor || dn == NULL) ? 1.0f : dn->daylight;
     in.glow = (isIndoor || dn == NULL) ? 0.0f : dn->glow;
+    in.sunAmount = 0.0f;
+    in.sunX = 0.5f;
+    {
+        // Shafts: only in clear or sunny weather outdoors; the sun strength and the daylight carry dawn, noon and dusk.
+        const VitaDayNightSun *const sun = VitaDayNight_GetSun();
+        const bool clear = (f->weather == VOXEL_WEATHER_CLEAR || f->weather == VOXEL_WEATHER_SUN) && f->fogDensity < 0.05f;
+        if (clear && !isIndoor && !f->underground && sun != NULL && dn != NULL)
+        {
+            float a = sun->strength > dn->glow ? sun->strength : dn->glow;
+            float d = dn->daylight / 0.25f;
+            a = a > 1.0f ? 1.0f : (a < 0.0f ? 0.0f : a);
+            d = d > 1.0f ? 1.0f : (d < 0.0f ? 0.0f : d);
+            in.sunAmount = a * d;
+            // The real sun lies above and beside the frustum at these pitches: a fixed point above the picture,
+            // east (dx < 0 at dawn) on the right.
+            in.sunX = 0.5f - sun->dx * 0.25f;
+            in.sunX = in.sunX < 0.05f ? 0.05f : (in.sunX > 0.95f ? 0.95f : in.sunX);
+        }
+    }
     in.zNear = VOXEL_PERSP_NEAR;
     in.zFar = VOXEL_PERSP_FAR;
     {

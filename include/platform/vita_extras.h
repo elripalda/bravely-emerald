@@ -86,6 +86,7 @@ typedef enum
     FAST_EXTRA_VOXEL_MIST,     // Deck rain mist (opacity)
     FAST_EXTRA_VOXEL_SPLASH,   // Deck rain splash rings (count)
     FAST_EXTRA_VOXEL_GLINT,    // Deck water glints (density)
+    FAST_EXTRA_VOXEL_SHAFTS,   // Deck light shafts (screen-space radial blur toward the sun, strength)
     FAST_EXTRA_VOXEL_TILTSHIFT, // Deck depth-based tilt-shift with bokeh (strength); off = the band blur
     FAST_EXTRA_VOXEL_PITCH,    // Deck camera tilt: 0 classic 40 deg, 1 36, 2 32 (default), 3 28, 4 24
     FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume: 0 off (no DSP) to 10, default 6

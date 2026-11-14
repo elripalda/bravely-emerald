@@ -23,6 +23,8 @@ typedef struct
 static const float kBloomGain[3] = { 1.5f, 3.0f, 5.0f };
 // Share of the diorama blur at the band edges by level (MEDIUM and HIGH are the old look).
 static const float kBlurMul[3] = { 0.5f, 1.0f, 1.0f };
+// Light shaft gain by level (times the frame's sun amount).
+static const float kShaftGain[3] = { 1.6f, 3.0f, 4.2f };
 // Tilt-shift by level: largest gather radius (fraction of the picture height at full circle of confusion) and taps.
 static const float kTiltRadius[3] = { 0.6f * 0.014f, 0.014f, 1.4f * 0.014f };
 static const float kTiltTaps[3] = { 8.0f, 12.0f, 16.0f };
@@ -81,6 +83,28 @@ static const char kBlurFs[] =
     "    gl_FragColor = vec4(c, 1.0);\n"
     "}\n";
 
+// Light shafts: radial march from each pixel toward the focus point uSun (uv, above the picture), summing the bright
+// part of the scene with a decay. 24 taps at half resolution.
+static const char kShaftFs[] =
+    "#version 120\n"
+    "uniform sampler2D uScene;\n"
+    "uniform vec2 uSun;\n"
+    "varying vec2 vPos;\n"
+    "void main() {\n"
+    "    vec2 delta = (uSun - vPos) * (0.6 / 24.0);\n"
+    "    vec2 uv = vPos;\n"
+    "    vec3 acc = vec3(0.0);\n"
+    "    float decay = 1.0;\n"
+    "    for (int i = 0; i < 24; i++) {\n"
+    "        uv += delta;\n"
+    "        vec3 s = texture2D(uScene, uv).rgb;\n"
+    "        float l = dot(s, vec3(0.299, 0.587, 0.114));\n"
+    "        acc += s * smoothstep(0.35, 0.85, l) * decay;\n"
+    "        decay *= 0.95;\n"
+    "    }\n"
+    "    gl_FragColor = vec4(acc * (1.0 / 24.0), 1.0);\n"
+    "}\n";
+
 // Composite body. Built twice (BuildPrograms): with POST_X defined (tilt-shift and the other phase 7 features)
 // and, if that fails to compile, without it (the phase 1 composite).
 // uDof: x top band height, y bottom band height (fractions of the frame), z/w blur at the edges.
@@ -102,6 +126,8 @@ static const char kCompositeBody[] =
     "uniform sampler2D uDepth;\n"
     "uniform vec4 uTilt;   // x on, y focus distance, z max radius (fraction of the height), w taps\n"
     "uniform vec2 uZ;      // near, far\n"
+    "uniform sampler2D uShafts;\n"
+    "uniform vec4 uShaft;  // x amount\n"
     "#endif\n"
     "varying vec2 vPos;\n"
     "void main() {\n"
@@ -137,6 +163,10 @@ static const char kCompositeBody[] =
     "        c = mix(c, texture2D(uBlur, vPos).rgb, max(wTop, wBot));\n"
     "    }\n"
     "    c += texture2D(uBloom, vPos).rgb * uBloomAmt;\n"
+    "#ifdef POST_X\n"
+    "    if (uShaft.x > 0.0)\n"
+    "        c += texture2D(uShafts, vPos).rgb * uShaft.x * vec3(1.0, 0.92, 0.74);\n"
+    "#endif\n"
     "    float l = dot(c, vec3(0.299, 0.587, 0.114));\n"
     "    vec3 tint = mix(uShadowTint, uHighTint, smoothstep(0.15, 0.75, l));\n"
     "    vec3 g = mix(vec3(l), c * tint, uSaturation);\n"
@@ -153,11 +183,14 @@ static const char kCompositeBody[] =
 static bool sReady;
 static void DeleteTargets(void);
 static bool sXOk;      // the composite with POST_X built
+static bool sShaftOk;  // the shaft program built and the composite has POST_X
+static DeckGlProgram sShaft;
+static GLint sShaftScene, sShaftSun, sCShafts, sCShaft;
 static bool sTiltOk;   // tilt-shift can run: POST_X composite and a depth texture on the scene target
 static bool sSizeWarned;
 static int sFailW;     // a scene width that could not be created (not tried again)
 static DeckGlTarget sScene;
-static DeckGlTarget sHalf[3]; // 0 bloom, 1 blur scratch, 2 DoF
+static DeckGlTarget sHalf[4]; // 0 bloom, 1 blur scratch, 2 DoF / tilt-shift copy, 3 light shafts
 static DeckGlProgram sBright, sCopy, sBlur, sComposite;
 static GLint sBrightScene, sBrightThreshold, sCopyScene, sBlurSrc, sBlurStep;
 static GLint sCScene, sCBloom, sCBlur, sCBloomAmt, sCBlurOn, sCDof, sCGradeAmt, sCShadow, sCHigh, sCSat, sCVignette, sCAspect, sCDepth, sCTilt, sCZ;
@@ -183,10 +216,12 @@ DeckPostConfig DeckPost_ReadConfig(void)
     c.bloomLvl = DeckLevel(FAST_EXTRA_VOXEL_BLOOM);
     c.blurLvl = DeckLevel(FAST_EXTRA_VOXEL_BLUR);
     c.tiltLvl = DeckLevel(FAST_EXTRA_VOXEL_TILTSHIFT);
+    c.shaftLvl = DeckLevel(FAST_EXTRA_VOXEL_SHAFTS);
     c.grade = c.gradeLvl >= 0;
     c.bloom = c.bloomLvl >= 0;
     c.blur = c.blurLvl >= 0;
     c.tilt = c.tiltLvl >= 0;
+    c.shafts = c.shaftLvl >= 0;
     return c;
 }
 
@@ -234,6 +269,15 @@ static bool BuildPrograms(void)
     sCDepth = DeckGl_Uniform(&sComposite, "uDepth");   // -1 in the plain composite (setters ignore it)
     sCTilt = DeckGl_Uniform(&sComposite, "uTilt");
     sCZ = DeckGl_Uniform(&sComposite, "uZ");
+    sCShafts = DeckGl_Uniform(&sComposite, "uShafts");
+    sCShaft = DeckGl_Uniform(&sComposite, "uShaft");
+    // The shaft pass is optional: a failed build only switches the shafts off.
+    sShaftOk = sXOk && DeckGl_BuildProgram(&sShaft, "post_shaft", kFullscreenVs, kShaftFs);
+    if (sShaftOk)
+    {
+        sShaftScene = DeckGl_Uniform(&sShaft, "uScene");
+        sShaftSun = DeckGl_Uniform(&sShaft, "uSun");
+    }
     return true;
 }
 
@@ -243,6 +287,8 @@ void DeckPost_Shutdown(void)
     DeckGl_DeleteProgram(&sCopy);
     DeckGl_DeleteProgram(&sBlur);
     DeckGl_DeleteProgram(&sComposite);
+    DeckGl_DeleteProgram(&sShaft);
+    sShaftOk = false;
     DeleteTargets();
     DeckGl_TimerShutdown();
     sReady = false;
@@ -269,7 +315,7 @@ static bool CreateTargets(int w, int h)
         DeckGl_DeleteTarget(&sScene);
         ok = DeckGl_CreateTarget(&sScene, w, h, DECK_GL_DEPTH_RENDERBUFFER24, GL_NEAREST);
     }
-    for (int i = 0; i < 3 && ok; i++)
+    for (int i = 0; i < 4 && ok; i++)
         ok = DeckGl_CreateTarget(&sHalf[i], w / 2, h / 2, DECK_GL_DEPTH_NONE, GL_LINEAR);
     return ok;
 }
@@ -277,7 +323,7 @@ static bool CreateTargets(int w, int h)
 static void DeleteTargets(void)
 {
     DeckGl_DeleteTarget(&sScene);
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 4; i++)
         DeckGl_DeleteTarget(&sHalf[i]);
 }
 
@@ -317,9 +363,9 @@ void DeckPost_Init(int sceneW, int sceneH)
     sReady = true;
     sTiltOk = sXOk && sScene.depth == DECK_GL_DEPTH_TEXTURE24;
     const DeckPostConfig c = DeckPost_ReadConfig();
-    DeckGl_Log("[POST] ready: scene %dx%d RGBA8 depth=%s extended=%d tilt=%d | config quality=%d shaders=%d grade=%d bloom=%d blur=%d tiltlvl=%d\n",
+    DeckGl_Log("[POST] ready: scene %dx%d RGBA8 depth=%s extended=%d tilt=%d shafts=%d | config quality=%d shaders=%d grade=%d bloom=%d blur=%d tiltlvl=%d\n",
                sScene.w, sScene.h, sScene.depth == DECK_GL_DEPTH_TEXTURE24 ? "texture24" : "renderbuffer24",
-               (int)sXOk, (int)sTiltOk, c.quality, (int)c.shaders, (int)c.grade, (int)c.bloom, (int)c.blur, (int)c.tilt);
+               (int)sXOk, (int)sTiltOk, (int)sShaftOk, c.quality, (int)c.shaders, (int)c.grade, (int)c.bloom, (int)c.blur, (int)c.tilt);
 }
 
 // A changed voxel_res: delete and create the scene and half-res targets at the new size (GL thread, between frames).
@@ -374,7 +420,7 @@ bool DeckPost_WantScene(int renderW, int renderH, bool indoor)
     const DeckPostConfig c = DeckPost_ReadConfig();
     if (!c.shaders)
         return false;
-    return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor);
+    return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor) || (c.shafts && sShaftOk);
 }
 
 void DeckPost_BindScene(void)
@@ -448,6 +494,7 @@ void DeckPost_Run(const DeckPostFrame *in)
     const float keep = 1.0f - Clamp01(in->fade);
     const bool doBloom = cfg.bloom && in->bloom > 0.0f && bloomGain > 0.0f;
     const bool doTilt = cfg.tilt && sTiltOk && !in->indoor && in->focusDist > 0.0f; // replaces the band blur
+    const bool doShafts = cfg.shafts && sShaftOk && in->sunAmount > 0.01f;
     const bool doBlur = cfg.blur && !in->indoor && !doTilt;
     float shadow[3], high[3];
 
@@ -478,6 +525,15 @@ void DeckPost_Run(const DeckPostFrame *in)
         DrawQuad();
         Blur(&sHalf[0], &sHalf[1], pb->bloomPasses);
     }
+    if (doShafts)
+    {
+        BindTex(0, sScene.color);
+        BeginTarget(&sHalf[3]);
+        DeckGl_UseProgram(&sShaft);
+        DeckGl_Set1i(sShaftScene, 0);
+        DeckGl_Set2f(sShaftSun, in->sunX, 1.3f);
+        DrawQuad();
+    }
     if (doBlur || doTilt)
     {
         BindTex(0, sScene.color);
@@ -493,6 +549,7 @@ void DeckPost_Run(const DeckPostFrame *in)
     // (0,0,960,544) on framebuffer 0 to the letterboxed rect and enables the scissor).
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     DeckGlViewport(0, 0, in->renderW, in->renderH);
+    BindTex(5, doShafts ? sHalf[3].color : 0);
     BindTex(3, doTilt ? sScene.depthTex : 0);
     BindTex(2, (doBlur || doTilt) ? sHalf[2].color : 0);
     BindTex(1, doBloom ? sHalf[0].color : 0);
@@ -507,6 +564,8 @@ void DeckPost_Run(const DeckPostFrame *in)
     DeckGl_Set1i(sCBloom, 1);
     DeckGl_Set1i(sCBlur, 2);
     DeckGl_Set1i(sCDepth, 3);
+    DeckGl_Set1i(sCShafts, 5);
+    DeckGl_Set4f(sCShaft, doShafts ? in->sunAmount * kShaftGain[cfg.shaftLvl] * keep : 0.0f, 0.0f, 0.0f, 0.0f);
     {
         const int tl = doTilt ? cfg.tiltLvl : 0;
         DeckGl_Set4f(sCTilt, doTilt ? 1.0f : 0.0f, in->focusDist, kTiltRadius[tl], kTiltTaps[tl]);
@@ -526,6 +585,7 @@ void DeckPost_Run(const DeckPostFrame *in)
 
     // Leave the state Pass_DepthOfField leaves (see deck_post.h).
     DeckGl_UseProgram(NULL);
+    BindTex(5, 0);
     BindTex(3, 0);
     BindTex(2, 0);
     BindTex(1, 0);

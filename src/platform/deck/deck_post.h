@@ -13,6 +13,8 @@ typedef struct
     float fade;            // f->fadeAmount: grade, vignette and bloom fade out with it
     float bloom;           // f->light.bloom (per weather, BaseLightFor)
     float daylight, glow;  // VitaDayNight_Get(); indoor passes 1 and 0 (neutral day)
+    float sunX;            // screen x (0..1) of the shafts' focus point, from the sun direction
+    float sunAmount;       // 0..1 shaft strength: sun and daylight, 0 at night, indoors, in rain, fog, sand, ash
     float zNear, zFar;     // projection planes of the scene (depth texture linearisation)
     float focusDist;       // eye to target distance (view-space depth of the focus plane), 0 = unknown
     float dofTopRows, dofBottomRows, dofTopAlpha, dofBottomAlpha; // VOXEL_DOF_* (voxel_tuning.h:89-92)
@@ -26,7 +28,8 @@ typedef struct
     bool bloom;    // voxel_bloom on
     bool blur;     // voxel_blur on
     bool tilt;     // voxel_tiltshift on (needs the depth texture, else the band blur runs)
-    int gradeLvl, bloomLvl, blurLvl, tiltLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
+    bool shafts;   // voxel_shafts on
+    int gradeLvl, bloomLvl, blurLvl, tiltLvl, shaftLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
 } DeckPostConfig;
 
 void DeckPost_Init(int sceneW, int sceneH); // the size arguments are replaced by voxel_res
