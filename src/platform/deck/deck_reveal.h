@@ -18,6 +18,7 @@ float DeckReveal_Flash(void);       // white flash alpha right now
 float DeckReveal_SinceFlip(void);   // seconds since the main flash peak (title drop-in clock); 1000 when the reveal is off
 float DeckReveal_SinceBadge(void);  // seconds since the badge flash peak; 1000 when the reveal is off, negative before
 float DeckReveal_Time(void);        // seconds since the current scene started
+void DeckReveal_SetBadgeFlash(bool on); // the title has a crest to reveal: the second, smaller flash fires for it
 void DeckReveal_DrawFlash(void);    // adds the white flash over the frame (fixed pipeline, ortho 960x544 set)
 
 #endif

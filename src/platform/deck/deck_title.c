@@ -400,14 +400,6 @@ static void OverPx(float *px, float r, float g, float b, float a)   // premultip
     px[3] = a + px[3] * ia;
 }
 
-static float SdRoundRect(float px, float py, float hx, float hy, float r)
-{
-    const float qx = fabsf(px) - hx + r, qy = fabsf(py) - hy + r;
-    const float ox = qx > 0.0f ? qx : 0.0f, oy = qy > 0.0f ? qy : 0.0f;
-
-    return sqrtf(ox * ox + oy * oy) + fminf(fmaxf(qx, qy), 0.0f) - r;
-}
-
 static GLuint FloatToTexture(const float *f, int w, int h)
 {
     uint8_t *b = (uint8_t *)malloc((size_t)w * h * 4);
@@ -421,6 +413,8 @@ static GLuint FloatToTexture(const float *f, int w, int h)
     free(b);
     return t;
 }
+
+static void QuadT(float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, float z0, float z1, float r, float g, float b, float a);
 
 // BRAVELY: just the letters, dark ink in Trajan-like capitals with a very soft light edge so they read over the logo.
 static bool BuildPlate(void)
@@ -664,6 +658,8 @@ bool DeckTitle_Wanted(void)
     const int phase = gDeckTitlePhase;
 
     sActive = false;
+    if (sBannerHidden)
+        HideBannerSprites(false);
     if (!sEnvRead)
     {
         const char *e = getenv("DECK_TITLE_ORIGINAL");
@@ -692,6 +688,7 @@ bool DeckTitle_Wanted(void)
             return false;
         }
         DeckGl_Log("[TITLE] ready (HD-2D title)\n");
+        DeckReveal_SetBadgeFlash(sCrestTex != 0);
     }
     if (sPrevPhase == 0)
     {
@@ -711,6 +708,7 @@ bool DeckTitle_Wanted(void)
         sPhase3At = Now();
     sPrevPhase = phase;
     sActive = true;
+    HideBannerSprites(true);   // the banner is drawn by DrawBanner while the HD-2D title is up
     return true;
 }
 
@@ -950,7 +948,7 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
     {
         const float u = dropU, back = 1.2f, v = u - 1.0f;
         const float ease = 1.0f + (back + 1.0f) * v * v * v + back * v * v;
-        const float pw = (float)sPlateW * 0.46f, ph = (float)sPlateH * 0.46f;
+        const float pw = (float)sPlateW * 0.56f, ph = (float)sPlateH * 0.56f;
         const float cx = 480.0f - camX * 3.0f, cy = 199.0f - (1.0f - ease) * 120.0f;
 
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -959,12 +957,12 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         DeckGl_Set1f(sLyBias, 0.0f);
         glBindTexture(GL_TEXTURE_2D, sPlateTex);
         QuadT(cx - pw * 0.5f, cy - ph * 0.5f, cx + pw * 0.5f, cy + ph * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, Smooth(0.0f, 0.45f, u) * (1.0f - fade));
-        if (tb > 0.0f)
+        if (tb > 0.0f && sCrestTex != 0)
         {
             const float bu = Clamp01(tb / 0.6f), bv = bu - 1.0f;
             const float be = 1.0f + 2.4f * bv * bv * bv + 1.4f * bv * bv;
             const float k = 0.5f + 0.5f * be;
-            const float bw = (float)sCrestW * 0.40f * k, bh = (float)sCrestH * 0.40f * k;
+            const float cs = 96.0f / (float)sCrestW, bw = (float)sCrestW * cs * k, bh = (float)sCrestH * cs * k;
             const float bx = 888.0f, by = 100.0f + sinf(t * 0.8f) * 1.2f;
             const float sp = sinf(3.1416f * Clamp01(tb / 1.2f));
 

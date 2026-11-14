@@ -28,6 +28,9 @@ static bool sEnvRead, sEnvOff;
 static int sCtx = -1;             // 0 none, 1..8 intro segment, 100 title
 static double sStart, sPhase2At = -1.0, sFlipAt = -1.0, sBadgeAt = -1.0;
 static double sNow;
+static bool sBadgeOn;
+
+void DeckReveal_SetBadgeFlash(bool on) { sBadgeOn = on; }
 
 static double Now(void) { return (double)SDL_GetTicks() / 1000.0; }
 
@@ -133,7 +136,7 @@ float DeckReveal_Flash(void)
         return 0.0f;
     if (sFlipAt >= 0.0)
         a = Env(sNow - sFlipAt);
-    if (sBadgeAt >= 0.0)
+    if (sBadgeAt >= 0.0 && sBadgeOn)
     {
         b = 0.55f * Env((sNow - sBadgeAt) * 1.5);
         a = a > b ? a : b;
