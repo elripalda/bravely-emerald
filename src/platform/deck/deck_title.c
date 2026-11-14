@@ -369,12 +369,12 @@ static int GlyphId(char c)
 
 // Decodes one 8x16 glyph (four 8x8 tiles of 2bpp rows: 1 face, 2 the game shadow, 0 and 3 clear) straight from the font data, so it
 // does not depend on the text engine's current colours. Returns its advance in texels.
-static int Glyph(char c, uint8_t out[16][8])
+static int Glyph(char c, uint8_t out[16][16])
 {
     const int id = GlyphId(c);
     const u16 *g = gFontNormalLatinGlyphs + 0x20 * id;
 
-    memset(out, 0, 16 * 8);
+    memset(out, 0, 16 * 16);
     if (id == 0)
         return 5;
     for (int t = 0; t < 4; t++)
@@ -397,7 +397,7 @@ static bool BuildText(TextTex *tt, const char *text, int sc, int style)
 {
     const int pad = 2 * sc + 2;
     int adv[16], total = 0, n = (int)strlen(text);
-    uint8_t glyphs[16][16][8];
+    uint8_t glyphs[16][16][16];
     uint8_t *mask, *rgba;
     int w, h;
 
