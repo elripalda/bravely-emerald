@@ -8,3 +8,11 @@ All taken on the Steam Deck, branch deck-port, DECK_GL_DEBUG=1, 0 GLERR.
 - final_B_battle_allhigh_*.png: final run B, wild battle, all HIGH. Backdrop clearly blurred and darkened, battlers, HP boxes and text box sharp, faint halo around the boxes. intro = first message, attack = TORCHIC used SCRATCH.
 
 Not captured (single test rule): OFF vs HIGH pairs for sun shadows, relief crops (player, tree, house at voxel_bump 0 vs 4), ground detail at dusk, dusk and night beams, menus with the new rows.
+
+## UI polish (deck-ui branch)
+- ui_sign_off_default_high_2x.png: the map name popup (GBA overlay) cropped and enlarged 2x, OFF / default / HIGH stacked. Same size and the same crisp glyphs in all three (bbox x 101-526, y 42-190 at 1280, as in the pre-UI-work screen).
+- ui_sign_high_full.png: the full frame with every UI setting and every effect at HIGH.
+- ui_hub_off_default_high.png: the new UI START menu (ui_v2=1), OFF / default / HIGH. Original art; HIGH only adds a 1 px shadow under the white text on the red row.
+- ui_battle_off_default_high.png: new UI battle HUD and text box (ui_v2=1), OFF / default / HIGH (different wild Pokemon, the encounter is random). Same HUD, original HP bar colours.
+- ui_settings_high.png: port options menu (VitaUI canvas) at HIGH: side margins get a soft shadow; no footer text line exists, the group label is darker.
+- ui_party_high_after_fix.png: new UI party info at HIGH after the text shadow threshold fix (muted grey labels are clean).
