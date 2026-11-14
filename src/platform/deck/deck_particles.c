@@ -6,6 +6,8 @@
 #include "deck_particles.h"
 #include "deck_levels.h"
 #include "deck_gl_shader.h"
+#include "deck_bump.h"
+#include "../voxel/voxel_atlas.h"
 #include "global.h"
 #include "constants/map_types.h"
 #include "platform/vita_extras.h"
@@ -251,10 +253,12 @@ static const char *kGlintVs =
     "varying vec2 vUv;\n"
     "varying vec4 vCol;\n"
     "varying vec2 vWorld;\n"
+    "varying vec3 vEye;\n"
     "void main() {\n"
     "    vUv = gl_MultiTexCoord0.xy;\n"
     "    vCol = gl_Color;\n"
     "    vWorld = gl_Vertex.xz + uChunk;\n"
+    "    vEye = (gl_ModelViewMatrix * gl_Vertex).xyz;\n"
     "    gl_Position = ftransform();\n"
     "}\n";
 
@@ -266,10 +270,14 @@ static const char *kGlintFs =
     "varying vec2 vUv;\n"
     "varying vec4 vCol;\n"
     "varying vec2 vWorld;\n"
+    "varying vec3 vEye;\n"
     "float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }\n"
     "void main() {\n"
     "    vec4 t = texture2D(uTex, vUv);\n"
     "    vec4 c = t * vCol;\n"
+    "#ifdef DECK_BUMP\n"
+    "    c.rgb *= deckBumpMul(uTex, vUv, t.rgb, vCol.rgb, vEye);\n"
+    "#endif\n"
     "    float wb = clamp((t.b - max(t.r, t.g * 0.8) - 0.05) * 5.0, 0.0, 1.0);\n"      // blue texels: water
     "    vec2 g = vWorld * 2.2;\n"
     "    vec2 id = floor(g);\n"
@@ -285,11 +293,12 @@ static const char *kGlintFs =
     "}\n";
 
 static DeckGlProgram sGlint;
+static DeckBumpUniforms sGBump;
 static GLint sGTex = -1, sGStrength = -1, sGChunk = -1;
 
 static void GlintInit(void)
 {
-    if (!DeckGl_BuildProgram(&sGlint, "water-glint", kGlintVs, kGlintFs))
+    if (!DeckBump_Build(&sGlint, &sGBump, "water-glint", kGlintVs, kGlintFs))
     {
         DeckGl_Log("[PART] glint shader build failed: plain ground stays\n");
         return;
@@ -311,6 +320,7 @@ bool DeckParticles_GlintBegin(float sun, float glow, bool rain)
     DeckGl_UseProgram(&sGlint);
     DeckGl_Set1i(sGTex, 0);
     DeckGl_Set1f(sGStrength, strength * lvl);
+    DeckBump_Set(&sGBump, (float)VOXEL_ATLAS_W, (float)VOXEL_ATLAS_H, (float)VOXEL_ATLAS_SLOT);
     return true;
 }
 

@@ -30,6 +30,7 @@
 #include "../deck/deck_gl_shader.h"
 #include "../deck/deck_post.h"
 #include "../deck/deck_sway.h"
+#include "../deck/deck_bump.h"
 #include "../deck/deck_flowers.h"
 #include "../deck/deck_rain.h"
 #include "../deck/deck_particles.h"
@@ -5031,6 +5032,9 @@ static void Pass_Ground(const VoxelFrame *const f)
     const bool glintGround = !wetGround && !f->indoor && !f->inBattle3D && !f->underground
                              && DeckParticles_GlintBegin(VitaDayNight_GetSun()->strength, VitaDayNight_Get()->glow,
                                                          f->weather == VOXEL_WEATHER_RAIN);
+    // Relief only: neither wet nor glints (night, indoors, the glint level off) but voxel_bump on = the wet program at 0 wetness
+    DeckBump_SetSun(gVoxelSun.dx, gVoxelSun.dz, gVoxelSun.strength);
+    const bool bumpGround = !wetGround && !glintGround && DeckRain_BumpBegin(rainLight);
 #endif
     for (uint32_t cutPass = 0; cutPass < 2u; cutPass++)
     {
@@ -5084,7 +5088,7 @@ static void Pass_Ground(const VoxelFrame *const f)
 
                         ChunkOffsets_Apply(chunk);
 #ifdef PLATFORM_DECK
-                        if (wetGround)
+                        if (wetGround || bumpGround)
                             DeckRain_WetChunk(chunk->drawOffsetX - sSwayShiftX, chunk->drawOffsetZ - sSwayShiftZ);
                         else if (glintGround)
                             DeckParticles_GlintChunk(chunk->drawOffsetX - sSwayShiftX, chunk->drawOffsetZ - sSwayShiftZ);
@@ -5096,7 +5100,7 @@ static void Pass_Ground(const VoxelFrame *const f)
         }
     }
 #ifdef PLATFORM_DECK
-    if (wetGround)
+    if (wetGround || bumpGround)
         DeckRain_WetEnd();
     else if (glintGround)
         DeckParticles_GlintEnd();
@@ -5204,6 +5208,19 @@ static bool Pass_Buildings(const VoxelFrame *const f)
         }
 
         glBindTexture(GL_TEXTURE_2D, bTex);
+#ifdef PLATFORM_DECK
+        // Relief on the building walls and roofs: the plain bump program for this page (OFF or failed: fixed function)
+        bool bumpPage = false;
+        {
+            uint32_t pw = 0, ph = 0, pth = 0;
+
+            if (DeckBump_Enabled() && VoxelBuildings_PageSize((uint32_t)p, &pw, &ph, &pth) && pw > 0 && pth > 0)
+            {
+                DeckBump_SetSun(gVoxelSun.dx, gVoxelSun.dz, gVoxelSun.strength);
+                bumpPage = DeckBump_PlainBegin((float)pw, (float)pth);
+            }
+        }
+#endif
 
         GLuint lastVbo = 0;
         for (int32_t i = 0; i < visibleChunkCount; i++)
@@ -5229,6 +5246,10 @@ static bool Pass_Buildings(const VoxelFrame *const f)
                 glDrawArrays(GL_TRIANGLES, (GLint)(chunk->buildingFirstVert + bspan->firstVert), (GLsizei)bspan->vertCount);
             }
         }
+#ifdef PLATFORM_DECK
+        if (bumpPage)
+            DeckBump_PlainEnd();
+#endif
     }
     return buildingAlphaEnabled;
 }

@@ -1,5 +1,7 @@
 #include "deck_rain.h"
 #include "deck_levels.h"
+#include "deck_bump.h"
+#include "../voxel/voxel_atlas.h"
 #include "deck_gl_shader.h"
 #include "platform/vita_extras.h"
 #include <math.h>
@@ -316,7 +318,8 @@ static const char *kWetFs =
     "    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);\n"
     "}\n"
     "void main() {\n"
-    "    vec4 c = texture2D(uTex, vUv) * vCol;\n"
+    "    vec4 t = texture2D(uTex, vUv);\n"
+    "    vec4 c = t * vCol;\n"
     "    vec3 up = normalize(mat3(gl_ModelViewMatrix) * vec3(0.0, 1.0, 0.0));\n"
     "    vec3 cr = cross(dFdx(vEye), dFdy(vEye));\n"
     "    float crLen = length(cr);\n"
@@ -324,7 +327,12 @@ static const char *kWetFs =
     "    float flatness = smoothstep(0.7, 0.95, abs(dot(n, up)));\n"
     "    float puddle = smoothstep(0.52, 0.72, noise(vWorld * 0.45) * 0.65 + noise(vWorld * 1.3) * 0.35);\n"
     "    float wet = uWet * flatness;\n"
-    "    vec3 col = c.rgb * (1.0 - 0.30 * wet - 0.18 * wet * puddle);\n"
+    "    float bm = 1.0;\n"
+    "#ifdef DECK_BUMP\n"
+    "    bm = deckBumpMul(uTex, vUv, t.rgb, vCol.rgb, vEye);\n"
+    "    bm = 1.0 + (bm - 1.0) * (1.0 - 0.4 * wet);\n"    // a wet surface is smoother: less relief under the sheen
+    "#endif\n"
+    "    vec3 col = c.rgb * bm * (1.0 - 0.30 * wet - 0.18 * wet * puddle);\n"
     "    float l = dot(col, vec3(0.299, 0.587, 0.114));\n"
     "    col = mix(vec3(l), col, 1.0 + 0.25 * wet);\n"
     "    float ndv = abs(dot(n, normalize(-vEye)));\n"
@@ -335,6 +343,7 @@ static const char *kWetFs =
     "}\n";
 
 static DeckGlProgram sWetProg;
+static DeckBumpUniforms sWetBump;
 static GLint sWetTex = -1, sWetWet = -1, sWetSky = -1, sWetChunk = -1;
 static float sWet = 0.0f;
 static float sLastSeconds = -1.0f;
@@ -342,7 +351,7 @@ static float sLastLog = -100.0f;
 
 static void WetInit(void)
 {
-    if (!DeckGl_BuildProgram(&sWetProg, "rain-wet", kWetVs, kWetFs))
+    if (!DeckBump_Build(&sWetProg, &sWetBump, "rain-wet", kWetVs, kWetFs))
     {
         DeckGl_Log("[RAIN] wet ground shader build failed: flat ground stays\n");
         return;
@@ -364,6 +373,20 @@ bool DeckRain_WetBegin(const float light[3])
     DeckGl_Set1f(sWetWet, sWet * DeckLevelPick(FAST_EXTRA_VOXEL_WET, 0.5f, 1.0f, 1.0f));
     // pale overcast sky x the light of the hour
     DeckGl_Set3f(sWetSky, 0.62f * light[0], 0.70f * light[1], 0.80f * light[2]);
+    DeckBump_Set(&sWetBump, (float)VOXEL_ATLAS_W, (float)VOXEL_ATLAS_H, (float)VOXEL_ATLAS_SLOT);
+    return true;
+}
+
+// Dry ground with relief: the same program with no wetness (uWet 0 is the plain texture times the vertex colour).
+bool DeckRain_BumpBegin(const float light[3])
+{
+    if (sWetProg.program == 0 || !sWetBump.ok || !DeckBump_Enabled())
+        return false;
+    DeckGl_UseProgram(&sWetProg);
+    DeckGl_Set1i(sWetTex, 0);
+    DeckGl_Set1f(sWetWet, 0.0f);
+    DeckGl_Set3f(sWetSky, 0.62f * light[0], 0.70f * light[1], 0.80f * light[2]);
+    DeckBump_Set(&sWetBump, (float)VOXEL_ATLAS_W, (float)VOXEL_ATLAS_H, (float)VOXEL_ATLAS_SLOT);
     return true;
 }
 

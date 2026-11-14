@@ -28,6 +28,8 @@ bool DeckRain_DrawStreaks(const DeckRainFrame *f);
 // C4: wet ground. WetBegin binds the ground program while the ground is wet and the frame is outdoors (light = day/night
 // colour for the sky reflection); returns false (nothing bound) otherwise. WetChunk sets the chunk's world offset per chunk.
 bool DeckRain_WetBegin(const float light[3]);
+// Relief only (voxel_bump on, ground not wet and no glints): the wet program with wetness 0. Same chunk and end calls.
+bool DeckRain_BumpBegin(const float light[3]);
 void DeckRain_WetChunk(float worldX, float worldZ);
 void DeckRain_WetEnd(void);
 float DeckRain_Wetness(void);
