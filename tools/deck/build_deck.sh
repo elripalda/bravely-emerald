@@ -1,7 +1,7 @@
 #!/bin/bash
 # One-script Steam Deck builder. Run it on the Deck, in Desktop Mode, from a clone of this repository:
 #
-#     ./tools/deck/build_deck.sh --rom /path/to/your/emerald.gba [--dir <install dir>] [--jobs N] [--no-run]
+#     bash tools/deck/build_deck.sh --rom /path/to/your/emerald.gba [--dir <install dir>] [--jobs N] [--no-run]
 #
 # What it does (every step can be repeated; finished steps are skipped):
 #   1. checks the Deck (distrobox, podman, free disk space) and your ROM file;
