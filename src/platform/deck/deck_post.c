@@ -198,11 +198,14 @@ static const char kCompositeBody[] =
     "        if (coc > 0.01) {\n"
     "            vec2 rad = vec2(1.0 / uAspect, 1.0) * (coc * uTilt.z);\n"
     "            vec3 acc = vec3(0.0);\n"
+    // The same 8 to 16 tap pattern at every pixel undersampled the 1 pixel horizontal lines of the building art into stripes (the banding on
+    // far houses); each pixel now rotates the pattern by interleaved gradient noise, so the error is fine grain instead of lines.
     "            float wsum = 0.0;\n"
+    "            float ign = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
     "            for (int i = 0; i < 16; i++) {\n"
     "                if (float(i) >= uTilt.w) break;\n"
     "                float fi = float(i) + 0.5;\n"
-    "                float a = fi * 2.39996323;\n"
+    "                float a = fi * 2.39996323 + ign;\n"
     "                vec3 s = texture2D(uBlur, vPos + vec2(cos(a), sin(a)) * sqrt(fi / uTilt.w) * rad).rgb;\n"
     "                float l = dot(s, vec3(0.299, 0.587, 0.114));\n"
     "                float w = 1.0 + 3.0 * l * l;\n"

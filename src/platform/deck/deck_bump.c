@@ -172,7 +172,7 @@ void DeckBump_ApplyIndoor(const DeckBumpUniforms *u)
         return;
     {
         const float amp = DeckBump_Enabled() ? 0.12f * DeckLevelPick(FAST_EXTRA_VOXEL_BUMP, 0.18f, 0.30f, 0.45f) : 0.0f;
-        const float gAmp = DeckBump_GroundOn() ? 0.2f * DeckLevelPick(FAST_EXTRA_VOXEL_GROUNDRELIEF, 0.20f, 0.35f, 0.50f) : 0.0f;
+        const float gAmp = DeckBump_GroundOn() ? 0.1f * DeckLevelPick(FAST_EXTRA_VOXEL_GROUNDRELIEF, 0.20f, 0.35f, 0.50f) : 0.0f;
 
         DeckGl_Set4f(u->par, amp, sSunW, 0.0f, 0.0f);
         DeckGl_Set4f(u->ground, gAmp, 1.0f, 0.0f, 0.0f);
