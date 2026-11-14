@@ -42,6 +42,15 @@ enum {
 #define A_B_START_SELECT (A_BUTTON | B_BUTTON | START_BUTTON | SELECT_BUTTON)
 
 static void MainCB2(void);
+
+#ifdef PLATFORM_DECK
+// Deck title scene (src/platform/deck/deck_title.c) follows the original state machine: 0 not on the title,
+// 1 logo shine, 2 version banner, 3 PRESS START, 4 leaving to another screen (fading). Read only by the platform.
+u8 gDeckTitlePhase;
+#define DECK_TITLE_PHASE(n) (gDeckTitlePhase = (n))
+#else
+#define DECK_TITLE_PHASE(n) ((void)0)
+#endif
 static void Task_TitleScreenPhase1(u8);
 static void Task_TitleScreenPhase2(u8);
 static void Task_TitleScreenPhase3(u8);
@@ -573,6 +582,7 @@ void CB2_InitTitleScreen(void)
     {
     default:
     case 0:
+        DECK_TITLE_PHASE(0);
         SetVBlankCallback(NULL);
         SetGpuReg(REG_OFFSET_BLDCNT, 0);
         SetGpuReg(REG_OFFSET_BLDALPHA, 0);
@@ -631,6 +641,7 @@ void CB2_InitTitleScreen(void)
     case 3:
         BeginNormalPaletteFade(PALETTES_ALL, 1, 16, 0, RGB_WHITEALPHA);
         SetVBlankCallback(VBlankCB);
+        DECK_TITLE_PHASE(1);
         gMain.state = 4;
         break;
     case 4:
@@ -724,6 +735,7 @@ static void Task_TitleScreenPhase1(u8 taskId)
 
         gTasks[taskId].tCounter = 144;
         gTasks[taskId].func = Task_TitleScreenPhase2;
+        DECK_TITLE_PHASE(2);
     }
 }
 
@@ -762,6 +774,7 @@ static void Task_TitleScreenPhase2(u8 taskId)
         CreateCopyrightBanner(START_BANNER_X, 148);
         gTasks[taskId].tBg1Y = 0;
         gTasks[taskId].func = Task_TitleScreenPhase3;
+        DECK_TITLE_PHASE(3);
     }
 
     if (!(gTasks[taskId].tCounter & 3) && gTasks[taskId].tPointless != 0)
@@ -785,6 +798,7 @@ static void Task_TitleScreenPhase3(u8 taskId)
     {
         FadeOutBGM(4);
         BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_WHITEALPHA);
+        DECK_TITLE_PHASE(4);
         SetMainCallback2(CB2_GoToMainMenu);
     }
     else if (JOY_HELD(CLEAR_SAVE_BUTTON_COMBO) == CLEAR_SAVE_BUTTON_COMBO)
@@ -828,25 +842,37 @@ static void Task_TitleScreenPhase3(u8 taskId)
 static void CB2_GoToMainMenu(void)
 {
     if (!UpdatePaletteFade())
+    {
+        DECK_TITLE_PHASE(0);
         SetMainCallback2(CB2_InitMainMenu);
+    }
 }
 
 static void CB2_GoToCopyrightScreen(void)
 {
     if (!UpdatePaletteFade())
+    {
+        DECK_TITLE_PHASE(0);
         SetMainCallback2(CB2_InitCopyrightScreenAfterTitleScreen);
+    }
 }
 
 static void CB2_GoToClearSaveDataScreen(void)
 {
     if (!UpdatePaletteFade())
+    {
+        DECK_TITLE_PHASE(0);
         SetMainCallback2(CB2_InitClearSaveDataScreen);
+    }
 }
 
 static void CB2_GoToResetRtcScreen(void)
 {
     if (!UpdatePaletteFade())
+    {
+        DECK_TITLE_PHASE(0);
         SetMainCallback2(CB2_InitResetRtcScreen);
+    }
 }
 
 static void CB2_GoToBerryFixScreen(void)
@@ -854,6 +880,7 @@ static void CB2_GoToBerryFixScreen(void)
     if (!UpdatePaletteFade())
     {
         m4aMPlayAllStop();
+        DECK_TITLE_PHASE(0);
         SetMainCallback2(CB2_InitBerryFixProgram);
     }
 }

@@ -18,6 +18,9 @@
 #ifdef PLATFORM_DECK
 #include "deck/deck_ambient_game.h"
 #include "deck/deck_uifx.h"
+#include "deck/deck_flatfx.h"
+#include "deck/deck_title.h"
+#include "deck/deck_reveal.h"
 #endif
 // Catch-up game frames run their scanline events without being drawn (see the main loop).
 #define VITA_SKIP_CATCHUP_DRAW
@@ -369,6 +372,10 @@ static void RenderGameTexture(void)
     glDisable(GL_BLEND);
     glDisable(GL_ALPHA_TEST);
     glEnable(GL_TEXTURE_2D);
+#ifdef PLATFORM_DECK
+    // Deck: the plain 2D picture (margins art and fades included) goes through the flat post pass (deck_flatfx.c)
+    const bool flatFx = DeckFlat_Begin();
+#endif
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -378,7 +385,6 @@ static void RenderGameTexture(void)
 
     VitaStage_UpdateSceneState();
     const int32_t stageKind = VitaStage_GetActiveKind();
-
     float vx0, vx1, vy0 = 0.0f, vy1 = 544.0f;
     float u0, u1;
 
@@ -417,6 +423,21 @@ static void RenderGameTexture(void)
         u1 = (float)(FRAME_LINE_X0 + DISPLAY_WIDTH) / (float)FRAME_LINE_WIDTH;
     }
 
+#ifdef PLATFORM_DECK
+    // Deck: on the title screen the picture in the texture is only the front layer (VDraw keyed it); deck_title.c draws the
+    // whole screen around it. DeckTitle_FrameActive is the decision VDraw made for this frame.
+    if (DeckTitle_FrameActive())
+    {
+        glBindTexture(GL_TEXTURE_2D, sGameTextureRing[sGameTextureUploadIdx]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        DeckTitle_Draw(sGameTextureRing[sGameTextureUploadIdx], vx0, vx1, u0, u1);
+        DeckReveal_DrawFlash();
+        if (flatFx)
+            DeckFlat_End();
+        glDepthMask(GL_FALSE);
+        return;
+    }
+#endif
     glBindTexture(GL_TEXTURE_2D, sGameTextureRing[sGameTextureUploadIdx]);
     static int32_t sCachedFilter = -1;
     const int32_t filter = sPlatformSettings[PLATFORM_SETTING_FILTER];
@@ -537,6 +558,11 @@ static void RenderGameTexture(void)
         if (Widescreen_StageFadesMargins())
             DrawStageMarginFade();
     }
+#endif
+#ifdef PLATFORM_DECK
+    DeckReveal_DrawFlash();
+    if (flatFx)
+        DeckFlat_End();
 #endif
     glDepthMask(GL_FALSE);
 }
@@ -1288,6 +1314,16 @@ void VDraw(SDL_Texture *texture)
     uint16_t *gbaImage = sFrameImage;
     // New UI battle HUD: the GBA text box and menus (BG0, BG1 while the level-up box shows) are its
     gFastDrawDispcntClear = Ui_BattleDispcntClear();
+#ifdef PLATFORM_DECK
+    DeckReveal_Frame();
+    if (DeckTitle_Wanted())
+    {
+        // title: draw only BG2 + sprites over a magenta backdrop (key), deck_title.c supplies the sky, Rayquaza and clouds
+        gFastDrawDispcntClear |= DISPCNT_BG0_ON | DISPCNT_BG1_ON;
+        gFastDrawBackdropOverride = 0x7C1F;
+        gFastDrawBldcntClear = BLDCNT_TGT1_BD | BLDCNT_TGT2_BD;
+    }
+#endif
 
     static int32_t sClassicFrames = 0;
     sClassicFrames++;
@@ -1305,6 +1341,8 @@ void VDraw(SDL_Texture *texture)
         sPerfTotal[PERF_DRAWFRAME] += perfT1 - perfT0;
         sPerfTotal[PERF_UPLOAD] += PerfNowMs() - perfT1;
         gFastDrawDispcntClear = 0;
+        gFastDrawBackdropOverride = -1;
+        gFastDrawBldcntClear = 0;
         REG_VCOUNT = 161; // prep for being in VBlank period
         return;
     }
@@ -1313,6 +1351,8 @@ void VDraw(SDL_Texture *texture)
     double perfT0 = PerfNowMs();
     DrawFrame(gbaImage);
     gFastDrawDispcntClear = 0;
+    gFastDrawBackdropOverride = -1;
+    gFastDrawBldcntClear = 0;
     double perfT1 = PerfNowMs();
 
     static uint16_t sConvertedFallback[FRAME_LINE_WIDTH * DISPLAY_HEIGHT];

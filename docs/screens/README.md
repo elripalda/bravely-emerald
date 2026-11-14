@@ -21,3 +21,9 @@ Not captured (single test rule): OFF vs HIGH pairs for sun shadows, relief crops
 - ui_battle_off_default_high.png: new UI battle HUD and text box (ui_v2=1), OFF / default / HIGH (different wild Pokemon, the encounter is random). Same HUD, original HP bar colours.
 - ui_settings_high.png: port options menu (VitaUI canvas) at HIGH: side margins get a soft shadow; no footer text line exists, the group label is darker.
 - ui_party_high_after_fix.png: new UI party info at HIGH after the text shadow threshold fix (muted grey labels are clean).
+
+## deck-title branch (Deck, DECK_GL_DEBUG=1, 0 GLERR)
+- title_original.png: the original title (voxel_title=0, voxel_flatfx=0), phase 3.
+- title_bravely_2dhd_phase3.png and title_bravely_2dhd_phase1_shine.png: the new title with BRAVELY and 2D-HD lettering; the phase 1 shot shows the shine sweep on the logo.
+- flatfx_intro_leaves_no_margins_slivers.png (slivers at both edges, no intro_margins.bin) and flatfx_intro_leaves_with_margins_off.png (margins art present, flatfx off).
+- flatfx_mainmenu_first_bloom_washout.png (first bloom values, NEW GAME unreadable), flatfx_mainmenu_high_retuned.png (after the retune), flatfx_title_original_high.png (original title through the flat pass at HIGH).

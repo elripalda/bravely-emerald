@@ -98,6 +98,9 @@ typedef enum
     FAST_EXTRA_VOXEL_UIGLOW,   // Deck UI depth glow: faint dark halo under the UI (UI passes only)
     FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume, key ambient_level: 0 OFF (no DSP), 1 LOW, 2 MEDIUM (default), 3 HIGH
     FAST_EXTRA_AMBIENT_DENSITY, // Deck ambient one-shot rate, key ambient_density: 0 SPARSE (default), 1 NORMAL, 2 FREQUENT
+    FAST_EXTRA_VOXEL_FLATFX,   // Deck 2D scene effects (intro, title, menus): bloom, glow, grade, vignette, grain, pulse; off = the plain picture
+    FAST_EXTRA_VOXEL_TITLE,    // Deck title screen: 0 ORIGINAL, 1 HD-2D (BRAVELY EMERALD)
+    FAST_EXTRA_VOXEL_REVEAL,   // Deck reveal flash: title and intro scenes start flat and flash into the HD-2D look (0 off, 1 on)
 #endif
 #ifdef PLATFORM_DECK
     // UI polish (docs/DECK_NOTES.md "UI polish"). Leveled like the effects above (0 OFF, 1 AUTO, 2 LOW, 3 MEDIUM, 4 HIGH)

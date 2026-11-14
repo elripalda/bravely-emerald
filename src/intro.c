@@ -179,6 +179,16 @@ static EWRAM_DATA u16 UNUSED sUnusedVar = 0;
 static EWRAM_DATA u16 sFlygonYOffset = 0;
 
 COMMON_DATA u32 gIntroFrameCounter = 0;
+
+#ifdef PLATFORM_DECK
+// Deck reveal (src/platform/deck/deck_reveal.c): which intro scene is on, read only by the platform. 0 not in the intro,
+// 1 Game Freak logo and leaves, 2 bike ride, 3 Poke Ball, 4 Groudon, 5 Kyogre, 6 clouds, 7 lightning, 8 Rayquaza, 255 the
+// copyright screen (stays flat).
+u8 gDeckIntroSegment;
+#define DECK_INTRO_SEGMENT(n) (gDeckIntroSegment = (n))
+#else
+#define DECK_INTRO_SEGMENT(n) ((void)0)
+#endif
 COMMON_DATA struct GcmbStruct gMultibootProgramStruct = {0};
 
 static const u16 sIntroDrops_Pal[]            = INCBIN_U16("graphics/intro/scene_1/drops.gbapal");
@@ -1053,6 +1063,7 @@ static void MainCB2_Intro(void)
 
 static void MainCB2_EndIntro(void)
 {
+    DECK_INTRO_SEGMENT(0);
     if (!UpdatePaletteFade())
         SetMainCallback2(CB2_InitTitleScreen);
 }
@@ -1071,6 +1082,7 @@ static void SerialCB_CopyrightScreen(void)
 
 static u8 SetUpCopyrightScreen(void)
 {
+    DECK_INTRO_SEGMENT(255);
     switch (gMain.state)
     {
     case COPYRIGHT_INITIALIZE:
@@ -1211,6 +1223,7 @@ static void Task_Scene1_Load(u8 taskId)
 
 static void Task_Scene1_FadeIn(u8 taskId)
 {
+    DECK_INTRO_SEGMENT(1);
     BeginNormalPaletteFade(PALETTES_ALL, 0, 16, 0, RGB_BLACK);
     SetVBlankCallback(VBlankCB_Intro);
     SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_MODE_0 | DISPCNT_OBJ_1D_MAP | DISPCNT_BG_ALL_ON | DISPCNT_OBJ_ON);
@@ -1359,6 +1372,7 @@ static void Task_Scene1_End(u8 taskId)
 
 static void Task_Scene2_Load(u8 taskId)
 {
+    DECK_INTRO_SEGMENT(2);
     IntroResetGpuRegs();
     SetVBlankCallback(NULL);
     ResetSpriteData();
@@ -1723,6 +1737,7 @@ static void SpriteCB_Manectric(struct Sprite *sprite)
 
 static void Task_Scene3_Load(u8 taskId)
 {
+    DECK_INTRO_SEGMENT(3);
     IntroResetGpuRegs();
     LZ77UnCompVram(sIntroPokeball_Gfx, (void *)VRAM);
     LZ77UnCompVram(sIntroPokeball_Tilemap, (void *)(BG_CHAR_ADDR(1)));
@@ -1773,6 +1788,7 @@ static void Task_Scene3_WaitGroudon(u8 taskId)
 
 static void Task_Scene3_LoadGroudon(u8 taskId)
 {
+    DECK_INTRO_SEGMENT(4);
     if (!gPaletteFade.active)
     {
         IntroResetGpuRegs();
@@ -2056,6 +2072,7 @@ static void SpriteCB_GroudonRocks(struct Sprite *sprite)
 
 static void Task_Scene3_LoadKyogre(u8 taskId)
 {
+    DECK_INTRO_SEGMENT(5);
     ResetSpriteData();
     LZDecompressVram(gIntroKyogre_Gfx, (void *)VRAM);
     LZDecompressVram(gIntroKyogre_Tilemap, (void *)(BG_CHAR_ADDR(3)));
@@ -2331,6 +2348,7 @@ static void SpriteCB_KyogreBubbles(struct Sprite *sprite)
 
 static void Task_Scene3_LoadClouds1(u8 taskId)
 {
+    DECK_INTRO_SEGMENT(6);
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG0
                                | BLDCNT_TGT1_BG1
                                | BLDCNT_TGT1_BG2
@@ -2432,6 +2450,7 @@ static void Task_Scene3_Clouds(u8 taskId)
 
 static void Task_Scene3_LoadLightning(u8 taskId)
 {
+    DECK_INTRO_SEGMENT(7);
     LZDecompressVram(gIntroRayquaza_Tilemap, (void *)(BG_SCREEN_ADDR(28)));
     LZDecompressVram(gIntroRayquazaClouds_Tilemap, (void *)(BG_CHAR_ADDR(3)));
     LZDecompressVram(gIntroRayquaza_Gfx, (void *)(BG_CHAR_ADDR(1)));
@@ -2531,6 +2550,7 @@ static void SpriteCB_Lightning(struct Sprite *sprite)
 
 static void Task_Scene3_LoadRayquazaAttack(u8 taskId)
 {
+    DECK_INTRO_SEGMENT(8);
     u8 attackTaskId;
 
     LoadCompressedSpriteSheet(sSpriteSheet_RayquazaOrb);
