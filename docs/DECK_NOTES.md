@@ -159,10 +159,10 @@ To judge later (Marcos):
 ## Phase 3: procedural ambient bed
 
 - Plan: `docs/superpowers/plans/2026-11-13-deck-phase3-ambient.md`. Synth: `src/platform/deck/deck_ambient.c` (pure DSP, no game headers). Game mapping and hook: `deck_ambient_game.c`, called from `Platform_QueueAudio` (`sdl2.c`) after the master volume loop, on the game thread.
-- Layers: wind (gust-modulated low-passed noise), rain (high-passed noise plus droplet ticks), waves (swell-shaped noise, 6 to 10 s), crickets (4 chirp-train voices), birds (3 voices, swept sine calls), cave (low tone plus drips), thunder (on the lightning edge). Slew 2.5 s per layer (rain 1.5 s), 1 s master fade; indoors, battles, menus and fast forward are silent.
+- Layers: wind (gust-modulated low-passed noise), rain (high-passed noise plus droplet ticks), waves (swell-shaped noise, 6 to 10 s), crickets (4 chirp-train voices), birds (3 voices, swept sine calls), cave (low tone plus drips), thunder (on the lightning edge). Slew 2.5 s per layer (rain 1.5 s), 1 s master fade; indoors, battles, menus (VitaUI, new UI, vanilla start menu window) and fast forward are silent. Thunder tail about 7.5 s (tau 1.2 s); a bolt during a rumble queues one more.
 - Setting `ambient_volume` (0 to 10, default 6, 0 = off with no DSP). Final gain = ambient_volume/10 x master volume.
 - Data test: `tools/deck_tests/test_ambient.c` (build line in its header, run in the distrobox): NaN, peak, RMS band, clipping, block seam steps, off switch, master 0 silence, fade, fast-forward mute ramp, no write past the frame count.
-- Log lines in `userdata/debug.log`: `ambient: mapType ... -> wind ... master` on every context change and `ambient: 5s out peak rms queue min max` every 5 s. `VITA_LOG` is buffered and never flushed on kill, so use debug.log direct appends for short runs.
+- Log lines (only with `DECK_GL_DEBUG` set and not 0, at most 2000 lines per process) in `userdata/debug.log`: `ambient: mapType ... -> wind ... master` on every context change and `ambient: 5s out peak rms queue min max` every 5 s. `VITA_LOG` is buffered and never flushed on kill, so use debug.log direct appends for short runs.
 - Not checked by ear: loudness against the music, bird/cricket character, wave pacing, thunder delay, crossfade feel, water radius at beaches.
 
 ## Phase 4: standing tall grass, player bend, flowers

@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "global.h"
@@ -12,6 +13,10 @@
 #include "constants/map_types.h"
 #include "platform/vita_daynight.h"
 #include "platform/vita_extras.h"
+#include "platform/vita_ui.h"
+#include "platform/ui.h"
+#include "menu.h"
+#include "window.h"
 #include "vita_platform.h"
 #include "../voxel/voxel_world.h"
 #include "deck_ambient.h"
@@ -33,8 +38,22 @@ static double sSumSq, sPeak;
 static long sSamples;
 static uint32_t sQMin = 0xffffffffu, sQMax;
 
+#define MAX_LOG_LINES 2000   // per process, so a long debug session cannot grow debug.log without bound
+
+static int sLogLines;
+static int sLogOn = -1;      // -1 = env not read yet
+
 static void Log(const char *fmt, ...)
 {
+    // Same switch as the GL diagnostics: DECK_GL_DEBUG set and not "0". Off = no file access at all.
+    if (sLogOn < 0)
+    {
+        const char *dbg = getenv("DECK_GL_DEBUG");
+        sLogOn = (dbg != NULL && strcmp(dbg, "0") != 0) ? 1 : 0;
+    }
+    if (!sLogOn || sLogLines >= MAX_LOG_LINES)
+        return;
+    sLogLines++;
     // VITA_LOG is fully buffered (32 KB, no flush), so short runs never show it; this appends and flushes.
     FILE *lg = fopen(VITA_DATA_DIR "debug.log", "a");
     if (lg != NULL)
@@ -69,7 +88,10 @@ static float ScanWater(void)
 static void UpdateTargets(void)
 {
     DeckAmbientTargets t;
-    const bool overworld = VitaGame_IsOverworld();
+    // Menus run while gMain.callback2 is still CB2_Overworld: the Vita/Deck start menu and its screens (VitaUI), the new UI,
+    // and the vanilla start menu window (the vanilla one also freezes the avatar; dialogue and scripts do not count).
+    const bool menu = VitaUI_IsOpen() || Ui_IsOpen() || GetStartMenuWindowId() != WINDOW_NONE;
+    const bool overworld = VitaGame_IsOverworld() && !menu;
     const bool outdoor = overworld && VitaGame_IsOutdoor();
     const bool underground = overworld && gMapHeader.mapType == MAP_TYPE_UNDERGROUND;
 
@@ -116,8 +138,8 @@ static void UpdateTargets(void)
         if (key != sLastKey)
         {
             sLastKey = key;
-            Log("ambient: mapType %d overworld %d daylight %.2f -> wind %.2f birds %.2f crickets %.2f water %.2f rain %.2f cave %.2f master %.0f\n",
-                     (int)gMapHeader.mapType, (int)overworld, (double)VitaDayNight_Get()->daylight, (double)t.wind, (double)t.birds,
+            Log("ambient: mapType %d overworld %d menu %d daylight %.2f -> wind %.2f birds %.2f crickets %.2f water %.2f rain %.2f cave %.2f master %.0f\n",
+                     (int)gMapHeader.mapType, (int)overworld, (int)menu, (double)VitaDayNight_Get()->daylight, (double)t.wind, (double)t.birds,
                      (double)t.crickets, (double)t.water, (double)t.rain, (double)t.cave, (double)t.master);
         }
     }
@@ -150,34 +172,34 @@ void DeckAmbient_Frame(float *stereo, int frames, unsigned rate, float masterVol
             if (sFrame % UPDATE_EVERY == 0)
                 UpdateTargets();
             DeckAmbient_Mix(stereo, frames, gain);
+
+            // The bed plus the music must not exceed full scale. The stats feed the 5 s log line (debug only).
+            for (int i = 0; i < frames * 2; i++)
+            {
+                float v = stereo[i];
+                if (v > 1.0f) stereo[i] = v = 1.0f;
+                else if (v < -1.0f) stereo[i] = v = -1.0f;
+                sSumSq += (double)v * v;
+                if (fabs(v) > sPeak) sPeak = fabs(v);
+            }
+            sSamples += frames * 2;
+            if (queuedBytes < sQMin) sQMin = queuedBytes;
+            if (queuedBytes > sQMax) sQMax = queuedBytes;
+            if ((sFrame + 1) % STATS_EVERY == 0)
+            {
+                Log("ambient: 5s out peak %.3f rms %.4f queue min %u max %u bytes setting %d master %.2f\n", sPeak,
+                         sSamples ? sqrt(sSumSq / (double)sSamples) : 0.0, (unsigned)sQMin, (unsigned)sQMax, setting,
+                         (double)DeckAmbient_MasterLevel());
+                sSumSq = sPeak = 0.0;
+                sSamples = 0;
+                sQMin = 0xffffffffu;
+                sQMax = 0;
+            }
         }
     }
     else
     {
-        DeckAmbient_Mix(stereo, frames, 0.0f);   // hard off: no DSP
+        DeckAmbient_Mix(stereo, frames, 0.0f);   // hard off: no DSP, the buffer is not touched
     }
     sFrame++;
-
-    // The bed plus the music must not exceed full scale, and the log line shows level and queue.
-    for (int i = 0; i < frames * 2; i++)
-    {
-        float v = stereo[i];
-        if (v > 1.0f) stereo[i] = v = 1.0f;
-        else if (v < -1.0f) stereo[i] = v = -1.0f;
-        sSumSq += (double)v * v;
-        if (fabs(v) > sPeak) sPeak = fabs(v);
-    }
-    sSamples += frames * 2;
-    if (queuedBytes < sQMin) sQMin = queuedBytes;
-    if (queuedBytes > sQMax) sQMax = queuedBytes;
-    if (sFrame % STATS_EVERY == 0)
-    {
-        Log("ambient: 5s out peak %.3f rms %.4f queue min %u max %u bytes setting %d master %.2f mute %d\n", sPeak,
-                 sSamples ? sqrt(sSumSq / (double)sSamples) : 0.0, (unsigned)sQMin, (unsigned)sQMax, setting,
-                 (double)DeckAmbient_MasterLevel(), (int)mute);
-        sSumSq = sPeak = 0.0;
-        sSamples = 0;
-        sQMin = 0xffffffffu;
-        sQMax = 0;
-    }
 }

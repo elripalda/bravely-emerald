@@ -23,7 +23,7 @@ Two files, so the DSP can be tested on its own:
   rain (high-passed noise bed plus Poisson droplet ticks), waves (low-passed noise under a swell envelope, 6 to 10 s, per-channel
   phase offset), crickets (4 voices of 3-5 pulse chirp trains on a 3.6 to 5.2 kHz carrier, panned), birds (up to 3 voices, sparse
   random calls of 1 to 4 swept sine notes with a smooth envelope, panned), cave (low noise plus beating 52/53.3 Hz drone,
-  random drips with a pinged echo), thunder (low-passed noise burst, 2.5 s decay). Sum goes through a soft limiter
+  random drips with a pinged echo), thunder (low-passed noise burst; envelope tau 1.2 s, so about a 7.5 s audible tail, kept on purpose: a long rolling rumble; a bolt during a rumble queues one more after it). Sum goes through a soft limiter
   `x / (1 + |x|)` and is scaled so the loudest combination peaks near -22 dBFS before the volume.
 - `deck_ambient_game.c`: `DeckAmbient_FromGame(float *stereo, int frames, float masterVolume, bool mute)` called from `sdl2.c`.
   Reads game state on the game thread: `VitaGame_IsOverworld()`, `gMapHeader.mapType`, `VitaDayNight_Get()->daylight`,

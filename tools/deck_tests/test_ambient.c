@@ -86,6 +86,38 @@ static void Common(const char *name, const Stats *s, double peakMax, double rmsL
     CHECK(s->maxStepSeam <= s->maxStepInside * 1.5 + 0.002, "%s: block seam step %.4f vs inside %.4f", name, s->maxStepSeam, s->maxStepInside);
 }
 
+// Thunder only, bolts at t1 and (if >= 0) t2 seconds. Returns RMS over [w0, w1) s and the largest sample step over [t1 + 3, t2 + 3).
+static void ThunderRun(int t1, int t2, double w0, double w1, double *rms, double *maxStep)
+{
+    static float buf[2 * 1024];
+    DeckAmbientTargets t = { 0, 0, 0, 0, 0, 0, 1 };
+    long frames = (long)RATE * 24, done = 0, wn = 0;
+    double sq = 0, prev = 0;
+    int blk = 0;
+
+    *maxStep = 0;
+    DeckAmbient_Init(RATE, 4242);
+    DeckAmbient_SetTargets(&t);
+    while (done < frames)
+    {
+        int n = 800;
+        (void)blk;
+        if (done == (long)t1 * RATE) DeckAmbient_Thunder();
+        if (t2 >= 0 && done == (long)t2 * RATE) DeckAmbient_Thunder();
+        memset(buf, 0, sizeof(float) * 2 * n);
+        DeckAmbient_Mix(buf, n, 1.0f);
+        for (int i = 0; i < n; i++)
+        {
+            double sec = (double)(done + i) / RATE, d = fabs(buf[2 * i] - prev);
+            prev = buf[2 * i];
+            if (sec >= w0 && sec < w1) { sq += (double)buf[2 * i] * buf[2 * i]; wn++; }
+            if (sec >= 5.0 && sec < 10.0 && d > *maxStep) *maxStep = d;
+        }
+        done += n;
+    }
+    *rms = wn ? sqrt(sq / wn) : 0;
+}
+
 int main(void)
 {
     struct { const char *name; DeckAmbientTargets t; double peakMax, rmsLo, rmsHi; } ctx[] = {
@@ -116,6 +148,37 @@ int main(void)
         s = Render(&t, 1.0f, 5);
         Report("thunder only", &s);
         Common("thunder only", &s, 0.40, 0.0003, 0.08);
+    }
+
+    // Thunder overlap: a bolt at 6 s lands in the rumble started by the bolt at 2 s. It must not restart the envelope
+    // (no step) and it queues one more rumble that plays after the first one has died out (audible at 13..14 s).
+    {
+        double rmsOne, rmsTwo, stepOne, stepTwo, rmsEarly, st;
+        ThunderRun(2, -1, 13.0, 14.0, &rmsOne, &stepOne);
+        ThunderRun(2, 6, 13.0, 14.0, &rmsTwo, &stepTwo);
+        ThunderRun(2, -1, 4.0, 6.0, &rmsEarly, &st);
+        printf("thunder overlap: single rms@13-14s %.6f, with queued bolt %.6f; max step in 5..10 s single %.5f overlap %.5f; rms 4..6 s %.5f\n",
+               rmsOne, rmsTwo, stepOne, stepTwo, rmsEarly);
+        CHECK(rmsEarly > 0.001, "thunder overlap: first rumble not audible (%.6f)", rmsEarly);
+        CHECK(rmsOne < 0.0001, "thunder overlap: single rumble still audible at 13 s (%.6f)", rmsOne);
+        CHECK(rmsTwo > 0.0005 && rmsTwo > 10.0 * rmsOne, "thunder overlap: queued rumble missing (%.6f)", rmsTwo);
+        CHECK(stepTwo <= stepOne * 1.5 + 1e-4, "thunder overlap: envelope restarted (step %.5f vs %.5f)", stepTwo, stepOne);
+    }
+
+    // Hard off: gain 0 must leave the buffer untouched, bit for bit, for a full minute (also with non-zero music in it).
+    {
+        float buf[2 * 800], ref[2 * 800];
+        DeckAmbientTargets t = { 1, 1, 1, 1, 1, 1, 1 };
+        int same = 1;
+        DeckAmbient_Init(RATE, 11);
+        DeckAmbient_SetTargets(&t);
+        for (int b = 0; b < 3600; b++)
+        {
+            for (int i = 0; i < 1600; i++) ref[i] = buf[i] = 0.7f * sinf((float)(b * 1600 + i) * 0.01f);
+            DeckAmbient_Mix(buf, 800, 0.0f);
+            if (memcmp(buf, ref, sizeof(buf)) != 0) same = 0;
+        }
+        CHECK(same, "gain 0 changed a buffer that held music");
     }
 
     // Hard off: gain 0 must leave the buffer untouched (exact zeros) for a full minute.

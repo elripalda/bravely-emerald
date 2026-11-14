@@ -69,6 +69,7 @@ static Drip sDrip[MAX_DRIPS];
 static float sDripWait;
 static float sThunderDelay;   // samples until the rumble starts; < 0 = none pending
 static float sThunderEnv, sThunderAge;
+static int sThunderQueued;    // a bolt arrived during a rumble: start the next one when this one ends
 static Pole2 sThunderLp[2];
 
 static uint32_t Rnd(void)
@@ -165,6 +166,8 @@ void DeckAmbient_Init(unsigned rate, unsigned seed)
     sMasterTarget = sMaster = 0.0f;
     sGainPrev = 0.0f;
     sTime = 0.0f;
+    memset(sWave, 0, sizeof(sWave));
+    memset(sCricket, 0, sizeof(sCricket));
     memset(sWind, 0, sizeof(sWind));
     memset(sRainLp, 0, sizeof(sRainLp));
     memset(sDropEnv, 0, sizeof(sDropEnv));
@@ -176,6 +179,7 @@ void DeckAmbient_Init(unsigned rate, unsigned seed)
     sThunderDelay = -1.0f;
     sThunderEnv = 0.0f;
     sThunderAge = 0.0f;
+    sThunderQueued = 0;
     NewWave(&sWave[0], 0.0f);
     NewWave(&sWave[1], 0.37f);
     for (int i = 0; i < MAX_CRICKETS; i++)
@@ -200,8 +204,14 @@ void DeckAmbient_SetTargets(const DeckAmbientTargets *t)
 
 void DeckAmbient_Thunder(void)
 {
-    if (sInit && sThunderDelay < 0.0f)
+    // sThunderDelay: -1 idle, >= 0 pending, -2 rumbling. A bolt while idle starts one; during a rumble it queues one
+    // more to follow (so the playing envelope never restarts or steps); while one is already pending it adds nothing.
+    if (!sInit)
+        return;
+    if (sThunderDelay == -1.0f)
         sThunderDelay = Rr(0.3f, 1.5f) * sRate;
+    else if (sThunderDelay == -2.0f)
+        sThunderQueued = 1;
 }
 
 void DeckAmbient_Mute(void)
@@ -215,6 +225,7 @@ void DeckAmbient_Mute(void)
     memset(sDrip, 0, sizeof(sDrip));
     sThunderDelay = -1.0f;
     sThunderEnv = 0.0f;
+    sThunderQueued = 0;
     sDropEnv[0] = sDropEnv[1] = 0.0f;
 }
 
@@ -259,6 +270,8 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
 
     // Control-rate values, once per block
     sTime += dt;
+    if (sTime > 100.0f)
+        sTime -= 100.0f;   // 100 s is a whole number of periods of 0.11 and 0.27 Hz, so the gust does not jump
     {
         const float gust = 0.5f + 0.5f * (0.6f * sinf(TWO_PI * 0.11f * sTime) + 0.4f * sinf(TWO_PI * 0.27f * sTime + 1.3f));
         const float windFc = 160.0f + 520.0f * gust * (0.4f + 0.6f * lv1[L_WIND]);
@@ -311,6 +324,8 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                     sRainLp[c].lp2 += 0.45f * (hp - sRainLp[c].lp2);  // takes the sting off above ~5 kHz
                     sum[c] += sRainLp[c].lp2 * lv * 0.15f + hp * sDropEnv[c] * 0.05f * lv;
                     sDropEnv[c] *= 0.9955f;
+                    if (sDropEnv[c] < 1e-9f)
+                        sDropEnv[c] = 0.0f;   // no denormals
                 }
             }
 
@@ -482,8 +497,13 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
             }
             else if (sThunderDelay == -2.0f)
             {
-                sThunderDelay = -1.0f;   // finished; a new request may start
                 sThunderEnv = 0.0f;
+                sThunderDelay = -1.0f;   // finished; a new request may start
+                if (sThunderQueued)
+                {
+                    sThunderQueued = 0;
+                    sThunderDelay = Rr(0.3f, 1.5f) * sRate;
+                }
             }
 
             {
