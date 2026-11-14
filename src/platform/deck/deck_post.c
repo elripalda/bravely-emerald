@@ -74,12 +74,20 @@ static const char kBrightFs[] =
     "    gl_FragColor = vec4(c * smoothstep(uThreshold, 1.0, l), 1.0);\n"
     "}\n";
 
+// The half resolution copy (tilt-shift and blur source) is a 2x2 box filter: four taps at the centres of the four scene texels under
+// each half-res pixel (uTexel = 0.5 / scene size). A single tap point-sampled every other row and column of the scene, so the fine
+// horizontal structure of the building art (and the relief on it) aliased into stripes after the blur: the banding on houses.
 static const char kCopyFs[] =
     "#version 120\n"
     "uniform sampler2D uScene;\n"
+    "uniform vec2 uTexel;\n"
     "varying vec2 vPos;\n"
     "void main() {\n"
-    "    gl_FragColor = vec4(texture2D(uScene, vPos).rgb, 1.0);\n"
+    "    vec3 c = texture2D(uScene, vPos + vec2(-uTexel.x, -uTexel.y)).rgb;\n"
+    "    c += texture2D(uScene, vPos + vec2(uTexel.x, -uTexel.y)).rgb;\n"
+    "    c += texture2D(uScene, vPos + vec2(-uTexel.x, uTexel.y)).rgb;\n"
+    "    c += texture2D(uScene, vPos + vec2(uTexel.x, uTexel.y)).rgb;\n"
+    "    gl_FragColor = vec4(c * 0.25, 1.0);\n"
     "}\n";
 
 // 9-tap Gaussian folded into 5 bilinear taps (offsets between texels, GL_LINEAR source).
@@ -329,7 +337,7 @@ static int sFailW;     // a scene width that could not be created (not tried aga
 static DeckGlTarget sScene;
 static DeckGlTarget sHalf[4]; // 0 bloom, 1 blur scratch, 2 DoF / tilt-shift copy, 3 light shafts
 static DeckGlProgram sBright, sCopy, sBlur, sComposite;
-static GLint sBrightScene, sBrightThreshold, sCopyScene, sBlurSrc, sBlurStep;
+static GLint sCopyTexel, sBrightScene, sBrightThreshold, sCopyScene, sBlurSrc, sBlurStep;
 static GLint sCScene, sCBloom, sCBlur, sCBloomAmt, sCBlurOn, sCDof, sCGradeAmt, sCShadow, sCHigh, sCSat, sCVignette, sCAspect, sCDepth, sCTilt, sCZ, sCLut, sCLutOn;
 
 static const float kQuad[8] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f };
@@ -408,6 +416,7 @@ static bool BuildPrograms(void)
     sBrightScene = DeckGl_Uniform(&sBright, "uScene");
     sBrightThreshold = DeckGl_Uniform(&sBright, "uThreshold");
     sCopyScene = DeckGl_Uniform(&sCopy, "uScene");
+    sCopyTexel = DeckGl_Uniform(&sCopy, "uTexel");
     sBlurSrc = DeckGl_Uniform(&sBlur, "uSrc");
     sBlurStep = DeckGl_Uniform(&sBlur, "uStep");
     sCScene = DeckGl_Uniform(&sComposite, "uScene");
@@ -839,6 +848,7 @@ void DeckPost_Run(const DeckPostFrame *in)
         BeginTarget(&sHalf[2]);
         DeckGl_UseProgram(&sCopy);
         DeckGl_Set1i(sCopyScene, 0);
+        DeckGl_Set2f(sCopyTexel, 0.5f / (float)sScene.w, 0.5f / (float)sScene.h);
         DrawQuad();
         if (doBlur)
             Blur(&sHalf[2], &sHalf[1], 1, 1.0f);
