@@ -1,15 +1,14 @@
-#include "deck_particles.h"
-#include "deck_gl_shader.h"
-#include "platform/vita_extras.h"
-#include "global.h"
-#include "constants/map_types.h"
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "deck_particles.h"
+#include "deck_gl_shader.h"
+#include "global.h"
+#include "constants/map_types.h"
+#include "platform/vita_extras.h"
 
-// Quads per kind in the one static VBO: pollen, fireflies, leaves (in that order).
 #define N_POLLEN 192
 #define N_FIRE 64
 #define N_LEAF 32
