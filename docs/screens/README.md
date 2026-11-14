@@ -8,3 +8,9 @@ All taken on the Steam Deck, branch deck-port, DECK_GL_DEBUG=1, 0 GLERR.
 - final_B_battle_allhigh_*.png: final run B, wild battle, all HIGH. Backdrop clearly blurred and darkened, battlers, HP boxes and text box sharp, faint halo around the boxes. intro = first message, attack = TORCHIC used SCRATCH.
 
 Not captured (single test rule): OFF vs HIGH pairs for sun shadows, relief crops (player, tree, house at voxel_bump 0 vs 4), ground detail at dusk, dusk and night beams, menus with the new rows.
+
+## deck-title branch (Deck, DECK_GL_DEBUG=1, 0 GLERR)
+- title_original.png: the original title (voxel_title=0, voxel_flatfx=0), phase 3.
+- title_bravely_2dhd_phase3.png and title_bravely_2dhd_phase1_shine.png: the new title with BRAVELY and 2D-HD lettering; the phase 1 shot shows the shine sweep on the logo.
+- flatfx_intro_leaves_no_margins_slivers.png (slivers at both edges, no intro_margins.bin) and flatfx_intro_leaves_with_margins_off.png (margins art present, flatfx off).
+- flatfx_mainmenu_first_bloom_washout.png (first bloom values, NEW GAME unreadable), flatfx_mainmenu_high_retuned.png (after the retune), flatfx_title_original_high.png (original title through the flat pass at HIGH).
