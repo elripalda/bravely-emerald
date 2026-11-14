@@ -395,7 +395,7 @@ static TextTex sBravely, sHd;
 // look (white face, grey underside, dark navy outline), style 1 the POKEMON logo look (yellow face, blue outline).
 static bool BuildText(TextTex *tt, const char *text, int sc, int style)
 {
-    const int pad = 2 * sc + 2;
+    const int pad = 3 * sc + 3;
     int adv[16], total = 0, n = (int)strlen(text);
     uint8_t glyphs[16][16][16];
     uint8_t *mask, *rgba;
@@ -428,6 +428,30 @@ static bool BuildText(TextTex *tt, const char *text, int sc, int style)
                             for (int dx = 0; dx < sc; dx++)
                                 mask[(pad + y * sc + dy) * w + x0 + x * sc + dx] = 1;
             x0 += adv[i] * sc;
+        }
+    }
+    {
+        // embolden: the game font strokes are one texel wide, the logo lettering is chunky
+        uint8_t *fat = (uint8_t *)calloc((size_t)w * h, 1);
+        const int e = sc / 2 + 1;
+
+        if (fat != NULL)
+        {
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    for (int dy = -e; dy <= e && !fat[y * w + x]; dy++)
+                        for (int dx = -e; dx <= e; dx++)
+                        {
+                            const int xx = x + dx, yy = y + dy;
+
+                            if (xx >= 0 && xx < w && yy >= 0 && yy < h && mask[yy * w + xx] && dx * dx + dy * dy <= e * e + 1)
+                            {
+                                fat[y * w + x] = 1;
+                                break;
+                            }
+                        }
+            memcpy(mask, fat, (size_t)w * h);
+            free(fat);
         }
     }
     for (int y = 0; y < h; y++)
@@ -479,7 +503,7 @@ static bool BuildText(TextTex *tt, const char *text, int sc, int style)
 
 static bool BuildBadge(void)
 {
-    return BuildText(&sBravely, "BRAVELY", 3, 0) && BuildText(&sHd, "2D-HD", 2, 1);
+    return BuildText(&sBravely, "BRAVELY", 4, 0) && BuildText(&sHd, "2D-HD", 3, 1);
 }
 
 static bool Build(void)
@@ -773,7 +797,7 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         DeckGl_Set1i(sLyTex, 0);
         DeckGl_Set1f(sLyBias, 0.0f);
         glBindTexture(GL_TEXTURE_2D, sBravely.tex);
-        QuadT(300.0f - (float)sBravely.w, 242.0f - (float)sBravely.h * 0.5f, 300.0f, 242.0f + (float)sBravely.h * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, a);
+        QuadT(318.0f - (float)sBravely.w, 244.0f - (float)sBravely.h * 0.5f, 318.0f, 244.0f + (float)sBravely.h * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, a);
         glBindTexture(GL_TEXTURE_2D, sHd.tex);
         QuadT(690.0f, 262.0f - (float)sHd.h * 0.5f, 690.0f + (float)sHd.w, 262.0f + (float)sHd.h * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, a);
     }
