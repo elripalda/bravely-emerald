@@ -1,3 +1,3 @@
-# fresh start -> title: one START skips the intro (any key does, MainCB2_Intro), then nothing is pressed so the title runs.
+# fresh start -> title: one START at 9 s skips the intro (the leaves scene has no fade then) (any key does, MainCB2_Intro), then nothing is pressed so the title runs.
 # Phase 1 (logo) ~4.3 s, phase 2 ~2.4 s, then PRESS START. Shots come from DECK_SHOT (EXTRA_ENV), see docs/DECK_NOTES.md.
-3000 START 150
+9000 START 150
