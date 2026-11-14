@@ -793,8 +793,10 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
     const float camX = sinf(t * 0.10f) * 0.9f + sinf(t * 0.043f + 1.7f) * 0.5f;
     const float camY = sinf(t * 0.07f + 1.0f) * 0.7f;
     const float intro = DeckReveal_On() ? DeckReveal_Amount() : Smooth(0.0f, 1.8f, t);
-    const float tf = DeckReveal_SinceFlip(), tb = DeckReveal_SinceBadge();
-    const float dropU = Clamp01((tf - 0.12f) / 0.95f), bannerU = Clamp01((tf - 0.05f) / 1.0f);
+    const float tb = DeckReveal_SinceBadge();
+    // BRAVELY drops in and EMERALD VERSION is pushed down when PRESS START comes (the logo has finished its own slide then)
+    const float td = DeckReveal_On() ? (sPhase3At >= 0.0 ? (float)(now - sPhase3At) : -1.0f) : 1000.0f;
+    const float dropU = Clamp01((td - 0.45f) / 0.95f), bannerU = Clamp01((td - 0.35f) / 1.0f);
     const float bannerShift = 52.0f * (bannerU * bannerU * (3.0f - 2.0f * bannerU));
     const float p3 = sPhase3At >= 0.0 ? Smooth(0.0f, 1.6f, (float)(now - sPhase3At)) : 0.0f;
     const int fadeY = gPaletteFade.y;
@@ -944,12 +946,12 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
 
     // ---- BRAVELY plate: drops in from above over the logo's lower edge (the banner has moved down for it); then the
     // HD-2D crest in the top right with a sparkle. Both after the front layer, both fade with the game's palette fade.
-    if (phase >= 2 && tf > 0.0f)
+    if (phase >= 3 && td > 0.45f)
     {
         const float u = dropU, back = 1.2f, v = u - 1.0f;
         const float ease = 1.0f + (back + 1.0f) * v * v * v + back * v * v;
-        const float pw = (float)sPlateW * 0.56f, ph = (float)sPlateH * 0.56f;
-        const float cx = 480.0f - camX * 3.0f, cy = 199.0f - (1.0f - ease) * 120.0f;
+        const float pw = (float)sPlateW * 0.60f, ph = (float)sPlateH * 0.60f;
+        const float cx = 480.0f - camX * 3.0f, cy = 190.0f - (1.0f - ease) * 120.0f;
 
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         DeckGl_UseProgram(&sLayer);
