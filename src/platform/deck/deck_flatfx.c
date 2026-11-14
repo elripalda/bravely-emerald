@@ -10,9 +10,9 @@
 #include <string.h>
 
 // ---- Levels (LOW, MEDIUM, HIGH). Starting values, to tune by eye.
-static const float kBloomAmt[3]   = { 0.45f, 0.70f, 1.00f };  // added bloom, times the blurred bright part
-static const float kBloomThr[3]   = { 0.66f, 0.60f, 0.54f };  // luminance where the bright pass starts
-static const float kGlowAmt[3]    = { 0.00f, 0.30f, 0.50f };  // wide soft halo around bright, saturated shapes (sprites, logo)
+static const float kBloomAmt[3]   = { 0.18f, 0.28f, 0.40f };  // added bloom, times the blurred bright part
+static const float kBloomThr[3]   = { 0.80f, 0.76f, 0.72f };  // luminance where the bright pass starts
+static const float kGlowAmt[3]    = { 0.00f, 0.12f, 0.20f };  // wide soft halo around bright, saturated shapes (sprites, logo)
 static const float kVignette[3]   = { 0.14f, 0.22f, 0.32f };
 static const float kGrade[3]      = { 0.50f, 0.75f, 1.00f };  // split-tone strength
 static const float kSaturation[3] = { 1.04f, 1.08f, 1.12f };
@@ -83,7 +83,8 @@ static const char kCompositeFs[] =
     "    c = mix(c, c * tint, uA.w);\n"
     "    c = mix(vec3(l), c, uB.x);\n"
     "    c = mix(c, c * c * (3.0 - 2.0 * c), uB.y);\n"
-    "    c += texture2D(uBloom, vPos).rgb * uA.x + texture2D(uGlow, vPos).rgb * uA.y;\n"
+    "    vec3 bl = texture2D(uBloom, vPos).rgb * uA.x + texture2D(uGlow, vPos).rgb * uA.y;\n"
+    "    c += max(bl - c, 0.0);\n"
     "    c *= uB.w;\n"
     "    vec2 d = (vPos - 0.5) * vec2(uC.x, 1.0);\n"
     "    c *= 1.0 - uA.z * smoothstep(0.30, 1.05, length(d));\n"
