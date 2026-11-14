@@ -17,6 +17,7 @@
 #include "vita/vita_reset.h"
 #ifdef PLATFORM_DECK
 #include "deck/deck_ambient_game.h"
+#include "deck/deck_flatfx.h"
 #endif
 // Catch-up game frames run their scanline events without being drawn (see the main loop).
 #define VITA_SKIP_CATCHUP_DRAW
@@ -365,6 +366,10 @@ static void RenderGameTexture(void)
     glDisable(GL_BLEND);
     glDisable(GL_ALPHA_TEST);
     glEnable(GL_TEXTURE_2D);
+#ifdef PLATFORM_DECK
+    // Deck: the plain 2D picture (margins art and fades included) goes through the flat post pass (deck_flatfx.c)
+    const bool flatFx = DeckFlat_Begin();
+#endif
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -533,6 +538,10 @@ static void RenderGameTexture(void)
         if (Widescreen_StageFadesMargins())
             DrawStageMarginFade();
     }
+#endif
+#ifdef PLATFORM_DECK
+    if (flatFx)
+        DeckFlat_End();
 #endif
     glDepthMask(GL_FALSE);
 }
