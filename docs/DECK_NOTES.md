@@ -124,3 +124,26 @@ Screenshot: `spectacle -b -n -f -o file.png` on the Deck host (no import/xwd/scr
 - Finding: `VitaPlatform_ApplyTargetFramerate` (sdl2.c:1013) calls `eglSwapInterval` before the window exists; SDL answers -1 "Video subsystem has not been initialized". `DeckVideo_SetSwapInterval` therefore remembers an interval only after SDL accepted it, else the later real call at init would be skipped.
 - Present pacing (60 and 30 FPS) not yet measured: needs a human route (xdotool input is unreliable, spectacle steals focus). Run the brief's Step 7 by hand.
 - Measured with the autoplay harness (tools/deck/run_autoplay.sh): voxel_fps=1 presents at 16.67 ms (p95 16.85, p99 17.62), paced. voxel_fps=0 still presents at 16.67 ms: the interval-2 request only happens before the window exists and fails; nothing re-requests it after init. Needs a fix before the 30 FPS cap works on Deck.
+
+## Phase 1: post presets (2026-11-13)
+
+Task 5 was reduced to reading the code and recording state. No value was tuned and no human judged the look; Marcos will judge all of it in one pass later.
+
+Current values in `src/platform/deck/deck_post.c` (`kPresets`, columns grade, saturation, vignette, bloomGain, threshold, bloomPasses):
+- Low: 0.60, 1.04, 0.12, 0.0, 0.70, 1
+- Medium: 0.80, 1.06, 0.18, 3.0, 0.65, 1
+- High: 1.00, 1.12, 0.30, 5.0, 0.58, 2
+- `kShadowTint` (day, dusk, night): {0.94,0.97,1.06}, {1.02,0.90,1.08}, {0.86,0.92,1.12}
+- `kHighTint` (day, dusk, night): {1.04,1.01,0.95}, {1.10,0.97,0.84}, {0.97,1.00,1.05}
+
+Checked in code: Medium grade 0.80 is at most 0.85 (faithful plus), and Low `bloomGain` is 0, so Low never blooms (`DeckPost_Run` also skips the bloom passes when `light.bloom` is 0).
+
+Weather with `light.bloom > 0` (`BaseLightFor`, `voxel_renderer.c` lines 2825-2893): SUN 0.10, RAIN 0.08 + 0.30 * bolt (spikes at lightning), SAND 0.16, ASH 0.10, PARTICLES 0.12, SHADE 0.12. FOG and the default (indoor) case have no bloom (0.0).
+
+To judge later (Marcos):
+- Dusk and night grade looks heavily teal at the 19:19 clock; shots `.claude-logs/t4/q1.png` and `q2.png`.
+- Indoors the post passes `daylight=1, glow=0`, which selects the day tint, not a neutral one.
+- `Pass_DayNightGrade` (in-scene tint) stacks with the post grade, so the time-of-day grade is applied twice.
+- No noon shot has been taken yet.
+- The warp fade-to-black and fade-to-white tint check is not done (the autoplay script has no warp).
+- Rain with lightning: bloom spike following `bolt` not observed.
