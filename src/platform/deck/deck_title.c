@@ -383,7 +383,7 @@ static int Glyph(char c, uint8_t out[16][8])
             const uint16_t r = g[t * 8 + y];
 
             for (int x = 0; x < 8; x++)
-                out[(t / 2) * 8 + y][(t % 2) * 8 + x] = (x < 4) ? ((r >> (8 + 2 * x)) & 3) : ((r >> (2 * (x - 4))) & 3);
+                out[(t / 2) * 8 + y][(t % 2) * 8 + x] = (((x < 4) ? (r >> 8) : r) >> (6 - 2 * (x & 3))) & 3;   // high byte = left four pixels, leftmost in the top bits
         }
     return gFontNormalLatinGlyphWidths[id];
 }
