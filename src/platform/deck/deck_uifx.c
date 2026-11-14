@@ -14,12 +14,12 @@
 // over it (the lower, the more glass shows).
 static const int kGlassPasses[3] = { 1, 1, 2 };
 static const float kGlassStep[3] = { 0.8f, 1.2f, 1.6f };
-static const float kGlassBaseMix[3] = { 0.70f, 0.60f, 0.50f };
+static const float kGlassBaseMix[3] = { 0.85f, 0.78f, 0.68f };
 static const float kGlassEdge[3] = { 0.0f, 0.15f, 0.30f };
 static const int kGlassFill[3] = { 244, 232, 214 };
 // Tint: opacity of the gradient, drift speed (1 = about one slow sweep a minute), breathing, moving sheen band; fill alpha when
 // only the tint is on.
-static const float kTintAmt[3] = { 0.04f, 0.06f, 0.09f };
+static const float kTintAmt[3] = { 0.03f, 0.045f, 0.07f };
 static const float kTintSpeed[3] = { 0.25f, 0.80f, 1.20f };
 static const float kTintBreath[3] = { 0.0f, 1.0f, 1.0f };
 static const float kTintSheen[3] = { 0.0f, 0.0f, 0.0f };

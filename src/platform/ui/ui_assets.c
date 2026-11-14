@@ -249,7 +249,7 @@ int32_t UiText_Draw(uint8_t face, uint8_t px, int32_t x, int32_t y, const char *
             const uint32_t lum = ((rgba & 0xFF) * 299 + ((rgba >> 8) & 0xFF) * 587 + ((rgba >> 16) & 0xFF) * 114) / 1000;
             static const int8_t kRing[8][2] = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } };
 
-            if (lum > 128)
+            if (lum > 200)
             {
                 if (mode >= 2)
                     for (int i = 0; i < (mode == 2 ? 4 : 8); i++)
