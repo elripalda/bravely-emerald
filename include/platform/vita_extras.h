@@ -92,6 +92,7 @@ typedef enum
     FAST_EXTRA_VOXEL_PITCH,    // Deck camera tilt: 0 classic 40 deg, 1 36, 2 32 (default), 3 28, 4 24
     FAST_EXTRA_VOXEL_BUMP,     // Deck pseudo normal map: relief from the albedo luminance, lit by the sun (strength)
     FAST_EXTRA_VOXEL_SUNSHADOW,   // Deck sun shadow map (casters: trees, buildings, characters; resolved in the composite)
+    FAST_EXTRA_VOXEL_BATTLEFX,    // Deck battle effects: type hit flash, drift, motes, spotlight, weather, entry, low HP, aberration
     FAST_EXTRA_VOXEL_BATTLEDIM,   // Deck 3D battle backdrop: blur radius and black overlay opacity
     FAST_EXTRA_VOXEL_GROUNDRELIEF,   // Deck ground micro-relief: procedural height by ground kind plus undulation, shading only
     FAST_EXTRA_VOXEL_UIGLOW,   // Deck UI depth glow: faint dark halo under the UI (UI passes only)

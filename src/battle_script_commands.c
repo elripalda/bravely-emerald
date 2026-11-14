@@ -5618,6 +5618,18 @@ static void Cmd_hitanimation(void)
     }
     else if (!(gHitMarker & HITMARKER_IGNORE_SUBSTITUTE) || !(gBattleMons[gActiveBattler].status2 & STATUS2_SUBSTITUTE) || gDisableStructs[gActiveBattler].substituteHP == 0)
     {
+#ifdef PLATFORM_DECK
+        // voxel_battlefx: the move's type (a dynamic type such as Hidden Power or Weather Ball wins), the struck battler, crit and size
+        {
+            extern void DeckBattleFx_Hit(u8 moveType, u8 targetBattler, bool8 crit, u16 damage, u16 targetMaxHp);
+            u8 moveType = gBattleMoves[gCurrentMove].type;
+
+            if (gBattleStruct->dynamicMoveType)
+                moveType = gBattleStruct->dynamicMoveType & 0x3F;
+            DeckBattleFx_Hit(moveType, gActiveBattler, (gMoveResultFlags & MOVE_RESULT_CRITICAL_HIT) != 0,
+                             gBattleMoveDamage > 0 ? (u16)gBattleMoveDamage : 0, gBattleMons[gActiveBattler].maxHP);
+        }
+#endif
         BtlController_EmitHitAnimation(B_COMM_TO_CONTROLLER);
         MarkBattlerForControllerExec(gActiveBattler);
         gBattlescriptCurrInstr += 2;

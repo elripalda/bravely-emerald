@@ -123,6 +123,7 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_uiglow") == 0) return FAST_EXTRA_VOXEL_UIGLOW;
         if (strcmp(key, "voxel_groundrelief") == 0) return FAST_EXTRA_VOXEL_GROUNDRELIEF;
         if (strcmp(key, "voxel_battledim") == 0) return FAST_EXTRA_VOXEL_BATTLEDIM;
+        if (strcmp(key, "voxel_battlefx") == 0) return FAST_EXTRA_VOXEL_BATTLEFX;
         if (strcmp(key, "voxel_sunshadow") == 0) return FAST_EXTRA_VOXEL_SUNSHADOW;
 #endif
         break;
@@ -340,6 +341,7 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS", "UI DEPTH GLOW", "voxel_uiglow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "GROUND DETAIL", "voxel_groundrelief", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "BATTLE BACKDROP", "voxel_battledim", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "BATTLE EFFECTS", "voxel_battlefx", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "SUN SHADOWS", "voxel_sunshadow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "LIGHT SHAFTS",     "voxel_shafts", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "TILT-SHIFT",       "voxel_tiltshift", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },

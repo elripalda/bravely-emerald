@@ -155,6 +155,10 @@ static const char kCompositeBody[] =
     "uniform float uVignette;\n"
     "uniform float uAspect;\n"
     "uniform vec2 uBack;   // battle backdrop: x blur amount, y black overlay opacity\n"
+    "uniform vec4 uBF0;    // battle fx: x hit tint, y aberration (uv), z crit flash, w low HP\n"
+    "uniform vec4 uBF1;    // rgb hit tint colour, w entry\n"
+    "uniform vec4 uBF2;    // xy hit centre (uv, y up), z radius (height units)\n"
+    "uniform vec4 uBF3;    // xy drift and shake offset (uv), z zoom\n"
     "#ifdef POST_X\n"
     "uniform sampler2D uDepth;\n"
     "uniform vec4 uTilt;   // x on, y focus distance, z max radius (fraction of the height), w taps\n"
@@ -174,7 +178,8 @@ static const char kCompositeBody[] =
     "#endif\n"
     "varying vec2 vPos;\n"
     "void main() {\n"
-    "    vec3 c = texture2D(uScene, vPos).rgb;\n"
+    "    vec2 sp = clamp(vec2(0.5) + (vPos - 0.5) / uBF3.z + uBF3.xy, 0.0, 1.0);\n"
+    "    vec3 c = texture2D(uScene, sp).rgb;\n"
     "#ifdef POST_X\n"
     "    if (uTilt.x > 0.5) {\n"
     "        float d = texture2D(uDepth, vPos).r;\n"
@@ -252,8 +257,27 @@ static const char kCompositeBody[] =
     "    }\n"
     "    c += texture2D(uBloom, vPos).rgb * uBloomAmt;\n"
     "    if (uBack.x > 0.0) {\n"
-    "        c = mix(c, texture2D(uBlur, vPos).rgb, uBack.x);\n"
+    "        c = mix(c, texture2D(uBlur, sp).rgb, uBack.x);\n"
     "        c *= 1.0 - uBack.y;\n"
+    "    }\n"
+    // Battle effects: only the backdrop is in this picture (the battlers, HP boxes and text are the overlay, drawn after it).
+    "    if (uBF0.x + uBF0.y + uBF0.z + uBF0.w + uBF1.w > 0.0) {\n"
+    "        vec2 asp = vec2(uAspect, 1.0);\n"
+    "        if (uBF0.y > 0.0) {\n"                                                        // RGB split along the line from the hit
+    "            vec2 dir = normalize(sp - uBF2.xy + vec2(1.0e-4)) * uBF0.y;\n"
+    "            vec2 sr = clamp(sp + dir, 0.0, 1.0);\n"
+    "            vec2 sb = clamp(sp - dir, 0.0, 1.0);\n"
+    "            c.r = mix(texture2D(uScene, sr).r, texture2D(uBlur, sr).r, uBack.x) * (1.0 - uBack.y);\n"
+    "            c.b = mix(texture2D(uScene, sb).b, texture2D(uBlur, sb).b, uBack.x) * (1.0 - uBack.y);\n"
+    "        }\n"
+    "        float hd = length((vPos - uBF2.xy) * asp);\n"
+    "        c += uBF1.rgb * (uBF0.x * 0.45 * exp(-hd * hd / max(uBF2.z * uBF2.z, 1.0e-4)));\n"    // type coloured flash
+    "        c += vec3(uBF0.z);\n"                                                          // crit: quick white flash
+    "        float lum = dot(c, vec3(0.299, 0.587, 0.114));\n"
+    "        c = mix(c, vec3(lum), 0.4 * uBF0.w);\n"                                          // low HP: mild desaturation
+    "        float edge = smoothstep(0.30, 0.95, length((vPos - 0.5) * asp));\n"
+    "        c = mix(c, c * vec3(1.0, 0.3, 0.26) + vec3(0.30, 0.0, 0.02) * edge, edge * uBF0.w);\n"   // red edge pulse
+    "        c += vec3(0.20, 0.19, 0.17) * uBF1.w * (1.0 - edge);\n"                          // battle start: a soft light burst
     "    }\n"
     "#ifdef POST_X\n"
     "    if (uShaft.x > 0.0)\n"
@@ -290,7 +314,7 @@ static void DeleteTargets(void);
 static bool CreateLut(void);
 static bool sXOk;      // the composite with POST_X built
 static bool sSunOk;    // the composite has the sun shadow resolve (POST_SUN)
-static GLint sCBack;
+static GLint sCBack, sCBF0, sCBF1, sCBF2, sCBF3;
 static GLint sCSunMap, sCInvVP, sCSunVP, sCSunA, sCSunB, sCSunL;
 static bool sShaftOk;  // the shaft program built and the composite has POST_X
 static DeckGlProgram sShaft;
@@ -399,6 +423,10 @@ static bool BuildPrograms(void)
     sCVignette = DeckGl_Uniform(&sComposite, "uVignette");
     sCAspect = DeckGl_Uniform(&sComposite, "uAspect");
     sCBack = DeckGl_Uniform(&sComposite, "uBack");
+    sCBF0 = DeckGl_Uniform(&sComposite, "uBF0");
+    sCBF1 = DeckGl_Uniform(&sComposite, "uBF1");
+    sCBF2 = DeckGl_Uniform(&sComposite, "uBF2");
+    sCBF3 = DeckGl_Uniform(&sComposite, "uBF3");
     sCDepth = DeckGl_Uniform(&sComposite, "uDepth");   // -1 in the plain composite (setters ignore it)
     sCTilt = DeckGl_Uniform(&sComposite, "uTilt");
     sCZ = DeckGl_Uniform(&sComposite, "uZ");
@@ -577,7 +605,7 @@ bool DeckPost_WantScene(int renderW, int renderH, bool indoor, bool battle)
     if (!c.shaders)
         return false;
     if (battle)
-        return c.dimLvl >= 0; // the battle only gets the backdrop blur and dim
+        return c.dimLvl >= 0 || DeckBattleFx_Enabled(); // the battle only gets the backdrop blur and dim and the battle effects
     return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor) || (c.shafts && sShaftOk) || (c.lut && sLutOk) || (c.sun && sSunOk);
 }
 
@@ -873,6 +901,22 @@ void DeckPost_Run(const DeckPostFrame *in)
     DeckGl_Set1f(sCBloomAmt, doBloom ? in->bloom * bloomGain * keep : 0.0f);
     DeckGl_Set1f(sCBlurOn, doBlur ? 1.0f : 0.0f);
     DeckGl_Set2f(sCBack, doBack ? keep : 0.0f, doBack ? kBackDim[backLvl] * keep : 0.0f);
+    if (in->battle && in->bfxOn)
+    {
+        const DeckBattleFxFrame *const b = &in->bfx;
+
+        DeckGl_Set4f(sCBF0, b->hit, b->aberration, b->flash, b->low);
+        DeckGl_Set4f(sCBF1, b->tint[0], b->tint[1], b->tint[2], b->entry);
+        DeckGl_Set4f(sCBF2, b->center[0], b->center[1], b->radius, 0.0f);
+        DeckGl_Set4f(sCBF3, b->offset[0], b->offset[1], b->zoom, 0.0f);
+    }
+    else
+    {
+        DeckGl_Set4f(sCBF0, 0.0f, 0.0f, 0.0f, 0.0f);
+        DeckGl_Set4f(sCBF1, 0.0f, 0.0f, 0.0f, 0.0f);
+        DeckGl_Set4f(sCBF2, 0.5f, 0.5f, 0.1f, 0.0f);
+        DeckGl_Set4f(sCBF3, 0.0f, 0.0f, 1.0f, 0.0f);
+    }
     // Legacy band height: VOXEL_DOF_*_ROWS * (renderH / 544) / renderH = rows / 544.
     DeckGl_Set4f(sCDof, in->dofTopRows / 544.0f, in->dofBottomRows / 544.0f, in->dofTopAlpha * blurMul, in->dofBottomAlpha * blurMul);
     DeckGl_Set1f(sCGradeAmt, cfg.grade ? pr->grade * keep : 0.0f);

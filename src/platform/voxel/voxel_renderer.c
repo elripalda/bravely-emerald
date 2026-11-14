@@ -37,6 +37,7 @@
 #include "../deck/deck_chars.h"
 #include "../deck/deck_sunshadow.h"
 #include "../deck/deck_uiglow.h"
+#include "../deck/deck_battlefx.h"
 #endif
 
 static int32_t sFrameDrawCalls = 0;
@@ -3727,6 +3728,7 @@ bool VoxelRenderer_Init(void)
     // RGBA8 scene target and post chain (deck_post.c); the legacy FBOs above stay the fallback.
     DeckPost_Init(VOXEL_DIORAMA_FBO_W, VOXEL_DIORAMA_FBO_H);
     DeckSway_Init();
+    DeckBattleFx_Init();
     DeckRain_Init();
     DeckParticles_Init();
     DeckChars_Init();
@@ -3802,6 +3804,7 @@ void VoxelRenderer_Shutdown(void)
 #ifdef PLATFORM_DECK
     DeckPost_Shutdown();
     DeckSway_Shutdown();
+    DeckBattleFx_Shutdown();
     DeckRain_Shutdown();
     DeckParticles_Shutdown();
     DeckChars_Shutdown();
@@ -6004,7 +6007,10 @@ static void Pass_DeckPost(const VoxelFrame *const f)
     in.dofBottomRows = VOXEL_DOF_BOTTOM_ROWS;
     in.dofTopAlpha = VOXEL_DOF_TOP_ALPHA;
     in.dofBottomAlpha = VOXEL_DOF_BOTTOM_ALPHA;
+    in.bfxOn = in.battle && DeckBattleFx_Begin(in.time, in.fade, &in.bfx);
     DeckPost_Run(&in);
+    if (in.battle)
+        DeckBattleFx_DrawBackdrop(in.time, in.fade); // after the post composite, before Pass_Overlay2D (battlers, HP boxes, text)
 }
 #endif
 

@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "deck_sunshadow.h"
+#include "deck_battlefx.h"
 
 // Deck post chain on an RGBA8 scene target: bloom, time-of-day grade, vignette, smooth DoF.
 // GL (Core 0) thread only. The legacy diorama FBO and Pass_DepthOfField stay the fallback.
@@ -21,7 +22,9 @@ typedef struct
     float sunAmount;       // 0..1 shaft strength: sun and daylight, 0 at night, indoors, in rain, fog, sand, ash
     float zNear, zFar;     // projection planes of the scene (depth texture linearisation)
     float focusDist;       // eye to target distance (view-space depth of the focus plane), 0 = unknown
-    bool battle;           // a 3D battle: only the backdrop blur and dim (voxel_battledim)
+    bool battle;           // a 3D battle: only the backdrop blur and dim (voxel_battledim) and the battle effects (voxel_battlefx)
+    bool bfxOn;            // bfx below is this frame's battle effect composite parameters
+    DeckBattleFxFrame bfx;
     const DeckSunResolve *sun; // this frame's sun shadow map (NULL: none)
     float dofTopRows, dofBottomRows, dofTopAlpha, dofBottomAlpha; // VOXEL_DOF_* (voxel_tuning.h:89-92)
 } DeckPostFrame;
