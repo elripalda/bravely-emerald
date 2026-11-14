@@ -54,3 +54,10 @@ present_ms percentiles (n=10771): p50 16.67  p95 16.83  p99 17.05
 Verdict: 60 FPS mode is paced to the display (present p50 16.67 ms, vsync took: SDL_GL_SetSwapInterval(1)=0, Get=1, x11/Xwayland).
 30 FPS mode is NOT: present stays 16.67 ms. Log has only a failed pre-window 'swap interval 2' (-1, video not initialised) followed by the init 'interval 1'; no later interval-2 request occurs on Deck.
 Overworld reached: 10.8k 3D frames, chunk builds, [AUTOPLAY] fire lines in debug.log. 15 s screenshot shows the Continue menu; end screenshot is black (spectacle cannot capture the GL window).
+
+== phase 1 compare ==
+Phase 1 perf compare: DEFERRED to the end (user ruling)
+Numbers already taken (autoplay field.txt, voxel_fps=1, not a full compare):
+- p1-t6 (75 s, voxel_shaders=1 quality=1 blur=1): frame ms p99 16.68, present p50 16.67 p99 17.11, present over 17.5 ms 0.21%, post CPU avg 0.326 ms, post GPU avg 0.288 ms (max 0.903). Under the 1.0 ms limit.
+- p1-legacy (120 s, voxel_shaders=0 blur=1): frame ms p99 16.90, present p50 16.67 p99 17.06, present over 17.5 ms 0.25%. The low/medium/high runs were not made.
+Deck dirs: /run/media/deck/SD512/emerald-deck/perf/p1-t6 and p1-legacy.
