@@ -10,16 +10,19 @@
 extern u8 gDeckTitlePhase;
 extern u8 gDeckIntroSegment;
 
-// Title: the main flash fires this long after the version banner has landed (the banner slides in during phase 2, about
-// 1.1 s), or at once when START skipped to PRESS START. The badge flash follows the main one.
-#define TITLE_FLASH_AFTER_BANNER 1.3
+// Title: the main flash fires this long after the title started (the logo is on screen from about 0.3 s), or at once when
+// START skipped to PRESS START. The badge flash follows the main one. The version banner slides in later (phase 2, about
+// 4.6 s) and lands already pushed down.
+#define TITLE_FLASH_AT 3.0
 #define TITLE_BADGE_AFTER_FLIP 2.2
 #define FLASH_RISE 0.14
 #define FLASH_FALL 0.95
 #define EFFECT_FADE_IN 1.4
-// Intro scenes (gDeckIntroSegment 1..8): length in seconds, the flash fires at the middle. 1 Game Freak logo and leaves,
-// 2 bike ride, 3 Poke Ball, 4 Groudon, 5 Kyogre, 6 clouds, 7 lightning, 8 Rayquaza. Measured in the [REVEAL] log lines.
-static const double kSegLen[9] = { 0.0, 16.8, 15.0, 4.0, 10.0, 10.0, 6.0, 6.0, 10.0 };
+// Intro scenes (gDeckIntroSegment 1..8): seconds after the scene start at which the flash fires (the middle of the scene,
+// -1 = none: the Poke Ball and lightning cuts are about a second or two, a flash there would only strobe). Real lengths from
+// the [REVEAL] log lines of a run: 1 Game Freak logo and leaves 18.3 s, 2 bike ride 17.4, 3 Poke Ball 0.7, 4 Groudon 2.3,
+// 5 Kyogre 4.1, 6 clouds 3.0, 7 lightning 2.0, 8 Rayquaza 3.5.
+static const double kSegFlash[9] = { -1.0, 9.1, 8.7, -1.0, 1.15, 2.0, 1.5, -1.0, 1.7 };
 
 static bool sEnvRead, sEnvOff;
 static int sCtx = -1;             // 0 none, 1..8 intro segment, 100 title
@@ -63,18 +66,17 @@ void DeckReveal_Frame(void)
     {
         if (gDeckTitlePhase >= 2 && sPhase2At < 0.0)
             sPhase2At = sNow;
-        if (sFlipAt < 0.0 && gDeckTitlePhase != 4
-            && (gDeckTitlePhase >= 3 || (sPhase2At >= 0.0 && sNow - sPhase2At >= TITLE_FLASH_AFTER_BANNER)))
+        if (sFlipAt < 0.0 && gDeckTitlePhase != 4 && (gDeckTitlePhase >= 3 || sNow - sStart >= TITLE_FLASH_AT))
         {
             sFlipAt = sNow + FLASH_RISE;
             sBadgeAt = sFlipAt + TITLE_BADGE_AFTER_FLIP;
             DeckGl_Log("[REVEAL] title flash at t=%.2f (phase %d)\n", sFlipAt - sStart, gDeckTitlePhase);
         }
     }
-    else if (ctx >= 1 && sFlipAt < 0.0)
+    else if (ctx >= 1 && sFlipAt < 0.0 && kSegFlash[ctx] >= 0.0)
     {
-        sFlipAt = sStart + kSegLen[ctx] * 0.5;
-        DeckGl_Log("[REVEAL] intro scene %d flash planned at +%.1f s\n", ctx, sFlipAt - sStart);
+        sFlipAt = sStart + kSegFlash[ctx];
+        DeckGl_Log("[REVEAL] intro scene %d flash planned at +%.2f s\n", ctx, sFlipAt - sStart);
     }
 }
 
