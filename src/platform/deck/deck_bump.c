@@ -37,7 +37,7 @@ static const char *kBumpGlsl =
     "}\n"
     // Fine grain in world space (noise frequencies per tile; fixed world scale, not screen scale, so nothing shimmers when walking).
     // Was (before the "much smaller" round): grass 1.5 and 3.6, sand 5.5 and 0.9, path 9 and 17, undulation 0.16 and 0.07 at 2.2 and 1.2.
-    // Now: grass 5 and 12, sand 15 and 3, path 18 and 29; the undulation is x0.04. The finest octave of each kind fades out when it
+    // Now: grass 5 and 12, sand 15 and 3, path 18 and 29; the undulation keeps its scales (0.16, 0.07) at x0.25 amplitude. The finest octave of each kind fades out when it
     // gets near the pixel size (aa), so it cannot alias.
     "float dgHeight(vec2 w, vec3 k, float fp) {\n"       // k: grass, sand, path weights; fp: tiles per pixel
     "    float a2 = 1.0 - smoothstep(0.25, 0.55, 12.0 * fp);\n"
@@ -47,7 +47,7 @@ static const char *kBumpGlsl =
     "    float p = dgNoise(w * 18.0) * 0.7 + (dgNoise(w * 29.0) * a3 + 0.5 * (1.0 - a3)) * 0.3;\n"
     "    return k.x * g + k.y * r + k.z * p;\n"
     "}\n"
-    "float dgUndulation(vec2 w) { return (dgNoise(w * 0.16) * 2.2 + dgNoise(w * 0.07 + 5.0) * 1.2) * 0.04; }\n"
+    "float dgUndulation(vec2 w) { return (dgNoise(w * 0.16) * 2.2 + dgNoise(w * 0.07 + 5.0) * 1.2) * 0.25; }\n"
     "float deckGroundMul(vec2 w, vec3 base, vec3 vcol, vec3 eye) {\n"
     "    vec3 dp1 = dFdx(eye);\n"             // derivatives outside any branch
     "    vec3 dp2 = dFdy(eye);\n"
