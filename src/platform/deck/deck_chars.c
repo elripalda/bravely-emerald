@@ -4,6 +4,7 @@
 #include <string.h>
 #include "deck_chars.h"
 #include "deck_levels.h"
+#include "deck_bump.h"
 #include "../voxel/voxel_entities.h"
 #include "deck_gl_shader.h"
 #include "platform/vita_extras.h"
@@ -13,9 +14,11 @@ static const char *kOutVs =
     "#version 120\n"
     "varying vec2 vUv;\n"
     "varying vec4 vCol;\n"
+    "varying vec3 vEye;\n"
     "void main() {\n"
     "    vUv = gl_MultiTexCoord0.xy;\n"
     "    vCol = gl_Color;\n"
+    "    vEye = (gl_ModelViewMatrix * gl_Vertex).xyz;\n"
     "    gl_Position = ftransform();\n"
     "}\n";
 
@@ -29,22 +32,28 @@ static const char *kOutFs =
     "uniform vec2 uParams;\n"       // outline alpha, rim strength
     "varying vec2 vUv;\n"
     "varying vec4 vCol;\n"
+    "varying vec3 vEye;\n"
     "void main() {\n"
     "    vec4 c = texture2D(uTex, vUv);\n"
     "    if (c.a > 0.5) {\n"
+    "        float bm = 1.0;\n"
+    "#ifdef DECK_BUMP\n"
+    "        bm = deckBumpMul(uTex, vUv, c.rgb, vCol.rgb, vEye);\n"   // the card faces the camera: its normal tilts by the height gradient
+    "#endif\n"
     "        float toSun = texture2D(uTex, vUv + uSunDir * uTexel).a;\n"
     "        float rim = (1.0 - step(0.5, toSun)) * uParams.y;\n"
-    "        vec3 rgb = c.rgb * vCol.rgb + vec3(0.34, 0.24, 0.10) * rim * vCol.rgb;\n"
+    "        vec3 rgb = c.rgb * vCol.rgb * bm + vec3(0.34, 0.24, 0.10) * rim * vCol.rgb;\n"
     "        gl_FragColor = vec4(min(rgb, vec3(1.0)), c.a * vCol.a);\n"
     "        return;\n"
     "    }\n"
     "    float n = max(max(texture2D(uTex, vUv + vec2(uTexel.x, 0.0)).a, texture2D(uTex, vUv - vec2(uTexel.x, 0.0)).a),\n"
     "                  max(texture2D(uTex, vUv + vec2(0.0, uTexel.y)).a, texture2D(uTex, vUv - vec2(0.0, uTexel.y)).a));\n"
-    "    if (n < 0.5) discard;\n"
+    "    if (n < 0.5 || uParams.x <= 0.0) discard;\n"
     "    gl_FragColor = vec4(vec3(0.04, 0.06, 0.13) * vCol.rgb, uParams.x * vCol.a);\n"
     "}\n";
 
 static DeckGlProgram sOut;
+static DeckBumpUniforms sOBump;
 static GLint sOTex = -1, sOTexel = -1, sOSun = -1, sOParams = -1;
 static bool sBlend = false;
 
@@ -89,7 +98,7 @@ void DeckChars_Init(void)
 {
     sOut.program = 0;
     sBlob.program = 0;
-    if (DeckGl_BuildProgram(&sOut, "char-outline", kOutVs, kOutFs))
+    if (DeckBump_Build(&sOut, &sOBump, "char-outline", kOutVs, kOutFs))
     {
         sOTex = DeckGl_Uniform(&sOut, "uTex");
         sOTexel = DeckGl_Uniform(&sOut, "uTexel");
@@ -115,13 +124,15 @@ bool DeckChars_OutlineBegin(float sunDx, float sunDz, float sunStrength)
 {
     const float lvl = DeckLevelPick(FAST_EXTRA_VOXEL_OUTLINE, 0.5f, 1.0f, 1.0f);
 
-    if (sOut.program == 0 || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || lvl <= 0.0f)
+    // The program also runs for the relief alone (outline OFF): outline alpha and rim 0, clear texels discarded
+    if (sOut.program == 0 || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || (lvl <= 0.0f && !(sOBump.ok && DeckBump_Enabled())))
         return false;
     DeckGl_UseProgram(&sOut);
     DeckGl_Set1i(sOTex, 0);
     DeckGl_Set2f(sOTexel, 1.0f / (float)VOXEL_SPRITE_ATLAS_W, 1.0f / (float)VOXEL_SPRITE_ATLAS_H);
     DeckGl_Set2f(sOSun, sunDx > 0.0f ? -1.0f : 1.0f, sunDz > 0.0f ? 1.0f : -1.0f);
-    DeckGl_Set2f(sOParams, 0.62f, 0.9f * sunStrength * lvl);
+    DeckGl_Set2f(sOParams, lvl > 0.0f ? 0.62f : 0.0f, 0.9f * sunStrength * lvl);
+    DeckBump_Set(&sOBump, (float)VOXEL_SPRITE_ATLAS_W, (float)VOXEL_SPRITE_ATLAS_H, 0.0f);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     sBlend = true;
