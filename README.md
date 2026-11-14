@@ -1,5 +1,152 @@
 # Pokémon Emerald Vita 3DS
 
+## Steam Deck and Windows ports
+
+This fork adds **native Steam Deck (Linux) and Windows builds** of the voxel Pokémon Emerald port,
+and a visual upgrade that only the Deck and Windows builds have. Same game, same save: the 3D
+voxel overworld and 3D battles of the Vita port, drawn through a new post-processing chain, with
+weather, sound and menu effects on top. It is not an emulator: the decompiled game is compiled to
+32-bit x86 and an SDL2 + OpenGL platform layer supplies the GBA hardware.
+
+**No game data is in this repository and no builds are distributed.** You make your own build from
+a dump of **your own Pokémon Emerald cartridge** with one script (see [Build](#build)).
+
+### Screenshots
+
+Real captures from a Steam Deck (1280×800, effects on HIGH unless noted).
+
+| | |
+|---|---|
+| ![Title screen](docs/screens/title_hd2d.jpg) | ![Title reveal](docs/screens/title_reveal.jpg) |
+| New BRAVELY EMERALD title: the game's own logo and banner with the new lettering, markings and sky. | The reveal: the logo shines in as the flat GBA picture becomes the HD-2D one. |
+| ![Littleroot](docs/screens/town_littleroot.jpg) | ![Tilt-shift town](docs/screens/town_tiltshift.jpg) |
+| Littleroot Town: wooden zone sign, flowers, standing grass, follower, soft shadows and colour grade. | Tilt-shift depth of field and relief on roofs and walls, looking down the street. |
+| ![Battle](docs/screens/battle_hd.jpg) | ![Settings](docs/screens/ui_settings_high.png) |
+| A 3D wild battle: the stage blurred and dimmed behind the sharp GBA battlers, HP boxes and text. | OPTIONS > WORLD > EFFECTS: every effect has its own row (OFF, AUTO, LOW, MEDIUM, HIGH). |
+| ![Before](docs/screens/before_legacy.png) | ![After](docs/screens/after_high.png) |
+| Before: the plain voxel picture of the Vita port. | After: the same spot with the new effects on HIGH and a lower camera tilt. |
+| ![Dusk](docs/screens/rays_dusk_final_gain.png) | |
+| Dusk grade and light shafts, effects on HIGH. | |
+
+### What it adds (Deck and Windows)
+
+Every effect can be switched off (or set to LOW, MEDIUM, HIGH) from OPTIONS; with everything OFF the
+old picture comes back.
+
+- **Post chain**: bloom, colour grade, a time-of-day LUT grade with an S-curve, vignette,
+  tilt-shift depth of field that follows the real scene depth, and a selectable scene resolution
+  (960, 1120 or 1280 wide). Camera tilt is a setting: CLASSIC (40 degrees), 36, 32, 28 or 24.
+- **Light**: sun and moon rays (light shafts) drawn at the angle of the sun or moon for the time of
+  day, a real sun shadow map (the baked shadow rays are skipped while it is on), soft blob shadows
+  under characters, and a character outline with a warm rim.
+- **Surfaces**: relief (a pseudo normal map from the texture art) and ground detail (grass clumps,
+  sand ripples, path grain), indoor floors included.
+- **Nature**: wind sway on trees and small plants, standing tall grass that bends where the player
+  walks, procedural flowers, rain (streaks, wet ground, mist, splashes), pollen, fireflies and
+  leaves, water glints.
+- **Sound**: a procedural ambient bed (wind, rain, waves, crickets, birds, cave drips, thunder) with
+  its own volume (OFF, LOW, MEDIUM, HIGH) and frequency (SPARSE, NORMAL, FREQUENT) rows.
+- **Battle**: the 3D backdrop is blurred and dimmed behind the GBA battlers and HP boxes, and move
+  hits add a type-coloured flash, glow and screen shake on big hits.
+- **Interface polish** (OPTIONS > GENERAL > INTERFACE, original art kept): frosted panel glass,
+  time-of-day panel tint, text clarity shadows, a pulsing menu cursor with a sliding trail, menu
+  open and close animation, smooth HP and EXP bars, button glyphs (GBA letters or A / B / X / Y in the
+  Deck colours), a wide-layout shadow and, in WORLD, a depth glow behind the UI.
+- **Title and intro**: the new BRAVELY EMERALD title (lettering in Cinzel, SIL OFL), the reveal
+  flash that turns each flat intro picture into the HD-2D one, and intro and menu effects.
+- **Platform**: 32-bit static SDL2, controller input, 960×544 picture letterboxed to the screen,
+  saves and settings in `userdata/` beside the program.
+
+Details and the constants behind every effect: [docs/DECK_NOTES.md](docs/DECK_NOTES.md).
+
+### Settings reference
+
+Settings live in `userdata/settings.txt` (`key=value`) and in START > OPTIONS. Level rows store
+`0` OFF, `1` AUTO (follows EFFECTS PRESET), `2` LOW, `3` MEDIUM, `4` HIGH; any other value counts as
+AUTO. Defaults are AUTO unless stated. Rows are those of `src/platform/vita/vita_extras.c`.
+
+| Tab > group | Menu row | Key | Values |
+|---|---|---|---|
+| GENERAL > SOUND | AMBIENT VOLUME | `ambient_level` | OFF, LOW, MEDIUM (default), HIGH |
+| GENERAL > SOUND | AMBIENT FREQUENCY | `ambient_density` | SPARSE (default), NORMAL, FREQUENT |
+| GENERAL > INTERFACE | PANEL GLASS, PANEL TINT, TEXT CLARITY, MENU CURSOR, MENU ANIMATION, HP BARS, WIDE UI LAYOUT | `voxel_uiglass`, `voxel_uitint`, `voxel_uitext`, `voxel_uisel`, `voxel_uianim`, `voxel_uibars`, `voxel_uilayout` | levels |
+| GENERAL > INTERFACE | BUTTON ICONS | `voxel_uiglyphs` | OFF (port circles), GBA, DECK (default) |
+| WORLD > RENDERER | 3D VOXEL DIORAMA | `voxel_3d` | OFF, ON (default) |
+| WORLD > RENDERER | DIORAMA BLUR (DOF) | `voxel_blur` | levels |
+| WORLD > RENDERER | TARGET FRAMERATE | `voxel_fps` | 30 (default), 60 (stored `0`, `1`) |
+| WORLD > EFFECTS | EFFECTS PRESET | `voxel_quality` | LOW, MEDIUM (default), HIGH (stored `0`, `1`, `2`) |
+| WORLD > EFFECTS | SHADERS | `voxel_shaders` | OFF (whole legacy path), ON (default) |
+| WORLD > EFFECTS | COLOR GRADE, LUT GRADE | `voxel_grade`, `voxel_lut` | levels |
+| WORLD > EFFECTS | BLOOM, TILT-SHIFT, 3D RESOLUTION | `voxel_bloom`, `voxel_tiltshift`, `voxel_res` | levels |
+| WORLD > EFFECTS | LIGHT SHAFTS, SUN SHADOWS, SOFT SHADOWS | `voxel_shafts`, `voxel_sunshadow`, `voxel_shadow` | levels |
+| WORLD > EFFECTS | RELIEF (BUMP), GROUND DETAIL | `voxel_bump`, `voxel_groundrelief` | levels |
+| WORLD > EFFECTS | WIND SWAY, GRASS & FLOWERS | `voxel_sway`, `voxel_grass` | levels |
+| WORLD > EFFECTS | RAIN STREAKS, WET GROUND, RAIN MIST, RAIN SPLASHES | `voxel_rain`, `voxel_wet`, `voxel_mist`, `voxel_splash` | levels |
+| WORLD > EFFECTS | PARTICLES, WATER GLINTS, CHARACTER OUTLINE | `voxel_particles`, `voxel_glint`, `voxel_outline` | levels |
+| WORLD > EFFECTS | BATTLE BACKDROP, BATTLE EFFECTS | `voxel_battledim`, `voxel_battlefx` | levels |
+| WORLD > EFFECTS | UI DEPTH GLOW | `voxel_uiglow` | levels |
+| WORLD > EFFECTS | INTRO EFFECTS | `voxel_flatfx` | levels |
+| WORLD > EFFECTS | TITLE SCREEN | `voxel_title` | ORIGINAL, HD-2D (default) |
+| WORLD > EFFECTS | REVEAL FLASH | `voxel_reveal` | OFF, ON (default) |
+| WORLD > EFFECTS | CAMERA TILT | `voxel_pitch` | CLASSIC, 36, 32 (default), 28, 24 (stored `0` to `4`) |
+
+What each level changes, row by row: [docs/DECK_NOTES.md](docs/DECK_NOTES.md#settings-levels-and-camera-tilt-2026-11-14).
+The original (pre-upgrade) look: every effect key `0`, `voxel_res=0`, `voxel_pitch=0`.
+
+### Build
+
+**Steam Deck** (Desktop Mode, no root needed): clone the repository, then
+
+```sh
+bash tools/deck/build_deck.sh --rom /path/to/your/emerald.gba
+```
+
+It creates an Arch distrobox container, builds the 32-bit libraries and the game, and leaves a
+launcher you can add to Steam. Step by step, with Game Mode, saves and troubleshooting:
+[docs/BUILD_DECK.md](docs/BUILD_DECK.md).
+
+**Windows** (32-bit build with MSYS2): get the game files once with `fetch_assets.sh`, then run
+`tools\windows\build.bat`. See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md).
+
+**PS Vita**: `build_all.ps1`, see [Build your own VPK](#build-your-own-vpk).
+
+### Performance
+
+Measured on the Steam Deck, see [docs/results/deck-visual-phase1-perf.txt](docs/results/deck-visual-phase1-perf.txt):
+before the post effects were added, a 200 s scripted run in the 60 FPS mode presented a frame every
+16.67 ms (p99 17.62 ms, 1.2 percent of frames over 17.5 ms). Frame timing with the effects on has
+not been measured yet.
+
+### Known issues and unverified
+
+From [docs/HANDOFF.md](docs/HANDOFF.md) and [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md):
+
+- Not measured or not checked: frame timing with the effects on, real vsync, the 30 FPS mode,
+  changing `voxel_res` while playing, dawn, water glints on real water, caves and indoors, crossing
+  a map border with the effects on, audio by ear, and Windows on GPUs other than the one it was
+  tried on (AMD). Windows: overworld and battle visuals, controller and performance not checked.
+- `Fatal error while decompressing LZ file.` is printed once per wild encounter; the game continues.
+- At camera tilt 24 with TILT-SHIFT on HIGH the front row of trees is very blurred and covers the
+  player's legs. Water tiles get the wet tint in rain. Mauville and Ever Grande flowers are not covered.
+- The intro and title margins at 16:9 need `assets/ui/intro_margins.bin`, which `build_deck.sh` makes.
+- The PS Vita issues listed further down apply to the Vita build only.
+
+### This fork's credits
+
+Chain of work: [pret/pokeemerald](https://github.com/pret/pokeemerald) (the decompilation) →
+[gradenGnostic/pokeemerald-multiplatform](https://github.com/gradenGnostic/pokeemerald-multiplatform)
+(the SDL2 platform layer and voxel renderer) → [HctrRB/pokeemerald-vita-3ds](https://github.com/HctrRB/pokeemerald-vita-3ds)
+(the PS Vita port with the features of [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds)) →
+this fork (Steam Deck and Windows builds and the visual upgrade). The Deck and Windows work was
+written with an AI coding assistant (Claude Code, by Anthropic) under the supervision of
+marcoscodas. The title lettering is Cinzel, under the SIL Open Font License
+([docs/licenses/Cinzel-OFL.txt](docs/licenses/Cinzel-OFL.txt)). The full list is under
+[Credits](#credits) and in [NOTICE.md](NOTICE.md).
+
+---
+
+## PS Vita port
+
 Unofficial native PS Vita port of Pokémon Emerald, built from the
 [pret/pokeemerald](https://github.com/pret/pokeemerald) decompilation. It is not an emulator:
 the game's C code is compiled for the Vita's ARM CPU, and a platform layer supplies what the GBA
