@@ -1,5 +1,7 @@
 #include <math.h>
 #include <stdint.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include "global.h"
 #include "main.h"
@@ -30,6 +32,20 @@ static uint32_t sLastKey = 0xffffffffu;
 static double sSumSq, sPeak;
 static long sSamples;
 static uint32_t sQMin = 0xffffffffu, sQMax;
+
+static void Log(const char *fmt, ...)
+{
+    // VITA_LOG is fully buffered (32 KB, no flush), so short runs never show it; this appends and flushes.
+    FILE *lg = fopen(VITA_DATA_DIR "debug.log", "a");
+    if (lg != NULL)
+    {
+        va_list args;
+        va_start(args, fmt);
+        vfprintf(lg, fmt, args);
+        va_end(args);
+        fclose(lg);
+    }
+}
 
 static float Ramp(float v, float lo, float hi)
 {
@@ -100,7 +116,7 @@ static void UpdateTargets(void)
         if (key != sLastKey)
         {
             sLastKey = key;
-            VITA_LOG("ambient: mapType %d overworld %d daylight %.2f -> wind %.2f birds %.2f crickets %.2f water %.2f rain %.2f cave %.2f master %.0f\n",
+            Log("ambient: mapType %d overworld %d daylight %.2f -> wind %.2f birds %.2f crickets %.2f water %.2f rain %.2f cave %.2f master %.0f\n",
                      (int)gMapHeader.mapType, (int)overworld, (double)VitaDayNight_Get()->daylight, (double)t.wind, (double)t.birds,
                      (double)t.crickets, (double)t.water, (double)t.rain, (double)t.cave, (double)t.master);
         }
@@ -156,7 +172,7 @@ void DeckAmbient_Frame(float *stereo, int frames, unsigned rate, float masterVol
     if (queuedBytes > sQMax) sQMax = queuedBytes;
     if (sFrame % STATS_EVERY == 0)
     {
-        VITA_LOG("ambient: 5s out peak %.3f rms %.4f queue min %u max %u bytes setting %d master %.2f mute %d\n", sPeak,
+        Log("ambient: 5s out peak %.3f rms %.4f queue min %u max %u bytes setting %d master %.2f mute %d\n", sPeak,
                  sSamples ? sqrt(sSumSq / (double)sSamples) : 0.0, (unsigned)sQMin, (unsigned)sQMax, setting,
                  (double)DeckAmbient_MasterLevel(), (int)mute);
         sSumSq = sPeak = 0.0;
