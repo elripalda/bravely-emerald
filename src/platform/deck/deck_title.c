@@ -367,7 +367,7 @@ static int GlyphId(char c)
     return 0;   // space
 }
 
-// Decodes one 8x16 glyph (four 8x8 tiles of 2bpp rows, 0 clear, 1 face, 2 the game's shadow) straight from the font data, so it
+// Decodes one 8x16 glyph (four 8x8 tiles of 2bpp rows: 1 face, 2 the game shadow, 0 and 3 clear) straight from the font data, so it
 // does not depend on the text engine's current colours. Returns its advance in texels.
 static int Glyph(char c, uint8_t out[16][8])
 {
@@ -423,7 +423,7 @@ static bool BuildText(TextTex *tt, const char *text, int sc, int style)
         {
             for (int y = 0; y < 16; y++)
                 for (int x = 0; x < 8; x++)
-                    if (glyphs[i][y][x] != 0)
+                    if (glyphs[i][y][x] == 1)
                         for (int dy = 0; dy < sc; dy++)
                             for (int dx = 0; dx < sc; dx++)
                                 mask[(pad + y * sc + dy) * w + x0 + x * sc + dx] = 1;
