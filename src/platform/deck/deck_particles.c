@@ -186,13 +186,15 @@ bool DeckParticles_Draw(const DeckPartFrame *f)
     const u8 mapType = gMapHeader.mapType;
     const bool fireMap = mapType == MAP_TYPE_ROUTE || mapType == MAP_TYPE_TOWN;
 
-    if (!DeckParticles_Enabled() || sPart.program == 0 || sVbo == 0 || f->rain)
+    if (!DeckParticles_Enabled() || sPart.program == 0 || sVbo == 0)
         return false;
-    if (!f->calm && !Off("pollen") && f->motes > 0.005f)
+    if (f->rain)
+        ;                                   // rain: nothing (counts stay 0 and are logged)
+    else if (!f->calm && !Off("pollen") && f->motes > 0.005f)
         pollen = (int)(Clamp01(f->motes) * (float)N_POLLEN + 0.5f);
-    if (fireMap && !Off("fire") && f->glow > 0.3f)
+    if (!f->rain && fireMap && !Off("fire") && f->glow > 0.3f)
         fire = (int)(Clamp01((f->glow - 0.3f) / 0.7f) * (float)N_FIRE + 0.5f);
-    if (!f->calm && !Off("leaf") && f->treeVerts > 300 && f->glow < 0.6f)
+    if (!f->rain && !f->calm && !Off("leaf") && f->treeVerts > 300 && f->glow < 0.6f)
         leaf = (int)(Clamp01((float)f->treeVerts / 2500.0f) * (float)N_LEAF + 0.5f);
     if (DebugOn() && f->seconds - sLastLog >= 5.0f)
     {
