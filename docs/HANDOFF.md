@@ -99,3 +99,7 @@ User ruling: full autonomy through all remaining phases (2 to 8) of `docs/superp
 - 2026-11-13, phase 5: Wet ground normals from `dFdx/dFdy` of the eye position, flatness weight on the up direction; cliffs and walls barely change. Puddles from value noise on the chunk-offset world position. Cost: puddle scale and strength untuned.
 - 2026-11-13, phase 5: Streak count 2048 max (drawn = amount x 2048, min 25 percent), width at least about a pixel (0.0022 per unit distance) with alpha scaled back. Why: thinner than a pixel flickers. Cost: far drops are a little thicker than their nominal 0.035.
 
+
+### User requests added during the autonomous run (2026-11-14)
+- Camera tilt more front-on (not fully): Deck setting `voxel_pitch`, default ~32 deg (from the fixed 40), rolled into phase 7 work.
+- Normal maps / slight extrusion for depth: planned as phase 9 (`voxel_bump`), after phase 7/8; height derived from albedo luminance since no art exists, tiny parallax, lit by time-of-day sun. See the ledger for the full decision.
