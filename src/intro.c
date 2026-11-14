@@ -179,6 +179,16 @@ static EWRAM_DATA u16 UNUSED sUnusedVar = 0;
 static EWRAM_DATA u16 sFlygonYOffset = 0;
 
 COMMON_DATA u32 gIntroFrameCounter = 0;
+
+#ifdef PLATFORM_DECK
+// Deck reveal (src/platform/deck/deck_reveal.c): which intro scene is on, read only by the platform. 0 not in the intro,
+// 1 Game Freak logo and leaves, 2 bike ride, 3 Poke Ball, 4 Groudon, 5 Kyogre, 6 clouds, 7 lightning, 8 Rayquaza, 255 the
+// copyright screen (stays flat).
+u8 gDeckIntroSegment;
+#define DECK_INTRO_SEGMENT(n) (gDeckIntroSegment = (n))
+#else
+#define DECK_INTRO_SEGMENT(n) ((void)0)
+#endif
 COMMON_DATA struct GcmbStruct gMultibootProgramStruct = {0};
 
 static const u16 sIntroDrops_Pal[]            = INCBIN_U16("graphics/intro/scene_1/drops.gbapal");
