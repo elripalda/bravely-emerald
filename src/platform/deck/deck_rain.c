@@ -18,7 +18,24 @@
 static bool sReady = false;
 static char sOff[96];
 
-static bool Off(const char *name) { return strstr(sOff, name) != NULL; }
+// DECK_RAIN_OFF is a comma, space or semicolon separated list; a name matches only as a whole token.
+static bool Off(const char *name)
+{
+    const size_t len = strlen(name);
+    const char *p = sOff;
+
+    while (*p != '\0')
+    {
+        size_t n = strcspn(p, ", ;");
+
+        if (n == len && strncmp(p, name, len) == 0)
+            return true;
+        p += n;
+        if (*p != '\0')
+            ++p;
+    }
+    return false;
+}
 
 static float Clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
@@ -295,8 +312,10 @@ static const char *kWetFs =
     "}\n"
     "void main() {\n"
     "    vec4 c = texture2D(uTex, vUv) * vCol;\n"
-    "    vec3 n = normalize(cross(dFdx(vEye), dFdy(vEye)));\n"
     "    vec3 up = normalize(mat3(gl_ModelViewMatrix) * vec3(0.0, 1.0, 0.0));\n"
+    "    vec3 cr = cross(dFdx(vEye), dFdy(vEye));\n"
+    "    float crLen = length(cr);\n"
+    "    vec3 n = crLen > 1.0e-12 ? cr / crLen : up;\n"
     "    float flatness = smoothstep(0.7, 0.95, abs(dot(n, up)));\n"
     "    float puddle = smoothstep(0.52, 0.72, noise(vWorld * 0.45) * 0.65 + noise(vWorld * 1.3) * 0.35);\n"
     "    float wet = uWet * flatness;\n"
@@ -361,7 +380,7 @@ void DeckRain_Init(void)
     sOff[0] = '\0';
     if (e != NULL)
         strncat(sOff, e, sizeof(sOff) - 1);
-    sReady = false;
+    DeckRain_Shutdown(); // idempotent: a second Init deletes the first one's programs and buffers
     StreakInit();
     WetInit();
     SplashInit();
@@ -384,6 +403,9 @@ void DeckRain_Shutdown(void)
     if (sStreakVbo != 0)
         glDeleteBuffers(1, &sStreakVbo);
     sStreakVbo = 0;
+    sWet = 0.0f;
+    sLastSeconds = -1.0f;
+    sLastLog = -100.0f;
     sReady = false;
 }
 
@@ -406,11 +428,12 @@ void DeckRain_Update(bool rain, float amount, bool indoor, float seconds)
     float dt = sLastSeconds < 0.0f ? 0.0f : seconds - sLastSeconds;
 
     sLastSeconds = seconds;
-    if (dt < 0.0f || dt > 0.25f)
-        dt = 0.0f; // first frame, a pause or a fade: the clock does not jump
-    if (!DeckRain_Enabled() || indoor)
-        return;
-    if (rain)
+    if (dt < 0.0f)
+        dt = 0.0f; // first frame or a clock reset
+    if (dt > 0.5f)
+        dt = 0.5f; // a stall or fade does not jump the clock, but slow frames still make progress
+    // Wetness always runs: indoors, with the setting off or after a toggle it dries at the 90 s rate, never freezes.
+    if (rain && !indoor && DeckRain_Enabled())
         sWet += dt / 20.0f * Clamp01(amount);
     else
         sWet -= dt / 90.0f;

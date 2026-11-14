@@ -5005,7 +5005,7 @@ static void Pass_Ground(const VoxelFrame *const f)
 #ifdef PLATFORM_DECK
     float rainLight[3];
     Deck_RainLight(rainLight);
-    const bool wetGround = !f->indoor && DeckRain_WetBegin(rainLight);
+    const bool wetGround = !f->indoor && !f->inBattle3D && DeckRain_WetBegin(rainLight);
     // Water glints use the ground program the wet shader does not: outdoors, daylight or moon, not in rain, not in battle
     const bool glintGround = !wetGround && !f->indoor && !f->inBattle3D
                              && DeckParticles_GlintBegin(VitaDayNight_GetSun()->strength, VitaDayNight_Get()->glow,
