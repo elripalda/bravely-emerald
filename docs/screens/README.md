@@ -14,3 +14,5 @@ Not captured (single test rule): OFF vs HIGH pairs for sun shadows, relief crops
 - title_bravely_2dhd_phase3.png and title_bravely_2dhd_phase1_shine.png: the new title with BRAVELY and 2D-HD lettering; the phase 1 shot shows the shine sweep on the logo.
 - flatfx_intro_leaves_no_margins_slivers.png (slivers at both edges, no intro_margins.bin) and flatfx_intro_leaves_with_margins_off.png (margins art present, flatfx off).
 - flatfx_mainmenu_first_bloom_washout.png (first bloom values, NEW GAME unreadable), flatfx_mainmenu_high_retuned.png (after the retune), flatfx_title_original_high.png (original title through the flat pass at HIGH).
+
+- title_hd2d_final.png and title_hd2d_final_markings_pulse.png: the HD-2D title (reveal done, BRAVELY above EMERALD VERSION, no badge). title_logo_edge_crop_4x.png: 4x crop of the POKEMON edge, identical to the original.
