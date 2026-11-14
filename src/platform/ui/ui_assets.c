@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ui_internal.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_uifx.h"
+#endif
 #include "../vita/vita_platform.h"
 
 #define UI_MAX_FONTS 24
@@ -208,11 +211,8 @@ int32_t UiText_Width(uint8_t face, uint8_t px, const char *s)
     return w;
 }
 
-int32_t UiText_Draw(uint8_t face, uint8_t px, int32_t x, int32_t y, const char *s, uint32_t rgba)
+static int32_t DrawRun(const UiFont *font, int32_t x, int32_t y, const char *s, uint32_t rgba)
 {
-    const UiFont *font = FindFont(face, px);
-    if (font == NULL || s == NULL)
-        return 0;
     const int32_t x0 = x, base = y + font->ascent;
     while (*s)
     {
@@ -229,6 +229,43 @@ int32_t UiText_Draw(uint8_t face, uint8_t px, int32_t x, int32_t y, const char *
         x += g->adv;
     }
     return x - x0;
+}
+
+int32_t UiText_Draw(uint8_t face, uint8_t px, int32_t x, int32_t y, const char *s, uint32_t rgba)
+{
+    const UiFont *font = FindFont(face, px);
+    if (font == NULL || s == NULL)
+        return 0;
+#ifdef PLATFORM_DECK
+    {
+        // voxel_uitext: a soft drop shadow / dark outline under light text, a faint light halo around dark text (mode 2 and 3),
+        // drawn as the same glyphs shifted, before the text itself. Light text: 1 shadow, 2 outline of 4 + shadow, 3 outline of 8 + shadow.
+        const int mode = DeckUiFx_TextMode();
+        const uint32_t a = rgba >> 24;
+
+        if (mode > 0 && a > 0)
+        {
+            const uint32_t lum = ((rgba & 0xFF) * 299 + ((rgba >> 8) & 0xFF) * 587 + ((rgba >> 16) & 0xFF) * 114) / 1000;
+            static const int8_t kRing[8][2] = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } };
+
+            if (lum > 128)
+            {
+                if (mode >= 2)
+                    for (int i = 0; i < (mode == 2 ? 4 : 8); i++)
+                        DrawRun(font, x + kRing[i][0], y + kRing[i][1], s, (a * 190 / 255) << 24);
+                DrawRun(font, x + 1, y + 2, s, (a * 140 / 255) << 24);
+                if (mode == 1)
+                    DrawRun(font, x + 2, y + 3, s, (a * 60 / 255) << 24);
+            }
+            else if (mode >= 2)
+            {
+                for (int i = 0; i < (mode == 2 ? 4 : 8); i++)
+                    DrawRun(font, x + kRing[i][0], y + kRing[i][1], s, ((a * 85 / 255) << 24) | 0x00FFFFFFu);
+            }
+        }
+    }
+#endif
+    return DrawRun(font, x, y, s, rgba);
 }
 
 _Static_assert(UI_SPR_COUNT <= UI_MAX_SPRITES, "ui_atlas.bin has more sprites than UI_MAX_SPRITES: the new UI would not load");

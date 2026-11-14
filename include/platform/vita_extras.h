@@ -99,6 +99,17 @@ typedef enum
     FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume, key ambient_level: 0 OFF (no DSP), 1 LOW, 2 MEDIUM (default), 3 HIGH
     FAST_EXTRA_AMBIENT_DENSITY, // Deck ambient one-shot rate, key ambient_density: 0 SPARSE (default), 1 NORMAL, 2 FREQUENT
 #endif
+#ifdef PLATFORM_DECK
+    // UI polish (docs/DECK_NOTES.md "UI polish"). Leveled like the effects above (0 OFF, 1 AUTO, 2 LOW, 3 MEDIUM, 4 HIGH)
+    FAST_EXTRA_VOXEL_UIGLASS,  // frosted glass behind panels
+    FAST_EXTRA_VOXEL_UITINT,   // moving two-colour gradient on panels
+    FAST_EXTRA_VOXEL_UITEXT,   // text shadow / outline (LOW shadow, MEDIUM outline + shadow, HIGH full outline + shadow)
+    FAST_EXTRA_VOXEL_UISEL,    // animated menu cursor
+    FAST_EXTRA_VOXEL_UIANIM,   // menu open / close fade and slide
+    FAST_EXTRA_VOXEL_UIBARS,   // HP / EXP bars: smooth fill, colour, low HP glow
+    FAST_EXTRA_VOXEL_UIGLYPHS, // button prompts: 0 OFF (the port's PlayStation glyphs), 1 GBA, 2 DECK (stored value = index)
+    FAST_EXTRA_VOXEL_UILAYOUT, // wide layout, item shadows, party bob
+#endif
     FAST_EXTRA_COUNT
 } FastExtraId;
 

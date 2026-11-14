@@ -118,8 +118,44 @@ void Ui_Render(int32_t viewWidth, int32_t viewHeight)
         }
     }
 #endif
-    Draw(list->verts, list->vcount, sTexture);
+#ifdef PLATFORM_DECK
+    {
+        // voxel_uiglass / voxel_uitint: the frosted layer of each panel is drawn at its place in the list (z order), then
+        // the list goes on, so the translucent fills lie over it. voxel_uianim moves and fades the whole list.
+        if (list->panelCount > 0 && DeckUiFx_Begin(list->panels, (int)list->panelCount))
+        {
+            uint32_t v = 0;
 
+            glPushMatrix();
+            glTranslatef(0.0f, list->slideY, 0.0f);
+            for (uint32_t i = 0; i < list->panelCount; i++)
+            {
+                const DeckUiPanel *p = &list->panels[i];
+
+                if (p->firstVert > v && p->firstVert <= list->vcount)
+                {
+                    Draw(list->verts + v, p->firstVert - v, sTexture);
+                    v = p->firstVert;
+                }
+                DeckUiFx_Panel(p, list->fade, list->slideY);
+            }
+            Draw(list->verts + v, list->vcount - v, sTexture);
+            glPopMatrix();
+            DeckUiFx_End();
+        }
+        else if (list->slideY != 0.0f)
+        {
+            glPushMatrix();
+            glTranslatef(0.0f, list->slideY, 0.0f);
+            Draw(list->verts, list->vcount, sTexture);
+            glPopMatrix();
+        }
+        else
+            Draw(list->verts, list->vcount, sTexture);
+    }
+#else
+    Draw(list->verts, list->vcount, sTexture);
+#endif
 
     glDisableClientState(GL_COLOR_ARRAY);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);

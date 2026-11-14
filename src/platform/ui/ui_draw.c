@@ -12,6 +12,9 @@
 #include <string.h>
 #include "ui_internal.h"
 #include "platform/ui.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_uifx.h"
+#endif
 
 #define UI_FRESH 4u
 #define UI_MAX_CLIP 8
@@ -28,12 +31,23 @@ static int32_t sClipDepth;
 
 static uint16_t sWhiteU, sWhiteV;
 static float sInvW = 1.0f, sInvH = 1.0f;
+#ifdef PLATFORM_DECK
+static uint32_t sTintA, sTintB;        // tint gradient colours of this list (theme + time of day)
+static int32_t sFillAlpha = 255;       // alpha multiplier of panel fills while the glass / tint is on
+#endif
 
 void UiDraw_Begin(void)
 {
     UiDrawList *list = &sLists[sBack];
     list->vcount = 0;
     UiTheme_Refresh();
+#ifdef PLATFORM_DECK
+    list->panelCount = 0;
+    list->fade = 1.0f;
+    list->slideY = 0.0f;
+    sFillAlpha = DeckUiFx_PanelsActive() ? DeckUiFx_FillAlpha() : 255;
+    DeckUiFx_TintColours(gUiTheme->tabTop, gUiTheme->capTop, &sTintA, &sTintB);
+#endif
     sClipDepth = 0;
     sClip[0] = (UiClip){ 0, 0, UI_SCREEN_W, UI_SCREEN_H };
     uint16_t wx = 0, wy = 0, tw = 1, th = 1;
@@ -43,6 +57,39 @@ void UiDraw_Begin(void)
     sWhiteV = (uint16_t)(wy + 1);
     sInvW = 1.0f / (float)(tw ? tw : 1);
     sInvH = 1.0f / (float)(th ? th : 1);
+}
+
+void UiDraw_AddPanel(int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, bool chamfer, uint32_t base)
+{
+#ifdef PLATFORM_DECK
+    UiDrawList *list = &sLists[sBack];
+
+    if (sFillAlpha >= 255 || list->panelCount >= DECK_UI_MAX_PANELS || w <= 0 || h <= 0)
+        return;
+    list->panels[list->panelCount++] = (DeckUiPanel){ (float)x, (float)y, (float)w, (float)h, (float)radius, chamfer ? 1u : 0u,
+                                                      base, sTintA, sTintB, list->vcount };
+#else
+    (void)x; (void)y; (void)w; (void)h; (void)radius; (void)chamfer; (void)base;
+#endif
+}
+
+int32_t UiDraw_FillAlpha(void)
+{
+#ifdef PLATFORM_DECK
+    return sFillAlpha;
+#else
+    return 255;
+#endif
+}
+
+void UiDraw_SetAnim(float fade, float slideY)
+{
+#ifdef PLATFORM_DECK
+    sLists[sBack].fade = fade;
+    sLists[sBack].slideY = slideY;
+#else
+    (void)fade; (void)slideY;
+#endif
 }
 
 void UiDraw_PushClip(int32_t x, int32_t y, int32_t w, int32_t h)
