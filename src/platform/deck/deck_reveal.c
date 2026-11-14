@@ -14,7 +14,7 @@ extern u8 gDeckIntroSegment;
 // START skipped to PRESS START. The badge flash follows the main one. The version banner slides in later (phase 2, about
 // 4.6 s) and lands already pushed down.
 #define TITLE_FLASH_AT 3.0
-#define TITLE_BADGE_AFTER_FLIP 2.2
+#define TITLE_BADGE_AFTER_FLIP 2.2   // the second flash is off (no badge): sBadgeOn stays false
 #define FLASH_RISE 0.14
 #define FLASH_FALL 0.95
 #define EFFECT_FADE_IN 1.4

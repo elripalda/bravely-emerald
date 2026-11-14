@@ -12,8 +12,6 @@
 #include "deck_reveal.h"
 #include "sprite.h"
 #include "graphics.h"
-#include <SDL2/SDL_image.h>
-#include "vita_platform.h"
 #include "deck_title_font.h"
 #include "platform/vita_extras.h"
 
@@ -192,8 +190,8 @@ static bool sInit, sFailed, sEnvRead, sEnvOrig, sArtOk;
 static DeckGlProgram sLayer, sRay, sFront, sShine, sSoft, sRays;
 static GLint sLyTex, sLyBias, sRyTex, sRyMark, sRySize, sRyScale, sRyMarkCol, sRyRim;
 static GLint sFrTex, sFrTexel, sFrRad, sFrMode, sFrAmt, sShTex, sShPos, sShAmt, sRaysT, sRaysAmt;
-static GLuint sSkyTex, sRayTex, sMarkTex, sCloudTex, sPlateTex, sCrestTex;
-static int sPlateW, sPlateH, sCrestW, sCrestH;
+static GLuint sSkyTex, sRayTex, sMarkTex, sCloudTex, sPlateTex;
+static int sPlateW, sPlateH;
 static int sPrevPhase;
 static double sStart, sPhase3At = -1.0;
 static unsigned sFrames;
@@ -357,7 +355,7 @@ fail:
     return false;
 }
 
-// ------------------------------------------------------------------------ serif plate and crest
+// ------------------------------------------------------------------------ serif lettering
 // The two words come from deck_title_font.h (Cinzel masks rendered once offline by tools/deck/gen_title_font.py).
 static unsigned char *DecodeRle(const unsigned char *rle, size_t n, int w, int h)
 {
@@ -483,54 +481,6 @@ static bool BuildPlate(void)
     return sPlateTex != 0;
 }
 
-// The HD-2D crest: only an official artwork may be used. Not found online (see docs/DECK_NOTES.md), so nothing is invented:
-// if the file ui/hd2d_badge.png (RGBA, about 256 px) exists in the dist's app0 folder it is drawn in the top right with the
-// sparkle, otherwise there is no crest.
-static bool BuildCrest(void)
-{
-    size_t size = 0;
-    uint8_t *file = VitaPlatform_LoadAsset("ui/hd2d_badge.png", &size);
-    SDL_RWops *rw;
-    SDL_Surface *img, *rgba;
-
-    if (file == NULL)
-    {
-        DeckGl_Log("[TITLE] no ui/hd2d_badge.png: the title has no HD-2D crest\n");
-        return true;
-    }
-    rw = SDL_RWFromConstMem(file, (int)size);
-    img = rw != NULL ? IMG_Load_RW(rw, 1) : NULL;
-    if (img == NULL)
-    {
-        DeckGl_Log("[TITLE] ui/hd2d_badge.png could not be read: %s\n", IMG_GetError());
-        free(file);
-        return true;
-    }
-    rgba = SDL_ConvertSurfaceFormat(img, SDL_PIXELFORMAT_ABGR8888, 0);
-    SDL_FreeSurface(img);
-    if (rgba != NULL)
-    {
-        uint8_t *px = (uint8_t *)rgba->pixels;
-
-        for (int y = 0; y < rgba->h; y++)   // premultiply
-            for (int x = 0; x < rgba->w; x++)
-            {
-                uint8_t *p = &px[(size_t)y * rgba->pitch + (size_t)x * 4];
-
-                p[0] = (uint8_t)(p[0] * p[3] / 255);
-                p[1] = (uint8_t)(p[1] * p[3] / 255);
-                p[2] = (uint8_t)(p[2] * p[3] / 255);
-            }
-        sCrestTex = MakeTexture(px, rgba->w, rgba->h, GL_RGBA, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, true);
-        sCrestW = rgba->w;
-        sCrestH = rgba->h;
-        SDL_FreeSurface(rgba);
-        DeckGl_Log("[TITLE] HD-2D crest loaded from ui/hd2d_badge.png (%dx%d)\n", sCrestW, sCrestH);
-    }
-    free(file);
-    return true;
-}
-
 // EMERALD VERSION: the game's own sprite sheet (8bpp, two 64x32 sprites, 1D tile order) decoded once from the same data the
 // game loads, drawn here as one piece at the sprite's live position so it can be pushed down without cutting the picture.
 static GLuint sBannerTex;
@@ -609,7 +559,7 @@ static void DrawBanner(float vx0, float vx1, float u0, float u1, float shift)
 
 static bool BuildBadge(void)
 {
-    return BuildPlate() && BuildCrest() && BuildBanner();
+    return BuildPlate() && BuildBanner();
 }
 
 static bool Build(void)
@@ -688,7 +638,6 @@ bool DeckTitle_Wanted(void)
             return false;
         }
         DeckGl_Log("[TITLE] ready (HD-2D title)\n");
-        DeckReveal_SetBadgeFlash(sCrestTex != 0);
     }
     if (sPrevPhase == 0)
     {
@@ -793,7 +742,6 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
     const float camX = sinf(t * 0.10f) * 0.9f + sinf(t * 0.043f + 1.7f) * 0.5f;
     const float camY = sinf(t * 0.07f + 1.0f) * 0.7f;
     const float intro = DeckReveal_On() ? DeckReveal_Amount() : Smooth(0.0f, 1.8f, t);
-    const float tb = DeckReveal_SinceBadge();
     // BRAVELY drops in and EMERALD VERSION is pushed down when PRESS START comes (the logo has finished its own slide then)
     const float td = DeckReveal_On() ? (sPhase3At >= 0.0 ? (float)(now - sPhase3At) : -1.0f) : 1000.0f;
     const float dropU = Clamp01((td - 0.45f) / 0.95f), bannerU = Clamp01((td - 0.35f) / 1.0f);
@@ -944,8 +892,8 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         }
     }
 
-    // ---- BRAVELY plate: drops in from above over the logo's lower edge (the banner has moved down for it); then the
-    // HD-2D crest in the top right with a sparkle. Both after the front layer, both fade with the game's palette fade.
+    // ---- BRAVELY: the letters drop in from above over the logo lower edge (the banner has moved down for them), after the
+    // front layer, fading with the game palette fade. (The HD-2D crest was dropped.)
     if (phase >= 3 && td > 0.45f)
     {
         const float u = dropU, back = 1.2f, v = u - 1.0f;
@@ -959,30 +907,8 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         DeckGl_Set1f(sLyBias, 0.0f);
         glBindTexture(GL_TEXTURE_2D, sPlateTex);
         QuadT(cx - pw * 0.5f, cy - ph * 0.5f, cx + pw * 0.5f, cy + ph * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, Smooth(0.0f, 0.45f, u) * (1.0f - fade));
-        if (tb > 0.0f && sCrestTex != 0)
-        {
-            const float bu = Clamp01(tb / 0.6f), bv = bu - 1.0f;
-            const float be = 1.0f + 2.4f * bv * bv * bv + 1.4f * bv * bv;
-            const float k = 0.5f + 0.5f * be;
-            const float cs = 96.0f / (float)sCrestW, bw = (float)sCrestW * cs * k, bh = (float)sCrestH * cs * k;
-            const float bx = 888.0f, by = 100.0f + sinf(t * 0.8f) * 1.2f;
-            const float sp = sinf(3.1416f * Clamp01(tb / 1.2f));
-
-            glBindTexture(GL_TEXTURE_2D, sCrestTex);
-            QuadT(bx - bw * 0.5f, by - bh * 0.5f, bx + bw * 0.5f, by + bh * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, Smooth(0.0f, 0.3f, tb) * (1.0f - fade));
-            if (sp > 0.01f)
-            {
-                // four-point sparkle on the crest's upper left facet
-                const float sx = bx - 22.0f, sy = by - 30.0f;
-
-                glBlendFunc(GL_ONE, GL_ONE);
-                DeckGl_UseProgram(&sSoft);
-                DiscXY(sx, sy, 40.0f * sp, 3.5f * sp, 1.0f, 0.97f, 0.85f, 0.9f * sp, 0.0f);
-                DiscXY(sx, sy, 3.5f * sp, 40.0f * sp, 1.0f, 0.97f, 0.85f, 0.9f * sp, 0.0f);
-                DiscXY(sx, sy, 11.0f * sp, 11.0f * sp, 1.0f, 1.0f, 0.95f, 0.8f * sp, 0.3f);
-            }
-        }
     }
+
 
     glDisable(GL_BLEND);
     DeckGl_UseProgram(NULL);
