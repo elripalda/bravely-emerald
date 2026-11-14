@@ -1,0 +1,3 @@
+# fresh start: watch the leaves intro, START at 14 s skips to the title, START at 28 s goes on to the main menu.
+14000 START 150
+28000 START 150
