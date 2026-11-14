@@ -383,7 +383,13 @@ void VitaUiOptions_Render(uint16_t *dst, const size_t pitch, const uint8_t blink
 
         if (row->group != NULL)
         {
+            #ifdef PLATFORM_DECK
+            // voxel_uitext: the small group label ("EFFECTS") in a darker tone of the same ink (contrast on the cream row)
+            VitaUiArt_DrawStrAscii(dst, pitch, clip, VITA_FONT_SMALL_NARROW, row->group, 18, ry + 1,
+                                   VitaExtras_GetFast(FAST_EXTRA_VOXEL_UITEXT) != 0 ? VitaUi_PackRgb565(50, 68, 64) : UI_INK_MUTED, VITA_UI_NO_SHADOW);
+#else
             VitaUiArt_DrawStrAscii(dst, pitch, clip, VITA_FONT_SMALL_NARROW, row->group, 18, ry + 1, UI_INK_MUTED, VITA_UI_NO_SHADOW);
+#endif
             VitaUiArt_DrawStrAscii(dst, pitch, clip, VITA_FONT_SMALL, row->label, 68, ry + 4, UI_INK_DARK, VITA_UI_NO_SHADOW);
         }
         else
