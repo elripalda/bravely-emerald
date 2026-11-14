@@ -44,6 +44,13 @@ static const char *kVs =
     "    float str = 0.25 + (uWind.z - 0.25) * 0.5;\n"
     "    float d = w * 0.8 * uAmp * str * gust * (0.35 + 0.65 * s);\n"
     "    p.xz += vec2(uWind.x, uWind.y) * d;\n"
+    // Small plants (flowers, tall grass: weight up to 0.8 to 1) get a second, faster sway across the wind and a slight droop, both
+    // weighted by w squared so a tree crown (w <= 0.5) barely gets it: the tip traces a soft figure-8 with its own per-plant phase
+    // (from the world position of its foot) instead of a short back and forth, and the base (w = 0) stays fixed.
+    "    float w2 = w * w;\n"
+    "    float s2 = sin(uTime * 2.3 + ph * 1.9 + 0.7) * 0.6 + sin(uTime * 3.7 + ph * 0.8) * 0.4;\n"
+    "    p.xz += vec2(-uWind.y, uWind.x) * (w2 * 0.30 * uAmp * str * gust * s2);\n"
+    "    p.y -= w2 * 0.05 * uAmp * str * (0.5 + 0.5 * s);\n"
     "    if (bendFlag > 0.5) {\n"
     "        vec2 f = p.xz + uFrameOffset;\n"
     "        vec3 b[4]; b[0] = uBend0; b[1] = uBend1; b[2] = uBend2; b[3] = uBend3;\n"
