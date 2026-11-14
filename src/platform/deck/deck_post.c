@@ -221,7 +221,14 @@ static const char kCompositeBody[] =
     "        float sd = texture2D(uDepth, vPos).r;\n"
     "        vec4 wq = uInvVP * vec4(vPos * 2.0 - 1.0, sd * 2.0 - 1.0, 1.0);\n"
     "        vec3 wp = wq.xyz / wq.w;\n"
-    "        vec3 nn = cross(dFdx(wp), dFdy(wp));\n"
+    // The normal from taps 3 pixels apart on each side (6 pixel baseline), not the 1 pixel derivatives of the reconstructed position: those were
+    // noisy at grazing angles (depth quantisation) and flipped from row to row on far walls, which put the stripes on far houses.
+    "        vec2 pxs = vec2(abs(dFdx(vPos.x)), abs(dFdy(vPos.y))) * 3.0;\n"
+    "        vec4 qa = uInvVP * vec4((vPos + vec2(pxs.x, 0.0)) * 2.0 - 1.0, texture2D(uDepth, vPos + vec2(pxs.x, 0.0)).r * 2.0 - 1.0, 1.0);\n"
+    "        vec4 qb = uInvVP * vec4((vPos - vec2(pxs.x, 0.0)) * 2.0 - 1.0, texture2D(uDepth, vPos - vec2(pxs.x, 0.0)).r * 2.0 - 1.0, 1.0);\n"
+    "        vec4 qc = uInvVP * vec4((vPos + vec2(0.0, pxs.y)) * 2.0 - 1.0, texture2D(uDepth, vPos + vec2(0.0, pxs.y)).r * 2.0 - 1.0, 1.0);\n"
+    "        vec4 qd = uInvVP * vec4((vPos - vec2(0.0, pxs.y)) * 2.0 - 1.0, texture2D(uDepth, vPos - vec2(0.0, pxs.y)).r * 2.0 - 1.0, 1.0);\n"
+    "        vec3 nn = cross(qa.xyz / qa.w - qb.xyz / qb.w, qc.xyz / qc.w - qd.xyz / qd.w);\n"
     "        float nl = length(nn);\n"
     "        nn = nl > 1.0e-12 ? nn / nl : vec3(0.0, 1.0, 0.0);\n"
     "        vec4 cq = uInvVP * vec4(0.0, 0.0, -1.0, 1.0);\n"          // a point on the near plane: the eye side
@@ -229,7 +236,7 @@ static const char kCompositeBody[] =
     "        float ndl = dot(nn, uSunL);\n"
     // Near vertical surfaces (house walls, cliffs) are skipped: their normal from the depth derivatives is too noisy at grazing angles and
     // the map self shadowed them in horizontal stripes (the banding on far houses; gone with voxel_sunshadow off). They keep their baked face shade.
-    "        if (sd < 0.9999 && ndl > 0.05 && nn.y > 0.45) {\n"
+    "        if (sd < 0.9999 && ndl > 0.05) {\n"
     "            float sinT = sqrt(max(1.0 - ndl * ndl, 0.0));\n"
     "            float tw = uSunB.y;\n"
     "            float bias = min(tw * (1.0 + 3.0 * sinT / max(ndl, 0.25)), tw * 10.0);\n"
