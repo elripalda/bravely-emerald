@@ -13,6 +13,7 @@
 #define BOX_Z 28.0f
 
 #define STREAK_COUNT 2048
+#define SPLASH_COUNT 1024
 
 static bool sReady = false;
 static char sOff[96];
@@ -172,6 +173,95 @@ bool DeckRain_DrawStreaks(const DeckRainFrame *f)
     return true;
 }
 
+// ---- C3 splashes ---------------------------------------------------------------------------------------
+// Rings on the camera ground plane (spec: the cheap option, flat routes). Every quad has its own period; at each new cycle
+// it picks a new spot from a hash of its seed and the cycle number, so nothing is stored or uploaded per frame.
+static const char *kSplashVs =
+    "#version 120\n"
+    "uniform float uTime;\n"
+    "uniform vec3 uTarget;\n"            // camera target x, ground, z
+    "uniform vec3 uParams;\n"            // ring life (s), max radius, height above the ground
+    "varying vec2 vUv;\n"
+    "varying float vK;\n"
+    "varying float vFade;\n"
+    "float hash(float n) { return fract(sin(n) * 43758.5453); }\n"
+    "void main() {\n"
+    "    vec3 seed = gl_Vertex.xyz;\n"
+    "    float period = 0.8 + 0.5 * seed.z;\n"
+    "    float t = uTime / period + seed.y;\n"
+    "    float cyc = floor(t);\n"
+    "    float k = fract(t) * period / uParams.x;\n"           // 0..1 while the ring lives, then > 1
+    "    vec2 r = vec2(hash(cyc * 1.37 + seed.x * 91.7), hash(cyc * 2.11 + seed.x * 57.3 + seed.z * 13.1));\n"
+    "    vec2 pos = vec2(uTarget.x - 10.0 + r.x * 20.0, uTarget.z - 14.0 + r.y * 22.0);\n"
+    "    float d = length(pos - uTarget.xz);\n"
+    "    float rad = k < 1.0 ? uParams.y * (0.3 + 0.7 * k) : 0.0;\n"
+    "    vec3 w = vec3(pos.x + gl_MultiTexCoord0.x * rad, uTarget.y + uParams.z, pos.y + gl_MultiTexCoord0.y * rad);\n"
+    "    vK = k;\n"
+    "    vFade = 1.0 - smoothstep(8.0, 12.0, d);\n"
+    "    vUv = gl_MultiTexCoord0.xy;\n"
+    "    gl_Position = gl_ModelViewProjectionMatrix * vec4(w, 1.0);\n"
+    "}\n";
+
+static const char *kSplashFs =
+    "#version 120\n"
+    "uniform vec3 uColor;\n"
+    "varying vec2 vUv;\n"
+    "varying float vK;\n"
+    "varying float vFade;\n"
+    "void main() {\n"
+    "    float r = length(vUv);\n"
+    "    float ring = smoothstep(0.52, 0.72, r) * (1.0 - smoothstep(0.72, 0.92, r));\n"
+    "    float crown = (1.0 - smoothstep(0.0, 0.2, r)) * clamp(1.0 - vK * 3.0, 0.0, 1.0);\n"
+    "    float a = (ring * 0.55 + crown * 0.7) * (1.0 - vK) * vFade;\n"
+    "    if (a < 0.01) discard;\n"
+    "    gl_FragColor = vec4(uColor, a);\n"
+    "}\n";
+
+static DeckGlProgram sSplash;
+static GLint sSpTarget = -1, sSpParams = -1, sSpColor = -1;
+static GLuint sSplashVbo = 0;
+
+static void SplashInit(void)
+{
+    if (!DeckGl_BuildProgram(&sSplash, "rain-splash", kSplashVs, kSplashFs))
+    {
+        DeckGl_Log("[RAIN] splash shader build failed: no splashes\n");
+        return;
+    }
+    sSpTarget = DeckGl_Uniform(&sSplash, "uTarget");
+    sSpParams = DeckGl_Uniform(&sSplash, "uParams");
+    sSpColor = DeckGl_Uniform(&sSplash, "uColor");
+    sSplashVbo = MakeQuadVbo(SPLASH_COUNT, 0x5EED0002u);
+    if (sSplashVbo == 0)
+        DeckGl_DeleteProgram(&sSplash);
+}
+
+bool DeckRain_DrawSplashes(const DeckRainFrame *f)
+{
+    if (!DeckRain_Enabled() || sSplash.program == 0 || sSplashVbo == 0 || Off("splash") || f->amount <= 0.05f)
+        return false;
+
+    int count = (int)(Clamp01(f->amount) * (float)SPLASH_COUNT + 0.5f);
+
+    if (count < SPLASH_COUNT / 4)
+        count = SPLASH_COUNT / 4;
+    DeckGl_UseProgram(&sSplash);
+    DeckGl_Set3f(sSpTarget, f->target[0], f->target[1], f->target[2]);
+    DeckGl_Set3f(sSpParams, 0.35f, 0.38f, 0.03f);
+    DeckGl_Set3f(sSpColor, 0.85f * f->light[0], 0.90f * f->light[1], 0.95f * f->light[2]);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_ALPHA_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    DrawQuadVbo(sSplashVbo, count);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+    DeckGl_UseProgram(NULL);
+    return true;
+}
+
 // ---- C4 wet ground -------------------------------------------------------------------------------------
 static const char *kWetVs =
     "#version 120\n"
@@ -274,9 +364,10 @@ void DeckRain_Init(void)
     sReady = false;
     StreakInit();
     WetInit();
-    sReady = sStreak.program != 0 || sWetProg.program != 0;
-    DeckGl_Log("[RAIN] init: streaks %s, wet %s, off list '%s'\n", sStreak.program != 0 ? "ready" : "failed",
-               sWetProg.program != 0 ? "ready" : "failed", sOff);
+    SplashInit();
+    sReady = sStreak.program != 0 || sWetProg.program != 0 || sSplash.program != 0;
+    DeckGl_Log("[RAIN] init: streaks %s, wet %s, splash %s, off list '%s'\n", sStreak.program != 0 ? "ready" : "failed",
+               sWetProg.program != 0 ? "ready" : "failed", sSplash.program != 0 ? "ready" : "failed", sOff);
 }
 
 void DeckRain_Shutdown(void)
@@ -285,6 +376,11 @@ void DeckRain_Shutdown(void)
         DeckGl_DeleteProgram(&sStreak);
     if (sWetProg.program != 0)
         DeckGl_DeleteProgram(&sWetProg);
+    if (sSplash.program != 0)
+        DeckGl_DeleteProgram(&sSplash);
+    if (sSplashVbo != 0)
+        glDeleteBuffers(1, &sSplashVbo);
+    sSplashVbo = 0;
     if (sStreakVbo != 0)
         glDeleteBuffers(1, &sStreakVbo);
     sStreakVbo = 0;

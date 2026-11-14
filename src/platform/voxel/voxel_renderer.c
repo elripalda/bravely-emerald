@@ -5451,6 +5451,7 @@ static void Pass_Atmosphere3D(const VoxelFrame *const f)
                 rf.cam[0] = sCamera.x; rf.cam[1] = sCamera.y; rf.cam[2] = sCamera.z;
                 rf.target[0] = sCamera.targetX; rf.target[1] = sCamera.ground; rf.target[2] = sCamera.targetZ;
                 Deck_RainLight(rf.light);
+                DeckRain_DrawSplashes(&rf);
                 if (DeckRain_DrawStreaks(&rf))
                     wKind = NULL;
             }

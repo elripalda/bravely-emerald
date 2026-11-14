@@ -35,4 +35,7 @@ float DeckRain_Wetness(void);
 // C5: opacity (0..1, to give DrawFogBanks) of the low rain mist: grows with the weather amount and the wetness ramp.
 float DeckRain_Mist(float weatherAmount);
 
+// C3: ring splashes on the camera ground plane (target y); returns true if drawn. Call before the streaks.
+bool DeckRain_DrawSplashes(const DeckRainFrame *f);
+
 #endif
