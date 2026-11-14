@@ -114,6 +114,8 @@ uint32_t VoxelWorld_GetCollision(int32_t worldX, int32_t worldY);
 uint32_t VoxelWorld_GetMetatileBehavior(int32_t worldX, int32_t worldY);
 /* The cell's metatile behaviour is MB_TALL_GRASS (the encounter grass; long grass is another one). */
 bool VoxelWorld_IsTallGrassCell(int32_t worldX, int32_t worldY);
+/* The cell's metatile (the General's) shows the animated flower tiles 508-511 in one of its 8 entries. */
+bool VoxelWorld_IsFlowerCell(int32_t worldX, int32_t worldY);
 /* Reflective behavior whose metatile art actually depicts water or ice. */
 bool VoxelWorld_IsVisibleReflectiveSurface(int32_t worldX, int32_t worldY);
 /* Where in the cell the GBA shows a priority-3 sprite (the clouds of

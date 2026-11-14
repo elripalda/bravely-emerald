@@ -32,6 +32,7 @@ bool VoxelTree_LaysGround(const void *secondaryTileset, int32_t metatileId);
 /* Deck: does a standing tuft of tall grass stand on this world cell (setting on, shaders up, behaviour
  * tall grass, not a tree's cell)? The field effect of the GBA's grass is hidden there. */
 bool VoxelTree_TallGrassStands(int32_t x, int32_t y);
+bool VoxelTree_FlowersStand(int32_t x, int32_t y); /* Deck: standing flowers on this cell (setting on, flower metatile) */
 uint32_t VoxelTree_TuftsEmitted(void); /* running total, for the debug log (Deck) */
 void VoxelTree_EmitInstance(VoxelBuilder *builder, const VoxelMapInstance *inst,
                             int32_t x0, int32_t y0, int32_t x1, int32_t y1);

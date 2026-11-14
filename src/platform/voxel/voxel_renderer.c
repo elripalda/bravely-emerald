@@ -30,6 +30,7 @@
 #include "../deck/deck_gl_shader.h"
 #include "../deck/deck_post.h"
 #include "../deck/deck_sway.h"
+#include "../deck/deck_flowers.h"
 #endif
 
 static int32_t sFrameDrawCalls = 0;
@@ -3549,6 +3550,21 @@ bool VoxelRenderer_Init(void)
             BrightenCrowns(sTreeMorton);
             Voxel_UnswizzleMortonToLinear(sTreeMorton, sTreeLinear,
                                           VOXEL_TREE_TEXTURE_DIM, VOXEL_TREE_TEXTURE_DIM);
+#ifdef PLATFORM_DECK
+            {
+                // standing flowers (deck_flowers.c): painted into the free rows py 112..123, graded like the rest.
+                // The linear buffer is bottom row first (Voxel_UnswizzleMortonToLinear): py -> row dim - 1 - py.
+                uint16_t flowers[DECK_FLOWER_W * DECK_FLOWER_VARIANTS * DECK_FLOWER_H];
+                const uint32_t w = DECK_FLOWER_W * DECK_FLOWER_VARIANTS;
+
+                DeckFlowers_Sprites(flowers);
+                VoxelGrade_Texels(flowers, w * DECK_FLOWER_H);
+                for (uint32_t r = 0; r < DECK_FLOWER_H; ++r)
+                    memcpy(&sTreeLinear[(VOXEL_TREE_TEXTURE_DIM - 1 - (DECK_FLOWER_ATLAS_Y + r)) * VOXEL_TREE_TEXTURE_DIM
+                                        + DECK_FLOWER_ATLAS_X],
+                           &flowers[r * w], w * sizeof(uint16_t));
+            }
+#endif
             glGenTextures(1, &sTreeTex);
             glBindTexture(GL_TEXTURE_2D, sTreeTex);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);

@@ -7,6 +7,7 @@
 #include "voxel_lighting.h"
 #ifdef PLATFORM_DECK
 #include "../deck/deck_sway.h"
+#include "../deck/deck_flowers.h"
 #endif
 
 struct Tileset;
@@ -382,8 +383,22 @@ bool VoxelTree_TallGrassStands(int32_t x, int32_t y)
 #endif
 }
 
+bool VoxelTree_FlowersStand(int32_t x, int32_t y)
+{
 #ifdef PLATFORM_DECK
-static uint32_t sTufts;
+    const VoxelMapInstance *inst = VoxelWorld_GetInstanceAt(x, y);
+
+    return inst != NULL && DeckGrass_Enabled() && VoxelWorld_UsesTreeSprites(inst)
+        && VoxelTree_Part(inst->secondaryTileset, VoxelWorld_GetMetatileId(x, y)) < 0
+        && !VoxelWorld_IsTallGrassCell(x, y) && VoxelWorld_IsFlowerCell(x, y);
+#else
+    (void)x; (void)y;
+    return false;
+#endif
+}
+
+#ifdef PLATFORM_DECK
+static uint32_t sTufts, sFlowerCells;
 
 uint32_t VoxelTree_TuftsEmitted(void)
 {
@@ -421,6 +436,49 @@ static void EmitTallGrass(VoxelBuilder *builder, int32_t x, int32_t y)
     builder->swayBend = false;
     builder->lightingConstant = constant;
     ++sTufts;
+}
+
+/* Standing flowers (E2): two small leant cards a cell, spread by the cell's coordinates (a hash, not a random
+ * state, so a rebuilt chunk draws the same flowers), at 0.5 x 0.75 tile, from the painted sprites in the free rows
+ * of the tree atlas (deck_flowers.c). They stand over the flat animated flowers of the ground, which stay. */
+static void EmitFlowers(VoxelBuilder *builder, int32_t x, int32_t y)
+{
+    const float length = DECK_FLOWER_H / 16.0f, halfWidth = 0.25f;
+    const float rise = 0.766044f * length, run = 0.642788f * length;
+    const float baseHeight = -0.05f;
+    const float constant = builder->lightingConstant;
+    uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u;
+
+#if CTR_VOXEL_LIGHTING
+    if (builder->lighting && constant < 0.0f)
+        builder->lightingConstant = VoxelLighting_Sample(
+            (float)x + 0.5f, 0.2f + builder->lift + builder->base,
+            VoxelBuilder_StretchZ(builder, (float)y + 0.5f + builder->shift));
+#endif
+    builder->rounded = true;
+    builder->swayY0 = baseHeight;
+    builder->swayRise = rise;
+    builder->swayScale = 0.8f;
+    builder->swayBend = true;
+    for (int i = 0; i < 2; ++i)
+    {
+        const float cx = (float)x + 0.25f + 0.5f * (float)((h >> (3 + i * 9)) & 0xFF) / 255.0f;
+        const float baseZ = (float)y + 0.35f + 0.5f * (float)((h >> (7 + i * 9)) & 0xFF) / 255.0f;
+        const int variant = (int)((h >> (13 + i * 5)) & 3u);
+        const int u0 = DECK_FLOWER_ATLAS_X + variant * DECK_FLOWER_W;
+        const int v0 = DECK_FLOWER_ATLAS_Y, v1 = DECK_FLOWER_ATLAS_Y + DECK_FLOWER_H;
+
+        VoxelBuilder_Quad(builder,
+            &(VoxelVertex){cx - halfWidth, baseHeight + rise, baseZ - run, TEX_U(u0), TEX_V(v0), 1.0f},
+            &(VoxelVertex){cx + halfWidth, baseHeight + rise, baseZ - run, TEX_U(u0 + DECK_FLOWER_W), TEX_V(v0), 1.0f},
+            &(VoxelVertex){cx + halfWidth, baseHeight, baseZ, TEX_U(u0 + DECK_FLOWER_W), TEX_V(v1), 1.0f},
+            &(VoxelVertex){cx - halfWidth, baseHeight, baseZ, TEX_U(u0), TEX_V(v1), 1.0f});
+    }
+    builder->rounded = false;
+    builder->swayRise = 0.0f;
+    builder->swayBend = false;
+    builder->lightingConstant = constant;
+    ++sFlowerCells;
 }
 #endif
 
@@ -653,6 +711,14 @@ void VoxelTree_EmitInstance(VoxelBuilder *builder, const VoxelMapInstance *inst,
                 builder->lift = VoxelRelief_CellLift(inst, x, y);
                 builder->shift = VoxelRelief_CellShift(inst, x, y);
                 EmitTallGrass(builder, x, y);
+                builder->lift = 0.0f;
+                builder->shift = 0.0f;
+            }
+            else if (VoxelTree_FlowersStand(x, y))
+            {
+                builder->lift = VoxelRelief_CellLift(inst, x, y);
+                builder->shift = VoxelRelief_CellShift(inst, x, y);
+                EmitFlowers(builder, x, y);
                 builder->lift = 0.0f;
                 builder->shift = 0.0f;
             }

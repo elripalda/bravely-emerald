@@ -749,6 +749,40 @@ bool VoxelWorld_IsTallGrassCell(int32_t worldX, int32_t worldY)
     return MetatileBehavior_IsTallGrass((u8)VoxelWorld_GetMetatileBehavior(worldX, worldY));
 }
 
+/* The General's flower animation writes 4 tiles at BG tile 508 (tileset_anims.c, QueueAnimTiles_General_Flower).
+ * Mauville's and Ever Grande's own flowers are not classified (their offsets are not read here). */
+#define FLOWER_TILE_FIRST 508
+#define FLOWER_TILE_LAST 511
+
+bool VoxelWorld_IsFlowerCell(int32_t worldX, int32_t worldY)
+{
+    static uint8_t sFlower[NUM_METATILES_IN_PRIMARY / 8];
+    static bool sFlowerReady;
+    const VoxelMapInstance *inst = NULL;
+    u16 block = GetRawBlock(worldX, worldY, &inst);
+    uint32_t id = block & MAPGRID_METATILE_ID_MASK;
+
+    if (inst == NULL || inst->primaryTileset != &gTileset_General || id >= NUM_METATILES_IN_PRIMARY)
+        return false;
+    if (!sFlowerReady)
+    {
+        const uint16_t *entries = Voxel_ResolveMetatiles(inst->primaryTileset);
+
+        if (entries == NULL)
+            return false;
+        for (uint32_t m = 0; m < NUM_METATILES_IN_PRIMARY; ++m)
+            for (uint32_t k = 0; k < 8; ++k)
+            {
+                uint32_t tile = entries[m * 8 + k] & 0x3FF;
+
+                if (tile >= FLOWER_TILE_FIRST && tile <= FLOWER_TILE_LAST)
+                    sFlower[m / 8] |= (uint8_t)(1u << (m % 8));
+            }
+        sFlowerReady = true;
+    }
+    return (sFlower[id / 8] >> (id % 8)) & 1u;
+}
+
 bool VoxelWorld_IsVisibleReflectiveSurface(int32_t worldX, int32_t worldY)
 {
     const VoxelMapInstance *inst = NULL;

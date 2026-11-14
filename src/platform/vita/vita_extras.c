@@ -299,7 +299,7 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS",    "COLOR GRADE",       "voxel_grade",      3, 2, sVoxelFxValues,      NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "BLOOM",             "voxel_bloom",      3, 2, sVoxelFxValues,      NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "WIND SWAY",         "voxel_sway",       2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "STANDING GRASS",    "voxel_grass",      2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "GRASS & FLOWERS",    "voxel_grass",      2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
 #endif
     { VITA_TAB_WORLD,   "TIME & SKY", "DAY / NIGHT CYCLE", "day_night",        2, 1, sDayNightValues,    NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "TIME & SKY", "TIMED ENCOUNTERS",  "timed_encounters", 2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },
