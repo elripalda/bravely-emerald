@@ -40,3 +40,10 @@ All in the SDD ledger (`.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/p
 - The 415 MB of root-owned leftovers in `SD512/emerald-deck/containers` need `sudo` to remove.
 - Intro-edge slivers may need a rebuild of the generated assets (Pillow was installed later).
 - Task 8 of the stage 1 plan (host-native run without the container) is not done; the user launched it from Desktop Mode only.
+
+## Autonomous run (user asleep, from 2026-11-13 night)
+
+User ruling: full autonomy through all remaining phases (2 to 8) of `docs/superpowers/specs/2026-11-13-deck-visual-upgrade-design.md`; ask nothing, decide and record below; visual checks, tuning and the perf compare happen when the user wakes. Reviews use Sonnet only. Ledger: `.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/progress.md` (git-ignored). Rules: one Deck run at a time, no detached loops, absolute outdirs for `run_autoplay.sh`, exactly one normal game instance at the end.
+
+### Autonomous decisions
+(append: date, phase, decision, why, cost if wrong)
