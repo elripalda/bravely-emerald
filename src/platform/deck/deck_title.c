@@ -10,6 +10,10 @@
 #include "global.h"
 #include "palette.h"
 #include "deck_reveal.h"
+#include "sprite.h"
+#include "graphics.h"
+#include <SDL2/SDL_image.h>
+#include "vita_platform.h"
 #include "deck_title_font.h"
 #include "platform/vita_extras.h"
 
@@ -101,7 +105,7 @@ static const char kRayFs[] =
     "}\n";
 
 // front layer: the game's own picture, the keyed backdrop (magenta) is transparent. uMode 0: glow (a soft halo of the lit
-// texels added behind), 1: the picture itself with a rim highlight on the upper left edges.
+// texels added behind), 1: the picture itself, texel for texel as the game drew it.
 static const char kFrontFs[] =
     "#version 120\n"
     "uniform sampler2D uTex;\n"
@@ -109,17 +113,8 @@ static const char kFrontFs[] =
     "uniform vec2 uRad;\n"         // glow radius in uv
     "uniform float uMode;\n"
     "uniform float uAmt;\n"
-    "uniform vec4 uBanner;\n"     // uv rect of the EMERALD VERSION sprites
-    "uniform float uBMode;\n"     // 0 no banner logic, 1 draw all but the banner, 2 draw only the banner
     "varying vec3 vT;\n"
     "varying vec4 vC;\n"
-    "bool isBanner(vec2 uv, vec3 c) {\n"
-    "    if (uBMode < 0.5 || uv.x < uBanner.x || uv.x > uBanner.z || uv.y < uBanner.y || uv.y > uBanner.w) return false;\n"
-    "    float mx = max(c.r, max(c.g, c.b));\n"
-    "    float mn = min(c.r, min(c.g, c.b));\n"
-    "    return (mx - mn) < 0.2 * mx + 0.02;\n"      // white, grey and the black outline; the logo is yellow and blue
-    "}\n"
-    "float opaque(vec2 uv) { vec3 c = texture2D(uTex, uv).rgb; return step(0.04, length(c - vec3(1.0, 0.0, 1.0))); }\n"
     "void main() {\n"
     "    vec2 uv = vT.xy;\n"
     "    if (uMode < 0.5) {\n"
@@ -129,18 +124,13 @@ static const char kFrontFs[] =
     "            float r = (mod(float(i), 2.0) < 0.5) ? 0.55 : 1.0;\n"
     "            vec2 o = vec2(cos(a), sin(a)) * uRad * r;\n"
     "            vec3 c = texture2D(uTex, uv + o).rgb;\n"
-    "            acc += c * step(0.04, length(c - vec3(1.0, 0.0, 1.0))) * (isBanner(uv + o, c) ? 0.0 : 1.0);\n"
+    "            acc += c * step(0.04, length(c - vec3(1.0, 0.0, 1.0)));\n"
     "        }\n"
     "        gl_FragColor = vec4(acc / 12.0 * uAmt, 1.0);\n"
     "        return;\n"
     "    }\n"
     "    vec3 c = texture2D(uTex, uv).rgb;\n"
     "    if (length(c - vec3(1.0, 0.0, 1.0)) < 0.04) discard;\n"
-    "    bool bn = isBanner(uv, c);\n"
-    "    if ((uBMode > 1.5 && !bn) || (uBMode > 0.5 && uBMode < 1.5 && bn)) discard;\n"
-    "    float edge = 1.0 - opaque(uv + vec2(-uTexel.x, -uTexel.y));\n"
-    "    float edge2 = 1.0 - opaque(uv + vec2(0.0, -uTexel.y));\n"
-    "    c += vec3(1.0, 0.96, 0.8) * max(edge, edge2) * 0.28;\n"
     "    gl_FragColor = vec4(c, 1.0);\n"
     "}\n";
 
@@ -201,7 +191,7 @@ static const char kRaysFs[] =
 static bool sInit, sFailed, sEnvRead, sEnvOrig, sArtOk;
 static DeckGlProgram sLayer, sRay, sFront, sShine, sSoft, sRays;
 static GLint sLyTex, sLyBias, sRyTex, sRyMark, sRySize, sRyScale, sRyMarkCol, sRyRim;
-static GLint sFrBanner, sFrBMode, sFrTex, sFrTexel, sFrRad, sFrMode, sFrAmt, sShTex, sShPos, sShAmt, sRaysT, sRaysAmt;
+static GLint sFrTex, sFrTexel, sFrRad, sFrMode, sFrAmt, sShTex, sShPos, sShAmt, sRaysT, sRaysAmt;
 static GLuint sSkyTex, sRayTex, sMarkTex, sCloudTex, sPlateTex, sCrestTex;
 static int sPlateW, sPlateH, sCrestW, sCrestH;
 static int sPrevPhase;
@@ -432,216 +422,200 @@ static GLuint FloatToTexture(const float *f, int w, int h)
     return t;
 }
 
-// BRAVELY: dark ink in Trajan-like capitals on a soft light translucent plate (pale grey-white, slight gradient, rim, shadow).
+// BRAVELY: just the letters, dark ink in Trajan-like capitals with a very soft light edge so they read over the logo.
 static bool BuildPlate(void)
 {
-    const int w = 560, h = 168;
+    const int pad = 18, tw = 440;
     unsigned char *m = DecodeRle(kBravelyRle, sizeof(kBravelyRle), KBRAVELYRLE_W, KBRAVELYRLE_H);
+    const float sc = (float)tw / (float)KBRAVELYRLE_W;
+    const int th = (int)((float)KBRAVELYRLE_H * sc + 0.5f), w = tw + 2 * pad, h = th + 2 * pad;
     float *f = (float *)calloc((size_t)w * h * 4, sizeof(float));
-    const float tw = 430.0f, sc = tw / (float)KBRAVELYRLE_W, th = (float)KBRAVELYRLE_H * sc;
+    float *a = (float *)calloc((size_t)w * h, sizeof(float));
+    float *b = (float *)calloc((size_t)w * h, sizeof(float));
 
-    if (m == NULL || f == NULL)
+    if (m == NULL || f == NULL || a == NULL || b == NULL)
     {
         free(m);
         free(f);
+        free(a);
+        free(b);
         return false;
+    }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            a[y * w + x] = MaskAt(m, KBRAVELYRLE_W, KBRAVELYRLE_H, ((float)x - pad) / sc, ((float)y - pad) / sc);
+    // soft light edge: the mask blurred (two box passes of radius 5), a little stronger than the letters themselves
+    for (int pass = 0; pass < 2; pass++)
+    {
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float acc = 0.0f;
+
+                for (int k = -5; k <= 5; k++)
+                    acc += (x + k >= 0 && x + k < w) ? a[y * w + x + k] : 0.0f;
+                b[y * w + x] = acc / 11.0f;
+            }
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float acc = 0.0f;
+
+                for (int k = -5; k <= 5; k++)
+                    acc += (y + k >= 0 && y + k < h) ? b[(y + k) * w + x] : 0.0f;
+                a[y * w + x] = pass == 0 ? acc / 11.0f : a[y * w + x];
+                if (pass == 1)
+                    b[y * w + x] = acc / 11.0f;
+            }
     }
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
         {
             float *px = &f[((size_t)y * w + x) * 4];
-            const float d = SdRoundRect((float)x + 0.5f - w * 0.5f, (float)y + 0.5f - h * 0.5f, w * 0.5f - 14.0f, h * 0.5f - 14.0f, 14.0f);
-            const float v = (float)y / (float)h;
+            const float halo = Clamp01(b[y * w + x] * 2.6f) * 0.75f;
+            const float ink = MaskAt(m, KBRAVELYRLE_W, KBRAVELYRLE_H, ((float)x - pad) / sc, ((float)y - pad) / sc);
 
-            if (d > 0.0f && d < 12.0f)
-            {
-                const float a = 0.30f * expf(-d / 4.5f);
-                OverPx(px, 0.02f, 0.05f, 0.08f, a);   // soft shadow outside
-            }
-            if (d < 1.0f)
-            {
-                const float cov = Clamp01(0.5f - d);
-                const float a = (0.90f - 0.14f * v) * cov;
-                const float lum = 0.985f - 0.17f * v;
-
-                OverPx(px, lum, lum + 0.01f, lum + 0.03f, a);
-                if (d > -3.0f)
-                    OverPx(px, 1.0f, 1.0f, 1.0f, 0.55f * cov * Clamp01((d + 3.0f) / 3.0f));   // bright rim
-                if (d < -3.0f && d > -5.0f)
-                    OverPx(px, 0.55f, 0.58f, 0.66f, 0.18f * cov);                        // inner fine line
-            }
+            OverPx(px, 0.96f, 0.98f, 1.0f, halo);
+            if (ink > 0.0f)
+                OverPx(px, 0.07f, 0.08f, 0.14f, 0.97f * ink);
         }
-    // text: embossed (white above-left under the ink, soft shadow below-right), ink on top
-    for (int pass = 0; pass < 3; pass++)
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                const float ox = (float)w * 0.5f - tw * 0.5f, oy = (float)h * 0.5f - th * 0.5f;
-                const float off = pass == 0 ? -1.2f : (pass == 1 ? 1.4f : 0.0f);
-                const float a = MaskAt(m, KBRAVELYRLE_W, KBRAVELYRLE_H, ((float)x - ox - off) / sc, ((float)y - oy - off) / sc);
-                float *px = &f[((size_t)y * w + x) * 4];
-
-                if (a <= 0.0f)
-                    continue;
-                if (pass == 0)
-                    OverPx(px, 1.0f, 1.0f, 1.0f, 0.75f * a);
-                else if (pass == 1)
-                    OverPx(px, 0.35f, 0.38f, 0.48f, 0.35f * a);
-                else
-                    OverPx(px, 0.08f, 0.09f, 0.15f, 0.96f * a);
-            }
     sPlateTex = FloatToTexture(f, w, h);
     sPlateW = w;
     sPlateH = h;
     free(m);
     free(f);
+    free(a);
+    free(b);
     return sPlateTex != 0;
 }
 
-static float H2(int a, int b, int c)
-{
-    unsigned n = (unsigned)(a * 73856093) ^ (unsigned)(b * 19349663) ^ (unsigned)(c * 83492791);
-
-    n = (n << 13) ^ n;
-    return (float)((n * (n * n * 15731u + 789221u) + 1376312589u) & 0x7fffffffu) / 2147483648.0f;
-}
-
-// HD-2D crest: a rounded shield, white with pale blue triangular facets like a cut crystal, a white rim, "HD-2D" in dark serif caps.
+// The HD-2D crest: only an official artwork may be used. Not found online (see docs/DECK_NOTES.md), so nothing is invented:
+// if the file ui/hd2d_badge.png (RGBA, about 256 px) exists in the dist's app0 folder it is drawn in the top right with the
+// sparkle, otherwise there is no crest.
 static bool BuildCrest(void)
 {
-    const int w = 240, h = 280;
-    unsigned char *m = DecodeRle(kHd2dRle, sizeof(kHd2dRle), KHD2DRLE_W, KHD2DRLE_H);
-    float *f = (float *)calloc((size_t)w * h * 4, sizeof(float));
-    unsigned char *in = (unsigned char *)calloc((size_t)w * h, 1);
-    const float tw = 150.0f, sc = tw / (float)KHD2DRLE_W, th = (float)KHD2DRLE_H * sc;
+    size_t size = 0;
+    uint8_t *file = VitaPlatform_LoadAsset("ui/hd2d_badge.png", &size);
+    SDL_RWops *rw;
+    SDL_Surface *img, *rgba;
 
-    if (m == NULL || f == NULL || in == NULL)
+    if (file == NULL)
     {
-        free(m);
-        free(f);
-        free(in);
-        return false;
+        DeckGl_Log("[TITLE] no ui/hd2d_badge.png: the title has no HD-2D crest\n");
+        return true;
     }
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-        {
-            const float nx = ((float)x + 0.5f - w * 0.5f) / 108.0f, ny = ((float)y + 0.5f - h * 0.5f) / 128.0f;
-            const float ax = fabsf(nx);
-            const float top = -0.93f + 0.13f * nx * nx + (ax < 0.12f ? 0.05f : 0.0f);
-            const float bot = 0.12f + 0.88f * (1.0f - powf(fminf(ax, 1.0f), 1.7f));
+    rw = SDL_RWFromConstMem(file, (int)size);
+    img = rw != NULL ? IMG_Load_RW(rw, 1) : NULL;
+    if (img == NULL)
+    {
+        DeckGl_Log("[TITLE] ui/hd2d_badge.png could not be read: %s\n", IMG_GetError());
+        free(file);
+        return true;
+    }
+    rgba = SDL_ConvertSurfaceFormat(img, SDL_PIXELFORMAT_ABGR8888, 0);
+    SDL_FreeSurface(img);
+    if (rgba != NULL)
+    {
+        uint8_t *px = (uint8_t *)rgba->pixels;
 
-            in[y * w + x] = (ax <= 1.0f && ny >= top && ny <= bot) ? 1 : 0;
-        }
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-        {
-            float *px = &f[((size_t)y * w + x) * 4];
-            int near = 99;
-
-            if (!in[y * w + x])
+        for (int y = 0; y < rgba->h; y++)   // premultiply
+            for (int x = 0; x < rgba->w; x++)
             {
-                // soft grey-blue shadow just outside the rim
-                for (int dy = -3; dy <= 3 && near > 3; dy++)
-                    for (int dx = -3; dx <= 3; dx++)
-                        if (x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < h && in[(y + dy) * w + x + dx])
-                        {
-                            near = 3;
-                            break;
-                        }
-                if (near == 3)
-                    OverPx(px, 0.25f, 0.35f, 0.55f, 0.35f);
+                uint8_t *p = &px[(size_t)y * rgba->pitch + (size_t)x * 4];
+
+                p[0] = (uint8_t)(p[0] * p[3] / 255);
+                p[1] = (uint8_t)(p[1] * p[3] / 255);
+                p[2] = (uint8_t)(p[2] * p[3] / 255);
+            }
+        sCrestTex = MakeTexture(px, rgba->w, rgba->h, GL_RGBA, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, true);
+        sCrestW = rgba->w;
+        sCrestH = rgba->h;
+        SDL_FreeSurface(rgba);
+        DeckGl_Log("[TITLE] HD-2D crest loaded from ui/hd2d_badge.png (%dx%d)\n", sCrestW, sCrestH);
+    }
+    free(file);
+    return true;
+}
+
+// EMERALD VERSION: the game's own sprite sheet (8bpp, two 64x32 sprites, 1D tile order) decoded once from the same data the
+// game loads, drawn here as one piece at the sprite's live position so it can be pushed down without cutting the picture.
+static GLuint sBannerTex;
+static bool sBannerHidden;
+
+static bool BuildBanner(void)
+{
+    static u32 gfx[0x1000 / 4];
+    uint8_t *rgba = (uint8_t *)calloc(128 * 32 * 4, 1);
+    const uint8_t *g = (const uint8_t *)gfx;
+
+    if (rgba == NULL)
+        return false;
+    LZ77UnCompWram(gTitleScreenEmeraldVersionGfx, gfx);
+    for (int y = 0; y < 32; y++)
+        for (int x = 0; x < 128; x++)
+        {
+            const int half = x / 64, lx = x % 64;
+            const int tile = half * 32 + (y / 8) * 8 + lx / 8;
+            const int idx = g[tile * 64 + (y % 8) * 8 + lx % 8];
+            uint8_t *o = &rgba[((size_t)y * 128 + x) * 4];
+
+            if (idx == 0)
                 continue;
-            }
-            for (int r = 1; r <= 7 && near == 99; r++)
-                for (int dy = -r; dy <= r && near == 99; dy++)
-                    for (int dx = -r; dx <= r; dx++)
-                    {
-                        const int xx = x + dx, yy = y + dy;
-
-                        if (xx < 0 || xx >= w || yy < 0 || yy >= h || !in[yy * w + xx])
-                        {
-                            near = r;
-                            break;
-                        }
-                    }
-            {
-                // triangular facets: a lattice of cells, each split into two triangles, a shade per triangle
-                const float cs = 30.0f, gx = (float)x / cs, gy = (float)y / cs;
-                const int cx = (int)floorf(gx), cy = (int)floorf(gy);
-                const float fx = gx - (float)cx, fy = gy - (float)cy;
-                const int tri = (fx + fy > 1.0f) ? 1 : 0;
-                const float hv = H2(cx, cy, tri);
-                const float edgeD = fminf(fminf(fx, fy), fminf(1.0f - fx, 1.0f - fy));
-                const float diag = fabsf(fx + fy - 1.0f) * 0.7071f;
-                const float lineD = fminf(edgeD, diag) * cs;
-                float r, g, b;
-
-                if (hv < 0.40f)
-                {
-                    const float k = hv / 0.40f;
-
-                    r = 0.60f + 0.22f * k;
-                    g = 0.80f + 0.12f * k;
-                    b = 0.97f;
-                }
-                else
-                {
-                    const float k = (hv - 0.40f) / 0.60f;
-
-                    r = 0.90f + 0.10f * k;
-                    g = 0.94f + 0.06f * k;
-                    b = 1.0f;
-                }
-                if (lineD < 1.1f)
-                {
-                    r *= 0.84f;
-                    g *= 0.90f;
-                    b *= 0.97f;
-                }
-                OverPx(px, r, g, b, 1.0f);
-                if (near <= 5)
-                    OverPx(px, 1.0f, 1.0f, 1.0f, 0.95f * (1.0f - (float)(near - 1) / 5.0f * 0.4f));   // white rim
-            }
+            Rgb555(gTitleScreenEmeraldVersionPal[idx & 15], o);
+            o[3] = 255;
         }
-    // "HD-2D": a pale halo, then dark ink
-    for (int pass = 0; pass < 2; pass++)
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                const float ox = (float)w * 0.5f - tw * 0.5f, oy = (float)h * 0.52f - th * 0.5f;
-                float a = 0.0f;
-                float *px = &f[((size_t)y * w + x) * 4];
+    sBannerTex = MakeTexture(rgba, 128, 32, GL_RGBA, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, false);
+    free(rgba);
+    return sBannerTex != 0;
+}
 
-                if (pass == 0)
-                {
-                    for (int k = 0; k < 8; k++)
-                    {
-                        const float ang = (float)k * 0.7854f;
+// The game's two banner sprites sit at x 98 and 162 (centres). While the HD-2D title draws the banner itself they are hidden
+// in the GBA frame; the left one's y and blend state drive the drawing.
+static struct Sprite *FindBanner(void)
+{
+    for (int i = 0; i < MAX_SPRITES; i++)
+        if (gSprites[i].inUse && gSprites[i].x == 98 && gSprites[i].oam.shape == 1 /* wide */)
+            return &gSprites[i];
+    return NULL;
+}
 
-                        a = fmaxf(a, MaskAt(m, KHD2DRLE_W, KHD2DRLE_H, ((float)x - ox + 2.6f * cosf(ang)) / sc, ((float)y - oy + 2.6f * sinf(ang)) / sc));
-                    }
-                    if (a > 0.0f)
-                        OverPx(px, 1.0f, 1.0f, 1.0f, 0.85f * a);
-                }
-                else
-                {
-                    a = MaskAt(m, KHD2DRLE_W, KHD2DRLE_H, ((float)x - ox) / sc, ((float)y - oy) / sc);
-                    if (a > 0.0f)
-                        OverPx(px, 0.10f, 0.12f, 0.22f, 0.97f * a);
-                }
-            }
-    sCrestTex = FloatToTexture(f, w, h);
-    sCrestW = w;
-    sCrestH = h;
-    free(m);
-    free(f);
-    free(in);
-    return sCrestTex != 0;
+static void HideBannerSprites(bool hide)
+{
+    for (int i = 0; i < MAX_SPRITES; i++)
+        if (gSprites[i].inUse && (gSprites[i].x == 98 || gSprites[i].x == 162) && gSprites[i].oam.shape == 1)
+            gSprites[i].invisible = hide;
+    sBannerHidden = hide;
+}
+
+static void DrawBanner(float vx0, float vx1, float u0, float u1, float shift)
+{
+    struct Sprite *sp = FindBanner();
+    float gy, alpha = 1.0f;
+    float xa, xb;
+
+    if (sp == NULL)
+        return;
+    gy = (float)(sp->y + sp->y2);
+    if (sp->oam.objMode != ST_OAM_OBJ_NORMAL)
+    {
+        const int idx = sp->data[0];
+
+        alpha = Clamp01((float)(31 - idx) / 16.0f);   // the game's own fade-in table: 0 until index 31, full at 15
+    }
+    // gba column -> screen x through the same mapping as the front texture (line texture column = 24 + column)
+    xa = vx0 + (((24.0f + 66.0f) / 288.0f) - u0) / (u1 - u0) * (vx1 - vx0);
+    xb = vx0 + (((24.0f + 194.0f) / 288.0f) - u0) / (u1 - u0) * (vx1 - vx0);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    DeckGl_UseProgram(&sLayer);
+    DeckGl_Set1i(sLyTex, 0);
+    DeckGl_Set1f(sLyBias, 0.0f);
+    glBindTexture(GL_TEXTURE_2D, sBannerTex);
+    QuadT(xa, (gy - 16.0f) * TEX_SCALE + shift, xb, (gy + 16.0f) * TEX_SCALE + shift, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, alpha);
 }
 
 static bool BuildBadge(void)
 {
-    return BuildPlate() && BuildCrest();
+    return BuildPlate() && BuildCrest() && BuildBanner();
 }
 
 static bool Build(void)
@@ -665,8 +639,6 @@ static bool Build(void)
     sFrRad = DeckGl_Uniform(&sFront, "uRad");
     sFrMode = DeckGl_Uniform(&sFront, "uMode");
     sFrAmt = DeckGl_Uniform(&sFront, "uAmt");
-    sFrBanner = DeckGl_Uniform(&sFront, "uBanner");
-    sFrBMode = DeckGl_Uniform(&sFront, "uBMode");
     sShTex = DeckGl_Uniform(&sShine, "uTex");
     sShPos = DeckGl_Uniform(&sShine, "uPos");
     sShAmt = DeckGl_Uniform(&sShine, "uAmt");
@@ -952,23 +924,15 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         DeckGl_Set1i(sFrTex, 0);
         DeckGl_Set2f(sFrTexel, 1.0f / 288.0f, 1.0f / 160.0f);
         DeckGl_Set2f(sFrRad, 7.0f / fw * fu, 7.0f / SH);
-        // EMERALD VERSION (low saturation texels inside this uv rect) is drawn separately so it can be pushed down
-        DeckGl_Set4f(sFrBanner, (24.0f + 96.0f) / 288.0f, 0.0f, (24.0f + 228.0f) / 288.0f, 92.0f / 160.0f);
-        DeckGl_Set1f(sFrBMode, phase >= 2 ? 1.0f : 0.0f);
         glBlendFunc(GL_ONE, GL_ONE);
         DeckGl_Set1f(sFrMode, 0.0f);
-        DeckGl_Set1f(sFrAmt, 0.35f * intro);
+        DeckGl_Set1f(sFrAmt, 0.18f * intro);
         QuadT(vx0, 0.0f, vx1, SH, u0, 0.0f, u1, 1.0f, 0, 0, 1, 1, 1, 1);
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         DeckGl_Set1f(sFrMode, 1.0f);
         DeckGl_Set1f(sFrAmt, 1.0f);
         QuadT(vx0, 0.0f, vx1, SH, u0, 0.0f, u1, 1.0f, 0, 0, 1, 1, 1, 1);
-        if (phase >= 2)
-        {
-            DeckGl_Set1f(sFrBMode, 2.0f);
-            QuadT(vx0, bannerShift, vx1, SH + bannerShift, u0, 0.0f, u1, 1.0f, 0, 0, 1, 1, 1, 1);
-            DeckGl_Set1f(sFrBMode, 1.0f);
-        }
+        DrawBanner(vx0, vx1, u0, u1, bannerShift);
         if (shinePhase < 1.0f)
         {
             glBlendFunc(GL_ONE, GL_ONE);
