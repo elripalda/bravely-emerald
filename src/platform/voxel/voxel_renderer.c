@@ -2298,6 +2298,11 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
     if (builder.count > 0)
     {
         uint32_t count = builder.count > CHUNK_TREE_CAP ? CHUNK_TREE_CAP : builder.count;
+#ifdef PLATFORM_DECK
+        if (builder.count > CHUNK_TREE_CAP)
+            DeckGl_Log("[GRASS] tree range truncated chunk %d,%d: %u > %d
+", x0, y0, (unsigned)builder.count, CHUNK_TREE_CAP);
+#endif
         PackVoxelVertices(sScratch, out->treeVerts, count, !in->indoor, SwayWeights());
         out->treeCount = count;
     }

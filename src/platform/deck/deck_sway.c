@@ -1,4 +1,5 @@
 #include "deck_sway.h"
+#include <time.h>
 #include "deck_gl_shader.h"
 #include "platform/vita_extras.h"
 
@@ -16,10 +17,17 @@ static const char *kVs =
     "uniform float uTime;\n"
     "uniform vec3 uWind;\n"          // dirX, dirZ, strength (DeckGl_SetFrameUniforms)
     "uniform vec2 uChunkOffset;\n"
+    "uniform vec2 uFrameOffset;\n"   // chunk draw offset: vertex + it = the frame the walkers are in
+    "uniform vec3 uBend0;\n"         // walker x, z (current frame), 1 = present, 0 = unused
+    "uniform vec3 uBend1;\n"
+    "uniform vec3 uBend2;\n"
+    "uniform vec3 uBend3;\n"
     "varying vec2 vUv;\n"
     "varying vec3 vCol;\n"
     "void main() {\n"
-    "    float w = clamp((255.0 - floor(gl_Color.a * 255.0 + 0.5)) / 190.0, 0.0, 1.0);\n"
+    "    float raw = 255.0 - floor(gl_Color.a * 255.0 + 0.5);\n"
+    "    float bendFlag = mod(raw, 2.0);\n"   // byte = 2 * round(95 * w * scale) + bend (voxel_mesh_builder.c)
+    "    float w = clamp((raw - bendFlag) / 190.0, 0.0, 1.0);\n"
     "    vec4 p = gl_Vertex;\n"
     "    vec2 world = p.xz + uChunkOffset;\n"
     "    float ph = dot(world, vec2(0.37, 0.61));\n"
@@ -28,6 +36,18 @@ static const char *kVs =
     "    float str = 0.25 + (uWind.z - 0.25) * 0.5;\n"
     "    float d = w * 0.8 * str * gust * (0.35 + 0.65 * s);\n"
     "    p.xz += vec2(uWind.x, uWind.y) * d;\n"
+    "    if (bendFlag > 0.5) {\n"
+    "        vec2 f = p.xz + uFrameOffset;\n"
+    "        vec3 b[4]; b[0] = uBend0; b[1] = uBend1; b[2] = uBend2; b[3] = uBend3;\n"
+    "        for (int i = 0; i < 4; i++) {\n"
+    "            vec2 dv = f - b[i].xy;\n"
+    "            float dist = length(dv);\n"
+    "            float k = b[i].z * w * clamp(1.0 - dist / 0.9, 0.0, 1.0);\n"
+    "            k *= k;\n"
+    "            p.xz += (dist > 0.001 ? dv / dist : vec2(0.0, 1.0)) * (0.6 * k);\n"
+    "            p.y -= 0.3 * k;\n"
+    "        }\n"
+    "    }\n"
     "    gl_Position = gl_ModelViewProjectionMatrix * p;\n"
     "    vUv = gl_MultiTexCoord0.xy;\n"
     "    vCol = gl_Color.rgb;\n"
@@ -99,6 +119,21 @@ void DeckSway_SetWalkers(const float (*xz)[2], int n)
     {
         sWalk[i][0] = xz[i][0];
         sWalk[i][1] = xz[i][1];
+    }
+    {
+        // once a second: where the bend uniforms put the walkers (current frame, tile centres)
+        static time_t sLast;
+        time_t now = time(NULL);
+
+        if (sWalkN > 0 && now != sLast)
+        {
+            sLast = now;
+            DeckGl_Log("[BEND] walkers %d: (%.2f,%.2f) (%.2f,%.2f) (%.2f,%.2f) (%.2f,%.2f)
+", sWalkN,
+                       sWalk[0][0], sWalk[0][1], sWalkN > 1 ? sWalk[1][0] : 0.0f, sWalkN > 1 ? sWalk[1][1] : 0.0f,
+                       sWalkN > 2 ? sWalk[2][0] : 0.0f, sWalkN > 2 ? sWalk[2][1] : 0.0f,
+                       sWalkN > 3 ? sWalk[3][0] : 0.0f, sWalkN > 3 ? sWalk[3][1] : 0.0f);
+        }
     }
 }
 

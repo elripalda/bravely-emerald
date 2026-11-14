@@ -756,31 +756,42 @@ bool VoxelWorld_IsTallGrassCell(int32_t worldX, int32_t worldY)
 
 bool VoxelWorld_IsFlowerCell(int32_t worldX, int32_t worldY)
 {
+    /* the chunk worker calls this: bitmap computed locally, published once (0 new, 1 filling, 2 ready) */
     static uint8_t sFlower[NUM_METATILES_IN_PRIMARY / 8];
-    static bool sFlowerReady;
+    static int sFlowerState;
+    uint8_t local[NUM_METATILES_IN_PRIMARY / 8];
+    const uint8_t *bits = sFlower;
     const VoxelMapInstance *inst = NULL;
     u16 block = GetRawBlock(worldX, worldY, &inst);
     uint32_t id = block & MAPGRID_METATILE_ID_MASK;
 
     if (inst == NULL || inst->primaryTileset != &gTileset_General || id >= NUM_METATILES_IN_PRIMARY)
         return false;
-    if (!sFlowerReady)
+    if (__atomic_load_n(&sFlowerState, __ATOMIC_ACQUIRE) != 2)
     {
         const uint16_t *entries = Voxel_ResolveMetatiles(inst->primaryTileset);
 
+        int expected = 0;
+
         if (entries == NULL)
             return false;
+        memset(local, 0, sizeof(local));
         for (uint32_t m = 0; m < NUM_METATILES_IN_PRIMARY; ++m)
             for (uint32_t k = 0; k < 8; ++k)
             {
                 uint32_t tile = entries[m * 8 + k] & 0x3FF;
 
                 if (tile >= FLOWER_TILE_FIRST && tile <= FLOWER_TILE_LAST)
-                    sFlower[m / 8] |= (uint8_t)(1u << (m % 8));
+                    local[m / 8] |= (uint8_t)(1u << (m % 8));
             }
-        sFlowerReady = true;
+        bits = local;
+        if (__atomic_compare_exchange_n(&sFlowerState, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+        {
+            memcpy(sFlower, local, sizeof(local));
+            __atomic_store_n(&sFlowerState, 2, __ATOMIC_RELEASE);
+        }
     }
-    return (sFlower[id / 8] >> (id % 8)) & 1u;
+    return (bits[id / 8] >> (id % 8)) & 1u;
 }
 
 bool VoxelWorld_IsVisibleReflectiveSurface(int32_t worldX, int32_t worldY)

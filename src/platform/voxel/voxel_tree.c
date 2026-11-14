@@ -440,7 +440,7 @@ static void EmitTallGrass(VoxelBuilder *builder, int32_t x, int32_t y)
     builder->swayRise = 0.0f;
     builder->swayBend = false;
     builder->lightingConstant = constant;
-    ++sTufts;
+    __atomic_fetch_add(&sTufts, 1u, __ATOMIC_RELAXED); /* debug counter; per-chunk deltas are approximate if builders overlap */
 }
 
 /* Standing flowers (E2): two small leant cards a cell, spread by the cell's coordinates (a hash, not a random
@@ -483,7 +483,7 @@ static void EmitFlowers(VoxelBuilder *builder, int32_t x, int32_t y)
     builder->swayRise = 0.0f;
     builder->swayBend = false;
     builder->lightingConstant = constant;
-    ++sFlowerCells;
+    __atomic_fetch_add(&sFlowerCells, 1u, __ATOMIC_RELAXED);
 }
 #endif
 
