@@ -1,0 +1,15 @@
+# title -> Continue, then START (new UI hub), open the first entry, go back, START again. Format: <start_ms> <button> <duration_ms>
+6000 A 200
+9000 A 200
+12000 A 200
+16000 A 200
+20000 A 200
+24000 A 200
+28000 START 200
+33000 A 200
+38000 B 200
+42000 DOWN 150
+43000 DOWN 150
+44000 A 200
+49000 B 200
+52000 B 200
