@@ -227,7 +227,9 @@ static const char kCompositeBody[] =
     "        vec4 cq = uInvVP * vec4(0.0, 0.0, -1.0, 1.0);\n"          // a point on the near plane: the eye side
     "        if (dot(nn, wp - cq.xyz / cq.w) > 0.0) nn = -nn;\n"      // face the viewer whatever the derivative handedness
     "        float ndl = dot(nn, uSunL);\n"
-    "        if (sd < 0.9999 && ndl > 0.05) {\n"
+    // Near vertical surfaces (house walls, cliffs) are skipped: their normal from the depth derivatives is too noisy at grazing angles and
+    // the map self shadowed them in horizontal stripes (the banding on far houses; gone with voxel_sunshadow off). They keep their baked face shade.
+    "        if (sd < 0.9999 && ndl > 0.05 && nn.y > 0.45) {\n"
     "            float sinT = sqrt(max(1.0 - ndl * ndl, 0.0));\n"
     "            float tw = uSunB.y;\n"
     "            float bias = min(tw * (1.0 + 3.0 * sinT / max(ndl, 0.25)), tw * 10.0);\n"
