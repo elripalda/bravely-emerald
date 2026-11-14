@@ -29,6 +29,7 @@
 #ifdef PLATFORM_DECK
 #include "../deck/deck_gl_shader.h"
 #include "../deck/deck_post.h"
+#include "../deck/deck_sway.h"
 #endif
 
 static int32_t sFrameDrawCalls = 0;
@@ -378,6 +379,13 @@ static VoxelGlVertex sBatchGlVerts[BATCH_GL_VERTS_CAP];
 // Scratch vertex buffer for building
 #define SCRATCH_VERTICES 16384
 static VoxelVertex sScratch[SCRATCH_VERTICES];
+#ifdef PLATFORM_DECK
+// Wind sway weight per scratch vertex (voxel_mesh_builder.h swayW), packed into the tree vertices' alpha.
+static uint8_t sSwayW[SCRATCH_VERTICES];
+static uint8_t *SwayWeights(void) { return sSwayW; }
+#else
+static uint8_t *SwayWeights(void) { return NULL; }
+#endif
 
 
 // Entity, Shadow & Reflection dynamic vertex buffers
@@ -771,7 +779,7 @@ static inline void BakeGradedVertexColor(float shade, bool outdoor, uint8_t *out
 
 // Convert VoxelVertex (floats) to VoxelGlVertex (hardware vertex format)
 static inline void PackVoxelVertices(const VoxelVertex *const src, VoxelGlVertex *const dst, const uint32_t count,
-                                     const bool outdoor)
+                                     const bool outdoor, const uint8_t *const sway)
 {
     for (uint32_t i = 0; i < count; i++)
     {
@@ -781,7 +789,7 @@ static inline void PackVoxelVertices(const VoxelVertex *const src, VoxelGlVertex
         dst[i].u = src[i].u;
         dst[i].v = src[i].v;
         BakeGradedVertexColor(src[i].shade, outdoor, &dst[i].r, &dst[i].g, &dst[i].b);
-        dst[i].a = 255;
+        dst[i].a = (sway != NULL) ? (uint8_t)(255u - sway[i]) : 255; // Deck sway weight, see deck_sway.c
     }
 }
 
@@ -1219,6 +1227,9 @@ static GLuint RequestOrLoadBuildingPage(const int32_t page, const bool synchrono
 static VoxelChunkSlot *sChunkGrid[CHUNK_GRID_W][CHUNK_GRID_H];
 
 // Invalidate chunk cache (e.g. on warp / scene cut)
+// Total of the map-crossing shifts since the chunk cache was last cleared (wind phase frame, deck_sway.c).
+static float sSwayShiftX, sSwayShiftZ;
+
 static void InvalidateChunkCache(void)
 {
     for (int32_t i = 0; i < MAX_CHUNKS; i++)
@@ -1228,6 +1239,7 @@ static void InvalidateChunkCache(void)
     }
     memset(sChunkGrid, 0, sizeof(sChunkGrid));
     sChunkOriginX = 0;
+    sSwayShiftX = sSwayShiftZ = 0.0f;
     sChunkOriginY = 0;
     sNeedsFullWarmup = true;
     sWarmupFrames = 10;
@@ -1254,6 +1266,8 @@ static void ShiftChunkCoordinates(int32_t shiftTilesX, int32_t shiftTilesY)
 
     float sx = (float)shiftTilesX;
     float sz = (float)shiftTilesY;
+    sSwayShiftX += sx;
+    sSwayShiftZ += sz;
 
     memset(sChunkGrid, 0, sizeof(sChunkGrid));
     for (int32_t i = 0; i < MAX_CHUNKS; i++)
@@ -2246,6 +2260,7 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
     // 2. Trees & Tall Grass across all overlapping instances
     phaseStart = VitaPerf_NowMs();
     VoxelBuilder_Init(&builder, sScratch, SCRATCH_VERTICES);
+    builder.swayW = SwayWeights(); // Deck wind weights (NULL elsewhere)
     VoxelBuilder_SetAtlas(&builder, in->activeMap);
     builder.originX = 0.0f;
     builder.originZ = 0.0f;
@@ -2276,7 +2291,7 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
     if (builder.count > 0)
     {
         uint32_t count = builder.count > CHUNK_TREE_CAP ? CHUNK_TREE_CAP : builder.count;
-        PackVoxelVertices(sScratch, out->treeVerts, count, !in->indoor);
+        PackVoxelVertices(sScratch, out->treeVerts, count, !in->indoor, SwayWeights());
         out->treeCount = count;
     }
     out->treesMs = VitaPerf_NowMs() - phaseStart;
@@ -2325,7 +2340,7 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
     if (builder.count > 0)
     {
         uint32_t count = builder.count > CHUNK_BUILDING_CAP ? CHUNK_BUILDING_CAP : builder.count;
-        PackVoxelVertices(sScratch, out->buildingVerts, count, !in->indoor);
+        PackVoxelVertices(sScratch, out->buildingVerts, count, !in->indoor, NULL);
         out->buildingCount = count;
     }
     out->buildingsMs = VitaPerf_NowMs() - phaseStart;
@@ -3662,6 +3677,7 @@ bool VoxelRenderer_Init(void)
 #ifdef PLATFORM_DECK
     // RGBA8 scene target and post chain (deck_post.c); the legacy FBOs above stay the fallback.
     DeckPost_Init(VOXEL_DIORAMA_FBO_W, VOXEL_DIORAMA_FBO_H);
+    DeckSway_Init();
 #endif
 
     MakeFog();
@@ -3733,6 +3749,7 @@ void VoxelRenderer_Shutdown(void)
     sDioramaFboReady = false;
 #ifdef PLATFORM_DECK
     DeckPost_Shutdown();
+    DeckSway_Shutdown();
 #endif
 
     if (sChunkStaging)
@@ -4688,7 +4705,7 @@ static void Frame_EmitEntities(const VoxelFrame *const f)
         sEntityGlCount = entityBuilder.count;
         if (sEntityGlCount > 0)
         {
-            PackVoxelVertices(sEntityVerts, sEntityGlVerts, sEntityGlCount, !indoor);
+            PackVoxelVertices(sEntityVerts, sEntityGlVerts, sEntityGlCount, !indoor, NULL);
         }
 
         sShadowGlCount = shadowBuilder.count;
@@ -4904,6 +4921,9 @@ static void Pass_Trees(const VoxelFrame *const f)
     {
         glEnable(GL_ALPHA_TEST);
         glAlphaFunc(GL_GREATER, 0.0f);
+#ifdef PLATFORM_DECK
+        const bool sway = DeckSway_Begin();
+#endif
         glBindTexture(GL_TEXTURE_2D, sTreeTex);
 
         for (int32_t i = 0; i < visibleChunkCount; i++)
@@ -4917,9 +4937,17 @@ static void Pass_Trees(const VoxelFrame *const f)
             glTexCoordPointer(2, GL_FLOAT, sizeof(VoxelGlVertex), (const void *)offsetof(VoxelGlVertex, u));
             glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(VoxelGlVertex), (const void *)offsetof(VoxelGlVertex, r));
 
+#ifdef PLATFORM_DECK
+            if (sway)
+                DeckSway_SetChunkOffset(chunk->drawOffsetX - sSwayShiftX, chunk->drawOffsetZ - sSwayShiftZ);
+#endif
             ChunkOffsets_Apply(chunk);
             glDrawArrays(GL_TRIANGLES, (GLint)chunk->treeFirstVert, (GLsizei)count);
         }
+#ifdef PLATFORM_DECK
+        if (sway)
+            DeckSway_End();
+#endif
     }
 }
 

@@ -76,6 +76,11 @@ typedef struct
     bool lightingRefine; /* ground subdivision; disabled for the fixed-size belt */
     /* A tree's crown card: a rounded volume, not the plane it is drawn on. */
     bool rounded;
+    /* Deck wind sway: when swayW is not NULL, every vertex emitted gets a weight byte there (index as
+     * in `vertices`): 0 none, else round(190 * scale * clamp((y - swayY0) / swayRise)). swayRise <= 0
+     * writes 0. Set by the tree emitters around a crown card or a tuft. */
+    uint8_t *swayW;
+    float swayY0, swayRise, swayScale;
     /* The relief's lattice: each vertex's shade already holds its face term,
      * worked out a tile across (see EmitRelief), not its quad's. */
     bool vertexFace;

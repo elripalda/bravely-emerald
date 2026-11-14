@@ -343,12 +343,16 @@ static void EmitSmallCell(VoxelBuilder *builder, const VoxelMapInstance *inst, i
 
     EmitGround(builder, inst, x, y, TEX_U(tx), TEX_V(ty), TEX_U(tx + 16), TEX_V(ty + 16));
     builder->rounded = true;
+    builder->swayY0 = baseHeight;
+    builder->swayRise = rise;
+    builder->swayScale = grass ? 1.0f : 0.5f;
     VoxelBuilder_Quad(builder,
         &(VoxelVertex){wx,        baseHeight + rise, baseZ - run, TEX_U(cx),      TEX_V(cy),      1.0f},
         &(VoxelVertex){wx + 1.0f, baseHeight + rise, baseZ - run, TEX_U(cx + 16), TEX_V(cy),      1.0f},
         &(VoxelVertex){wx + 1.0f, baseHeight,        baseZ,       TEX_U(cx + 16), TEX_V(cy + 32), 1.0f},
         &(VoxelVertex){wx,        baseHeight,        baseZ,       TEX_U(cx),      TEX_V(cy + 32), 1.0f});
     builder->rounded = false;
+    builder->swayRise = 0.0f;
 }
 
 /* A 2x2 tree's art: its crown (rows of `rowPx` texels), its trunk's ground,
@@ -422,12 +426,16 @@ static void EmitCrownCard(VoxelBuilder *builder, const LargeArt *art, int32_t x,
 
     /* A crown card: lit as the rounded crown it stands for. */
     builder->rounded = true;
+    builder->swayY0 = baseHeight;
+    builder->swayRise = rise;
+    builder->swayScale = 0.5f;
     VoxelBuilder_Quad(builder,
         &(VoxelVertex){wx,        baseHeight + top * rise,    baseZ - top * run,    u0, v0, 1.0f},
         &(VoxelVertex){wx + 1.0f, baseHeight + top * rise,    baseZ - top * run,    u1, v0, 1.0f},
         &(VoxelVertex){wx + 1.0f, baseHeight + bottom * rise, baseZ - bottom * run, u1, v1, 1.0f},
         &(VoxelVertex){wx,        baseHeight + bottom * rise, baseZ - bottom * run, u0, v1, 1.0f});
     builder->rounded = false;
+    builder->swayRise = 0.0f;
 }
 
 static void EmitCell(VoxelBuilder *builder, const VoxelMapInstance *inst, const void *secondaryTileset,

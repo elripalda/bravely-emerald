@@ -75,6 +75,7 @@ typedef enum
     FAST_EXTRA_VOXEL_SHADERS,  // Deck shader master switch: 0 off (legacy picture), 1 on
     FAST_EXTRA_VOXEL_GRADE,    // Deck colour grade + vignette: 0 off, 1 on, 2 auto (preset)
     FAST_EXTRA_VOXEL_BLOOM,    // Deck bloom: 0 off, 1 on, 2 auto (preset)
+    FAST_EXTRA_VOXEL_SWAY,     // Deck wind sway of tree crowns and long grass: 0 off, 1 on
 #endif
     FAST_EXTRA_COUNT
 } FastExtraId;

@@ -101,6 +101,7 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_shaders") == 0) return FAST_EXTRA_VOXEL_SHADERS;
         if (strcmp(key, "voxel_grade") == 0) return FAST_EXTRA_VOXEL_GRADE;
         if (strcmp(key, "voxel_bloom") == 0) return FAST_EXTRA_VOXEL_BLOOM;
+        if (strcmp(key, "voxel_sway") == 0) return FAST_EXTRA_VOXEL_SWAY;
 #endif
         break;
     default:
@@ -289,6 +290,7 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS",    "SHADERS",           "voxel_shaders",    2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "COLOR GRADE",       "voxel_grade",      3, 2, sVoxelFxValues,      NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "BLOOM",             "voxel_bloom",      3, 2, sVoxelFxValues,      NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "WIND SWAY",         "voxel_sway",       2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
 #endif
     { VITA_TAB_WORLD,   "TIME & SKY", "DAY / NIGHT CYCLE", "day_night",        2, 1, sDayNightValues,    NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "TIME & SKY", "TIMED ENCOUNTERS",  "timed_encounters", 2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },

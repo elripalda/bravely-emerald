@@ -112,6 +112,8 @@ void VoxelBuilder_Init(VoxelBuilder *builder, VoxelVertex *storage, uint32_t cap
     builder->lightingRefine = true;
     builder->lightingConstant = -1.0f;
     builder->rounded = false;
+    builder->swayW = NULL;
+    builder->swayY0 = builder->swayRise = builder->swayScale = 0.0f;
     builder->vertexFace = false;
     builder->statics = NULL;
     builder->staticCapacity = 0;
@@ -143,6 +145,12 @@ void VoxelBuilder_Tri(VoxelBuilder *builder, const VoxelVertex *a,
 
     for (int32_t i = 0; i < 3; ++i)
     {
+        if (builder->swayW != NULL)
+        {
+            float w = builder->swayRise > 0.0f ? (v[i]->y - builder->swayY0) / builder->swayRise : 0.0f;
+            w = w < 0.0f ? 0.0f : (w > 1.0f ? 1.0f : w);
+            builder->swayW[builder->count] = (uint8_t)(w * builder->swayScale * 190.0f + 0.5f);
+        }
         VoxelVertex *out = &builder->vertices[builder->count++];
 
         *out = *v[i];
