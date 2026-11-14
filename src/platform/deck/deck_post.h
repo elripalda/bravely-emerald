@@ -8,7 +8,7 @@
 
 typedef struct
 {
-    int renderW, renderH;  // f->renderW / f->renderH (must equal the scene target size)
+    int renderW, renderH;  // f->renderW / f->renderH: the logical 960x544 (letterbox viewport call)
     bool indoor;           // no DoF indoors (same rule as Frame_BeginPasses)
     float fade;            // f->fadeAmount: grade, vignette and bloom fade out with it
     float bloom;           // f->light.bloom (per weather, BaseLightFor)
@@ -29,11 +29,15 @@ typedef struct
     int gradeLvl, bloomLvl, blurLvl, tiltLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
 } DeckPostConfig;
 
-void DeckPost_Init(int sceneW, int sceneH);
+void DeckPost_Init(int sceneW, int sceneH); // the size arguments are replaced by voxel_res
 void DeckPost_Shutdown(void);
 DeckPostConfig DeckPost_ReadConfig(void);
 // true: this frame's 3D scene goes to the RGBA8 scene target. Call before binding a framebuffer.
+// May recreate the scene target when voxel_res changed (960 / 1120 / 1280 wide, 16:9 like the picture).
 bool DeckPost_WantScene(int renderW, int renderH, bool indoor);
+// Size of the scene target: the 3D viewport of the frame (the projection aspect stays 960/544).
+int DeckPost_SceneWidth(void);
+int DeckPost_SceneHeight(void);
 void DeckPost_BindScene(void);
 // Leaves: framebuffer 0 with the letterboxed viewport and scissor, program 0, texture unit 0
 // active with GL_TEXTURE_2D enabled, blend/depth test/alpha test off, depth mask off, client

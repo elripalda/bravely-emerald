@@ -324,6 +324,7 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS", "WATER GLINTS",     "voxel_glint", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "CHARACTER OUTLINE","voxel_outline", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "SOFT SHADOWS",     "voxel_shadow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "3D RESOLUTION",    "voxel_res", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "TILT-SHIFT",       "voxel_tiltshift", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "CAMERA TILT",       "voxel_pitch",      5, 2, sVoxelPitchValues,   NULL, NULL, NULL },
 #endif

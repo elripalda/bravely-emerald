@@ -4966,6 +4966,11 @@ static void Frame_BeginPasses(VoxelFrame *const f)
     }
 
     // 8. OpenGL Setup & Hardware Render Passes
+#ifdef PLATFORM_DECK
+    if (f->postActive)
+        glViewport(0, 0, DeckPost_SceneWidth(), DeckPost_SceneHeight()); // the scene target (voxel_res); the aspect below stays 960/544
+    else
+#endif
     glViewport(0, 0, renderW, renderH);
 
     glMatrixMode(GL_PROJECTION);

@@ -147,10 +147,15 @@ static const char kCompositeBody[] =
     "    gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);\n"
     "}\n";
 
+#define DECK_BASE_W 960   // the logical picture and the OFF/LOW scene width
+#define DECK_BASE_H 544
+
 static bool sReady;
+static void DeleteTargets(void);
 static bool sXOk;      // the composite with POST_X built
 static bool sTiltOk;   // tilt-shift can run: POST_X composite and a depth texture on the scene target
 static bool sSizeWarned;
+static int sFailW;     // a scene width that could not be created (not tried again)
 static DeckGlTarget sScene;
 static DeckGlTarget sHalf[3]; // 0 bloom, 1 blur scratch, 2 DoF
 static DeckGlProgram sBright, sCopy, sBlur, sComposite;
@@ -238,13 +243,42 @@ void DeckPost_Shutdown(void)
     DeckGl_DeleteProgram(&sCopy);
     DeckGl_DeleteProgram(&sBlur);
     DeckGl_DeleteProgram(&sComposite);
-    DeckGl_DeleteTarget(&sScene);
-    for (int i = 0; i < 3; i++)
-        DeckGl_DeleteTarget(&sHalf[i]);
+    DeleteTargets();
     DeckGl_TimerShutdown();
     sReady = false;
     sXOk = false;
     sTiltOk = false;
+}
+
+// Scene width by voxel_res: OFF and LOW 960, MEDIUM 1120, HIGH 1280 (AUTO follows voxel_quality); height keeps 960:544, even.
+static void WantedSize(int *w, int *h)
+{
+    static const int kWidth[3] = { 960, 1120, 1280 };
+    const int lvl = DeckLevel(FAST_EXTRA_VOXEL_RES);
+
+    *w = lvl < 0 ? DECK_BASE_W : kWidth[lvl];
+    *h = (((*w * DECK_BASE_H + DECK_BASE_W - 1) / DECK_BASE_W) + 1) & ~1;
+}
+
+static bool CreateTargets(int w, int h)
+{
+    bool ok = DeckGl_CreateTarget(&sScene, w, h, DECK_GL_DEPTH_TEXTURE24, GL_NEAREST);
+
+    if (!ok)
+    {
+        DeckGl_DeleteTarget(&sScene);
+        ok = DeckGl_CreateTarget(&sScene, w, h, DECK_GL_DEPTH_RENDERBUFFER24, GL_NEAREST);
+    }
+    for (int i = 0; i < 3 && ok; i++)
+        ok = DeckGl_CreateTarget(&sHalf[i], w / 2, h / 2, DECK_GL_DEPTH_NONE, GL_LINEAR);
+    return ok;
+}
+
+static void DeleteTargets(void)
+{
+    DeckGl_DeleteTarget(&sScene);
+    for (int i = 0; i < 3; i++)
+        DeckGl_DeleteTarget(&sHalf[i]);
 }
 
 void DeckPost_Init(int sceneW, int sceneH)
@@ -258,14 +292,15 @@ void DeckPost_Init(int sceneW, int sceneH)
         DeckGl_Log("[POST] shaders unavailable: legacy path\n");
         return;
     }
-    ok = DeckGl_CreateTarget(&sScene, sceneW, sceneH, DECK_GL_DEPTH_TEXTURE24, GL_NEAREST);
-    if (!ok)
+    sFailW = 0;
+    WantedSize(&sceneW, &sceneH);
+    ok = CreateTargets(sceneW, sceneH);
+    if (!ok && sceneW != DECK_BASE_W)
     {
-        DeckGl_DeleteTarget(&sScene);
-        ok = DeckGl_CreateTarget(&sScene, sceneW, sceneH, DECK_GL_DEPTH_RENDERBUFFER24, GL_NEAREST);
+        DeckGl_Log("[POST] %dx%d target failed at init: %dx%d\n", sceneW, sceneH, DECK_BASE_W, DECK_BASE_H);
+        DeleteTargets();
+        ok = CreateTargets(DECK_BASE_W, DECK_BASE_H);
     }
-    for (int i = 0; i < 3 && ok; i++)
-        ok = DeckGl_CreateTarget(&sHalf[i], sceneW / 2, sceneH / 2, DECK_GL_DEPTH_NONE, GL_LINEAR);
     ok = ok && BuildPrograms();
     if (ok && force != NULL && strcmp(force, "0") != 0)
     {
@@ -287,18 +322,55 @@ void DeckPost_Init(int sceneW, int sceneH)
                (int)sXOk, (int)sTiltOk, c.quality, (int)c.shaders, (int)c.grade, (int)c.bloom, (int)c.blur, (int)c.tilt);
 }
 
+// A changed voxel_res: delete and create the scene and half-res targets at the new size (GL thread, between frames).
+// A failed create goes back to the old size, remembers the width, and does not try it again.
+static void ApplyWantedSize(void)
+{
+    int w, h;
+
+    WantedSize(&w, &h);
+    if (w == sScene.w || w == sFailW)
+        return;
+    const int oldW = sScene.w, oldH = sScene.h;
+    DeleteTargets();
+    if (CreateTargets(w, h))
+    {
+        DeckGl_Log("[POST] scene target %dx%d -> %dx%d (voxel_res)\n", oldW, oldH, sScene.w, sScene.h);
+        sFailW = 0;
+    }
+    else
+    {
+        DeckGl_Log("[POST] scene target %dx%d failed: back to %dx%d\n", w, h, oldW, oldH);
+        sFailW = w;
+        DeleteTargets();
+        if (!CreateTargets(oldW, oldH))
+        {
+            DeckPost_Shutdown();
+            DeckGl_Log("[POST] fallback: legacy diorama FBO and Pass_DepthOfField in use\n");
+            return;
+        }
+    }
+    sTiltOk = sXOk && sScene.depth == DECK_GL_DEPTH_TEXTURE24;
+}
+
+int DeckPost_SceneWidth(void) { return sScene.w; }
+int DeckPost_SceneHeight(void) { return sScene.h; }
+
 bool DeckPost_WantScene(int renderW, int renderH, bool indoor)
 {
     if (!sReady)
         return false;
-    if (renderW != sScene.w || renderH != sScene.h)
+    if (renderW != DECK_BASE_W || renderH != DECK_BASE_H)
     {
         if (!sSizeWarned)
-            DeckGl_Log("[POST] render size %dx%d differs from the scene target %dx%d: legacy path\n",
-                       renderW, renderH, sScene.w, sScene.h);
+            DeckGl_Log("[POST] render size %dx%d is not the logical %dx%d: legacy path\n",
+                       renderW, renderH, DECK_BASE_W, DECK_BASE_H);
         sSizeWarned = true;
         return false;
     }
+    ApplyWantedSize();
+    if (!sReady)
+        return false;
     const DeckPostConfig c = DeckPost_ReadConfig();
     if (!c.shaders)
         return false;
@@ -341,12 +413,15 @@ static void BlurPass(const DeckGlTarget *dst, const DeckGlTarget *src, float ste
     DrawQuad();
 }
 
+// The step grows with the scene width so the blur keeps its size on the picture at 1120 and 1280.
 static void Blur(const DeckGlTarget *t, const DeckGlTarget *tmp, int passes)
 {
+    const float k = (float)sScene.w / (float)DECK_BASE_W;
+
     for (int i = 0; i < passes; i++)
     {
-        BlurPass(tmp, t, 1.0f / (float)t->w, 0.0f);
-        BlurPass(t, tmp, 0.0f, 1.0f / (float)t->h);
+        BlurPass(tmp, t, k / (float)t->w, 0.0f);
+        BlurPass(t, tmp, 0.0f, k / (float)t->h);
     }
 }
 
@@ -422,8 +497,10 @@ void DeckPost_Run(const DeckPostFrame *in)
     BindTex(2, (doBlur || doTilt) ? sHalf[2].color : 0);
     BindTex(1, doBloom ? sHalf[0].color : 0);
     BindTex(0, sScene.color);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); // pixel art stays sharp
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // 960: one texel per logical pixel, NEAREST keeps the pixel art sharp. 1120 and 1280 are not integer multiples
+    // of the letterbox rect, NEAREST would shimmer on diagonal edges: LINEAR (the target is near 1:1 on the Deck).
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sScene.w == DECK_BASE_W ? GL_NEAREST : GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sScene.w == DECK_BASE_W ? GL_NEAREST : GL_LINEAR);
     GradeTints(in->daylight, in->glow, shadow, high);
     DeckGl_UseProgram(&sComposite);
     DeckGl_Set1i(sCScene, 0);
