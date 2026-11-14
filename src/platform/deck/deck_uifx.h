@@ -35,6 +35,8 @@ bool DeckUiFx_PanelsActive(void);
 int DeckUiFx_FillAlpha(void);
 // Text clarity: 0 none, 1 soft shadow, 2 outline (4 directions) + shadow, 3 outline (8 directions) + shadow.
 int DeckUiFx_TextMode(void);
+// Button prompts (voxel_uiglyphs): 0 the port's PlayStation glyphs, 1 GBA letters, 2 Steam Deck A / B / X / Y.
+int DeckUiFx_GlyphMode(void);
 // Seconds since start, continuous (the glass and the animations never step).
 float DeckUiFx_Seconds(void);
 // Tint gradient colours for a theme: the two theme colours shifted by the time of day (warm at dusk, cool at night).

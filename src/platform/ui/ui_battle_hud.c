@@ -170,9 +170,23 @@ static void Bar(int32_t x, int32_t y, int32_t w, int32_t h, int32_t pct, uint32_
 {
     if (pct < 0) pct = 0;
     if (pct > 100) pct = 100;
+    float fillPct = (float)pct;
+    if (UiFx_BarsOn())
+    {
+        // voxel_uibars: smooth fill; the HP bars (green / yellow / red from HpColours) get the gradient and the low HP glow
+        const bool hp = bottom == UI_RGBA(52, 211, 153, 255) || bottom == UI_RGBA(254, 214, 91, 255) || bottom == UI_RGBA(232, 82, 82, 255);
+
+        fillPct = UiFx_BarShown(x, y, w, (float)pct);
+        if (hp)
+        {
+            top = UiFx_HpColour(fillPct, 0);
+            bottom = UiFx_HpColour(fillPct, 1);
+            UiFx_BarGlow(x, y, w, h, fillPct);
+        }
+    }
     UiDraw_Rect(x, y, w, h, TH->gauge);
-    int32_t fill = (w - 4) * pct / 100;
-    if (pct > 0 && fill < 1) fill = 1;
+    int32_t fill = (int32_t)((float)(w - 4) * fillPct / 100.0f + 0.5f);
+    if (fillPct > 0.0f && fill < 1) fill = 1;
     UiDraw_RectV(x + 2, y + 2, fill, h - 4, top, bottom);
 }
 

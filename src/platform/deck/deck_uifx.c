@@ -93,6 +93,14 @@ int DeckUiFx_TextMode(void)
     return l < 0 ? 0 : l + 1;
 }
 
+int DeckUiFx_GlyphMode(void)
+{
+    const int v = VitaExtras_GetFast(FAST_EXTRA_VOXEL_UIGLYPHS);
+
+    ReadEnv();
+    return (sEnvAll || v < 0 || v > 2) ? 0 : v;
+}
+
 float DeckUiFx_Seconds(void)
 {
     static Uint64 sStart;
@@ -417,7 +425,6 @@ void DeckUiFx_Panel(const DeckUiPanel *p, float fade, float slideY)
         return;
     const int g = s.glassLvl, t = s.tintLvl;
     const bool glass = s.glassOn && g >= 0;
-    const int lv = t >= 0 ? t : (g >= 0 ? g : 0);
     float r, gr, b, ar, ag, ab, br, bg_, bb;
 
     if (!glass && t < 0)

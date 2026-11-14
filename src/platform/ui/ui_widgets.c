@@ -283,8 +283,45 @@ static void Disc(int32_t cx, int32_t cy, int32_t r, uint32_t colour)
     UiDraw_Rect(cx - runHw, cy + runStart, runHw * 2 + 1, r + 1 - runStart, colour);
 }
 
+// voxel_uiglyphs: the button circle as a letter. Deck: A (cross position), B (circle), X (square), Y (triangle), each in its colour.
+// GBA: A and B only (the GBA has no other face buttons; the square and triangle keep the port's own shapes).
+static bool LetterGlyph(int32_t x, int32_t y, uint8_t kind, int mode)
+{
+    static const char *const kDeckLetter[4] = { "A", "B", "Y", "X" };   // by UI_GLYPH_*: cross, circle, triangle, square
+    static const uint32_t kDeckRing[4] = { UI_RGBA(76, 160, 84, 255), UI_RGBA(214, 81, 81, 255), UI_RGBA(214, 168, 40, 255), UI_RGBA(91, 127, 214, 255) };
+    static const uint32_t kDeckInk[4] = { UI_RGBA(140, 236, 150, 255), UI_RGBA(255, 122, 122, 255), UI_RGBA(255, 220, 100, 255), UI_RGBA(143, 180, 255, 255) };
+    const int32_t cx = x + 12, cy = y + 12;
+    uint32_t ring, ink;
+    const char *letter;
+
+    kind &= 3;
+    if (mode == 1)
+    {
+        if (kind != UI_GLYPH_CROSS && kind != UI_GLYPH_CIRCLE)
+            return false;
+        letter = kind == UI_GLYPH_CROSS ? "A" : "B";
+        ring = UI_RGBA(150, 70, 140, 255);
+        ink = UI_RGBA(240, 190, 235, 255);
+    }
+    else
+    {
+        letter = kDeckLetter[kind];
+        ring = kDeckRing[kind];
+        ink = kDeckInk[kind];
+    }
+    Disc(cx, cy + 2, 12, C_SHADOW);
+    Disc(cx, cy, 12, ring);
+    Disc(cx, cy, 10, UI_RGBA(27, 30, 36, 255));
+    UiText_Draw(UI_FACE_PS2P, 16, cx - UiText_Width(UI_FACE_PS2P, 16, letter) / 2, y + 5, letter, ink);
+    return true;
+}
+
 void UiW_Glyph(int32_t x, int32_t y, uint8_t kind)
 {
+    const int glyphMode = UiFx_GlyphMode();
+
+    if (glyphMode > 0 && LetterGlyph(x, y, kind, glyphMode))
+        return;
     static const uint32_t ring[4] = { UI_RGBA(91, 127, 214, 255), UI_RGBA(214, 81, 81, 255), UI_RGBA(47, 167, 126, 255), UI_RGBA(194, 102, 168, 255) };
     static const uint32_t ink[4] = { UI_RGBA(143, 180, 255, 255), UI_RGBA(255, 122, 122, 255), UI_RGBA(95, 224, 176, 255), UI_RGBA(244, 155, 216, 255) };
     const int32_t cx = x + 12, cy = y + 12;
@@ -598,6 +635,7 @@ void UiW_Row(int32_t x, int32_t y, int32_t w, int32_t h, bool selected, int32_t 
             UiDraw_Rect(x, y + h - 2, w, 2, T->selEdge);
             UiW_Arrow(x + 8, y + (h - 12) / 2, T->selArrow);
         }
+        UiFx_SelRow(x, y, w, h);   // voxel_uisel: pulse and slide trail
     }
     else
     {
@@ -622,11 +660,27 @@ void UiW_Bar(int32_t x, int32_t y, int32_t w, int32_t h, int32_t percent, uint32
 {
     if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
+    int32_t fillW = (w - 4) * percent / 100;
+    if (UiFx_BarsOn())
+    {
+        // voxel_uibars: the fill follows the value smoothly; HP bars (the three HP colours) take the green > yellow > red
+        // gradient of the shown value and glow at low HP
+        const bool hp = bottom == UI_COL_HP_HIGH || bottom == UI_COL_HP_MID || bottom == UI_COL_HP_LOW;
+        const float shown = UiFx_BarShown(x, y, w, (float)percent);
+
+        fillW = (int32_t)((float)(w - 4) * shown / 100.0f + 0.5f);
+        if (hp)
+        {
+            top = UiFx_HpColour(shown, 0);
+            bottom = UiFx_HpColour(shown, 1);
+            UiFx_BarGlow(x, y, w, h, shown);
+        }
+    }
     UiDraw_Rect(x + 1, y, w - 2, h, UI_RGBA(26, 38, 32, 255));
     UiDraw_Rect(x, y + 1, w, h - 2, UI_RGBA(26, 38, 32, 255));
     UiDraw_Rect(x + 2, y + 2, w - 4, h - 4, UI_COL_BAR_BG);
     UiDraw_Rect(x + 2, y + 2, w - 4, 1, UI_RGBA(255, 255, 255, 26));
-    UiDraw_RectV(x + 2, y + 2, (w - 4) * percent / 100, h - 4, top, bottom);
+    UiDraw_RectV(x + 2, y + 2, fillW, h - 4, top, bottom);
 }
 
 void UiW_Button(int32_t x, int32_t y, int32_t w, const char *label, uint8_t colour, bool pressed)
