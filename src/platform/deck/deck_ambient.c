@@ -289,7 +289,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                 {
                     sWind[c].lp1 += windA * (Rs() - sWind[c].lp1);
                     sWind[c].lp2 += windA * (sWind[c].lp1 - sWind[c].lp2);
-                    sum[c] += sWind[c].lp2 * windAmp * lv * 5.0f;
+                    sum[c] += sWind[c].lp2 * windAmp * lv * 0.9f;
                 }
             }
 
@@ -309,7 +309,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                     sRainLp[c].lp1 += rainHp * (nz - sRainLp[c].lp1);
                     const float hp = nz - sRainLp[c].lp1;             // high-passed hiss
                     sRainLp[c].lp2 += 0.45f * (hp - sRainLp[c].lp2);  // takes the sting off above ~5 kHz
-                    sum[c] += sRainLp[c].lp2 * lv * 0.30f + hp * sDropEnv[c] * 0.10f * lv;
+                    sum[c] += sRainLp[c].lp2 * lv * 0.15f + hp * sDropEnv[c] * 0.05f * lv;
                     sDropEnv[c] *= 0.9955f;
                 }
             }
@@ -325,7 +325,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                     const float a = CutoffCoef(260.0f + 1900.0f * env);
                     w->lp1 += a * (Rs() - w->lp1);
                     w->lp2 += a * (w->lp1 - w->lp2);
-                    sum[c] += w->lp2 * (0.12f + 0.88f * env) * lv * 4.5f;
+                    sum[c] += w->lp2 * (0.12f + 0.88f * env) * lv * 0.75f;
                     w->phase += 1.0f / w->len;
                     if (w->phase >= 1.0f)
                         NewWave(w, 0.0f);
@@ -359,7 +359,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                     }
                     if (env > 0.0f)
                     {
-                        const float v = Sin01(k->phase) * env * env * k->amp * lv * 0.06f;
+                        const float v = Sin01(k->phase) * env * env * k->amp * lv * 0.09f;
                         sum[0] += v * (0.5f - 0.5f * k->pan);
                         sum[1] += v * (0.5f + 0.5f * k->pan);
                     }
@@ -393,7 +393,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                         const float x = b->t / b->noteLen;
                         const float e = Sin01(x * 0.5f);
                         const float f = b->f0 + (b->f1 - b->f0) * x;
-                        const float v = (Sin01(b->phase) + 0.25f * Sin01(Wrap01(b->phase * 2.0f))) * e * e * b->amp * lv * 0.05f;
+                        const float v = (Sin01(b->phase) + 0.25f * Sin01(Wrap01(b->phase * 2.0f))) * e * e * b->amp * lv * 0.12f;
                         sum[0] += v * (0.5f - 0.5f * b->pan);
                         sum[1] += v * (0.5f + 0.5f * b->pan);
                         b->phase = Wrap01(b->phase + f / sRate);
@@ -420,10 +420,10 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                 {
                     sCaveLp[c].lp1 += caveA * (Rs() - sCaveLp[c].lp1);
                     sCaveLp[c].lp2 += caveA * (sCaveLp[c].lp1 - sCaveLp[c].lp2);
-                    sum[c] += sCaveLp[c].lp2 * lv * 2.2f;
+                    sum[c] += sCaveLp[c].lp2 * lv * 0.6f;
                 }
                 {
-                    const float tone = (Sin01(sCavePhaseA) + Sin01(sCavePhaseB)) * 0.5f * lv * 0.05f;
+                    const float tone = (Sin01(sCavePhaseA) + Sin01(sCavePhaseB)) * 0.5f * lv * 0.03f;
                     sum[0] += tone;
                     sum[1] += tone;
                     sCavePhaseA = Wrap01(sCavePhaseA + 52.0f / sRate);
@@ -446,7 +446,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                         continue;
                     }
                     {
-                        const float v = Sin01(d->phase) * d->env * d->amp * 0.07f;
+                        const float v = Sin01(d->phase) * d->env * d->amp * 0.05f;
                         sum[0] += v * (0.5f - 0.5f * d->pan);
                         sum[1] += v * (0.5f + 0.5f * d->pan);
                     }
@@ -475,7 +475,7 @@ void DeckAmbient_Mix(float *out, int frames, float gain)
                 {
                     sThunderLp[c].lp1 += thunderA * (Rs() - sThunderLp[c].lp1);
                     sThunderLp[c].lp2 += thunderA * (sThunderLp[c].lp1 - sThunderLp[c].lp2);
-                    sum[c] += sThunderLp[c].lp2 * sThunderEnv * atk * 9.0f;
+                    sum[c] += sThunderLp[c].lp2 * sThunderEnv * atk * 4.0f;
                 }
                 sThunderEnv *= thunderDecay;
                 sThunderAge += 1.0f;
