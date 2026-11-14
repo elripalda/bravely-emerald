@@ -35,13 +35,19 @@ static const char *kBumpGlsl =
     "    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
     "    return mix(mix(dgHash(i), dgHash(i + vec2(1.0, 0.0)), f.x), mix(dgHash(i + vec2(0.0, 1.0)), dgHash(i + vec2(1.0, 1.0)), f.x), f.y);\n"
     "}\n"
-    "float dgHeight(vec2 w, vec3 k) {\n"       // k: grass, sand, path weights
-    "    float g = dgNoise(w * 1.5) * 0.65 + dgNoise(w * 3.6) * 0.35;\n"
-    "    float r = sin((w.x * 0.6 + w.y) * 5.5 + dgNoise(w * 0.9) * 4.0) * 0.5 + 0.5;\n"
-    "    float p = dgNoise(w * 9.0) * 0.7 + dgNoise(w * 17.0) * 0.3;\n"
+    // Fine grain in world space (noise frequencies per tile; fixed world scale, not screen scale, so nothing shimmers when walking).
+    // Was (before the "much smaller" round): grass 1.5 and 3.6, sand 5.5 and 0.9, path 9 and 17, undulation 0.16 and 0.07 at 2.2 and 1.2.
+    // Now: grass 5 and 12, sand 15 and 3, path 18 and 29; the undulation is x0.04. The finest octave of each kind fades out when it
+    // gets near the pixel size (aa), so it cannot alias.
+    "float dgHeight(vec2 w, vec3 k, float fp) {\n"       // k: grass, sand, path weights; fp: tiles per pixel
+    "    float a2 = 1.0 - smoothstep(0.25, 0.55, 12.0 * fp);\n"
+    "    float a3 = 1.0 - smoothstep(0.25, 0.55, 29.0 * fp);\n"
+    "    float g = dgNoise(w * 5.0) * 0.65 + (dgNoise(w * 12.0) * a2 + 0.5 * (1.0 - a2)) * 0.35;\n"
+    "    float r = sin((w.x * 0.6 + w.y) * 15.0 + dgNoise(w * 3.0) * 4.0) * 0.5 + 0.5;\n"
+    "    float p = dgNoise(w * 18.0) * 0.7 + (dgNoise(w * 29.0) * a3 + 0.5 * (1.0 - a3)) * 0.3;\n"
     "    return k.x * g + k.y * r + k.z * p;\n"
     "}\n"
-    "float dgUndulation(vec2 w) { return dgNoise(w * 0.16) * 2.2 + dgNoise(w * 0.07 + 5.0) * 1.2; }\n"
+    "float dgUndulation(vec2 w) { return (dgNoise(w * 0.16) * 2.2 + dgNoise(w * 0.07 + 5.0) * 1.2) * 0.04; }\n"
     "float deckGroundMul(vec2 w, vec3 base, vec3 vcol, vec3 eye) {\n"
     "    vec3 dp1 = dFdx(eye);\n"             // derivatives outside any branch
     "    vec3 dp2 = dFdy(eye);\n"
@@ -56,16 +62,17 @@ static const char *kBumpGlsl =
     "    float path = max(0.0, 1.0 - grass - sand);\n"
     "    float water = clamp((base.b - max(base.r, base.g * 0.8) - 0.05) * 5.0, 0.0, 1.0);\n"
     "    vec3 k = vec3(grass, sand, path);\n"
-    "    float e = 0.07;\n"
-    "    float h = dgHeight(w, k);\n"
-    "    float gx = (dgHeight(w + vec2(e, 0.0), k) - h) / e;\n"
-    "    float gz = (dgHeight(w + vec2(0.0, e), k) - h) / e;\n"
+    "    float fp = max(length(dFdx(w)), length(dFdy(w)));\n"
+    "    float e = 0.02;\n"
+    "    float h = dgHeight(w, k, fp);\n"
+    "    float gx = (dgHeight(w + vec2(e, 0.0), k, fp) - h) / e;\n"
+    "    float gz = (dgHeight(w + vec2(0.0, e), k, fp) - h) / e;\n"
     "    float u0 = dgUndulation(w);\n"
     "    float ux = (dgUndulation(w + vec2(0.5, 0.0)) - u0) / 0.5;\n"
     "    float uz = (dgUndulation(w + vec2(0.0, 0.5)) - u0) / 0.5;\n"
-    "    vec3 Np = normalize(vec3(-(gx * 0.30 + ux * 0.9), 1.0, -(gz * 0.30 + uz * 0.9)));\n"
+    "    vec3 Np = normalize(vec3(-(gx * 0.09 + ux * 0.9), 1.0, -(gz * 0.09 + uz * 0.9)));\n"
     "    float dd = dot(Np, uBumpSun) - uBumpSun.y;\n"
-    "    float raw = dd * (0.4 + 0.6 * uBumpP.y) * 2.4 + (h - 0.5) * 0.35;\n"
+    "    float raw = dd * (0.4 + 0.6 * uBumpP.y) * 2.4 + (h - 0.5) * 0.25;\n"
     "    return 1.0 + uGroundP.x * flatK * (1.0 - water) * clamp(raw, -1.0, 1.0);\n"
     "}\n"
     "float deckBumpMul(sampler2D s, vec2 uv, vec3 base, vec3 vcol, vec3 eye) {\n"
