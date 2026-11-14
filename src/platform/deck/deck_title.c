@@ -1,15 +1,15 @@
-#include "deck_title.h"
-#include "deck_gl_shader.h"
-#include "deck_levels.h"
-#include "global.h"
-#include "palette.h"
-#include "platform/vita_extras.h"
 #include <SDL2/SDL.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "deck_title.h"
+#include "deck_gl_shader.h"
+#include "deck_levels.h"
+#include "global.h"
+#include "palette.h"
+#include "platform/vita_extras.h"
 
 // Written by src/title_screen.c: 0 off the title, 1 logo shine, 2 version banner, 3 PRESS START, 4 leaving.
 extern u8 gDeckTitlePhase;
