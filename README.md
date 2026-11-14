@@ -108,7 +108,7 @@ launcher you can add to Steam. Step by step, with Game Mode, saves and troublesh
 **Windows** (32-bit build with MSYS2): get the game files once with `fetch_assets.sh`, then run
 `tools\windows\build.bat`. See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md).
 
-**PS Vita**: `build_all.ps1`, see [Build your own VPK](#build-your-own-vpk).
+PS Vita builds are not covered by this fork's instructions (the Vita code lineage remains in the tree).
 
 ### Performance
 
@@ -169,9 +169,9 @@ The full list is under [Features](#features).
 > This project is not affiliated with or endorsed by them. This repository does not contain the
 > game's graphics, sounds or binary data, nor any ROM: to build, you check a dump of **your own
 > cartridge** and the game files are downloaded from the public decompilation
-> ([docs/BUILD_YOUR_OWN.md](docs/BUILD_YOUR_OWN.md)). Like every decompilation, the tree still
-> holds the game's code and text in decompiled form. A built VPK contains Nintendo's data:
-> **do not distribute builds**.
+> (see [Build](#build)). Like every decompilation, the tree still holds the game's code and text
+> in decompiled form. A build contains Nintendo's data: **do not distribute builds or the
+> downloaded files**.
 
 ## Features
 
@@ -257,69 +257,18 @@ These parts build and run in the design mocks, but have not been checked on the 
 ## Repository layout
 
 ```
-CMakeLists.txt, build_vita.ps1/.sh   Vita build (preprocess → compile → link → SELF → VPK)
-make_tools.mk, *_rules.mk, vita/     host tools, asset rules, link wrapper, LiveArea art
+CMakeLists.txt, build_*.sh/.ps1      CMake build (Deck and Windows; the Vita scripts remain)
+make_tools.mk, *_rules.mk, vita/     host tools, asset rules, Vita-lineage platform files
 src/, include/, asm/, data/,         the pokeemerald decompilation (game code and text data;
 constants/                           graphics/, sound/ and data binaries come from fetch_assets)
 fetch_assets.sh/.ps1, tools/assets/  game files download (checks your ROM, then the manifest)
 src/platform/                        GBA hardware emulation and main loop
 src/platform/voxel/                  3D voxel world
 src/platform/vita/                   native UI and Vita-specific features
-assets/                              port data packed into the VPK (voxel, UI art, followers)
+assets/                              port data (voxel, UI art, followers)
 tools/                               pret host tools and the UI art generators (tools/ui_gen)
 docs/                                technical documentation
 ```
-
-## Build your own VPK
-
-No builds are distributed: you make your own from your Pokémon Emerald cartridge. Full guide,
-with every command and the common errors: [docs/BUILD_YOUR_OWN.md](docs/BUILD_YOUR_OWN.md)
-(en español: [docs/COMPILA_TU_VPK.md](docs/COMPILA_TU_VPK.md)).
-
-**One step (Windows).** With [MSYS2](https://www.msys2.org) installed in `C:\msys64` and the
-repository cloned, one script installs what is missing (MSYS2 packages, VitaSDK, Python with
-Pillow), checks your dump, gets the game files, builds everything and leaves `EmeraldVita.vpk`
-in the repository folder:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\build_all.ps1 -Rom "C:\path\to\emerald.gba"
-```
-
-The ROM is only needed the first time; after `git pull`, run `.\build_all.ps1` again to rebuild.
-The steps it runs, one by one:
-
-1. **Dump your cartridge** to a `.gba` file (any language of Pokémon Emerald, 16 MB).
-2. **Install the tools** (Windows, once): [MSYS2](https://www.msys2.org) in `C:\msys64`,
-   [VitaSDK](https://vitasdk.org) with SDL2, [Git](https://git-scm.com) and
-   [Python 3](https://www.python.org) with Pillow (`pip install pillow`). Exact commands:
-   [docs/BUILD.md](docs/BUILD.md#requirements-windows).
-3. **Get the repository**:
-   ```powershell
-   git clone https://github.com/HctrRB/pokeemerald-vita-3ds.git
-   cd pokeemerald-vita-3ds
-   ```
-4. **Get the game files** (once). The script checks that your dump is Pokémon Emerald, then
-   downloads the decompilation's graphics, sounds and data and checks each file
-   ([tools/assets/manifest.txt](tools/assets/manifest.txt)). Nothing is copied from the ROM.
-   ```powershell
-   powershell.exe -ExecutionPolicy Bypass -File .\fetch_assets.ps1 -Rom "C:\path\to\emerald.gba"
-   ```
-5. **Build the host tools and convert the game files** (once), in the *MSYS2 MINGW64* shell:
-   ```sh
-   make -f make_tools.mk -j8 CC="gcc -static" CXX="g++ -static"
-   make -f vita/assets.mk -j8
-   ```
-6. **Build the VPK**, in PowerShell:
-   ```powershell
-   powershell.exe -ExecutionPolicy Bypass -File .\build_vita.ps1
-   ```
-   The result is `build-vita\pokeemerald.vpk`.
-7. **Install it** with VitaShell (*Enable unsafe homebrew* on in HENkaku settings). The game
-   appears as **Emerald Vita** (title ID `PKEM00001`); saves and settings live in
-   `ux0:data/POKEVITA/`.
-
-Do not share the VPK or the downloaded files: they contain Nintendo's game data. Vita3K runs the
-VPK for functional testing; measure performance on hardware.
 
 ## Controls
 
@@ -341,8 +290,9 @@ Buttons can be remapped in Options. Settings and saves live in `ux0:data/POKEVIT
 
 | Document | Covers |
 |---|---|
-| [docs/BUILD_YOUR_OWN.md](docs/BUILD_YOUR_OWN.md) ([español](docs/COMPILA_TU_VPK.md)) | Make your own VPK from your cartridge, step by step |
-| [docs/BUILD.md](docs/BUILD.md) | Toolchain, build steps, CMake options, installing and testing |
+| [docs/BUILD_DECK.md](docs/BUILD_DECK.md) | Build for the Steam Deck, step by step |
+| [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) | The 32-bit Windows build (MSYS2) |
+| [docs/BUILD.md](docs/BUILD.md) | Build overview: host tools, game assets, CMake options |
 | [docs/README.md](docs/README.md) | Index of the technical documentation |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, boot, one frame, where things are, runtime files |
 | [docs/THREADS.md](docs/THREADS.md) | Cores, pacing, who owns which data |
