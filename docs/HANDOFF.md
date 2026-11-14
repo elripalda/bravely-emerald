@@ -2,9 +2,27 @@
 
 Date: 2026-11-13. Branch `deck-port` in `F:\emerald-deck` (local only, never pushed to GitHub).
 
-## Next session starter
+## Run summary for the user (read this first when waking up) - 2026-11-14 final gate
 
-Read `docs/HANDOFF.md` and `.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/progress.md`, then continue the phase 1 plan: Task 4 Sonnet review gate and warp-fade tint check, then Task 5. Use Marcos' Token Optimizer. Caveman style in chat. Per-task review gates use Sonnet; Opus only for the final whole-branch review.
+Branch `deck-port`, Deck repo clone at the same commit, binary built clean (-j4, no warnings), one normal instance running from `build-deck/dist`.
+
+**What exists (Deck only, all behind `voxel_shaders`)**: ph1 post chain (grade, bloom, band blur), ph2 wind sway, ph3 procedural ambient bed (`ambient_volume` 0-10, default 6), ph4 standing tall grass + player bend + flowers, ph5 rain (streaks, wet ground, mist, splashes), ph6 particles (pollen, fireflies, leaves, water glints), character outline + rim, soft blob shadows, ph7 tilt-shift with bokeh, scene resolution, light shafts, LUT grade, camera tilt, ph9 relief (bump). Phase 8 (real-time shadow maps, optional): deliberately SKIPPED per the spec: sun shadows are already ray-traced into vertex colours at chunk build (`voxel_lighting.c`), a shadow map would duplicate them and force a lighting cache rework, highest risk for the smallest gain.
+
+**Settings** (EFFECTS list in WORLD tab; every row OFF / AUTO / LOW / MEDIUM / HIGH = 0 / 1 / 2 / 3 / 4, AUTO follows `voxel_quality`): `voxel_blur grade bloom sway grass rain wet mist splash particles glint outline shadow res lut bump shafts tiltshift`; `voxel_pitch` 0 classic 40, 1 36, 2 32 (default), 3 28, 4 24; `voxel_res` OFF/LOW 960, MEDIUM/AUTO 1120, HIGH 1280; `voxel_shaders=0` = whole legacy path; `ambient_volume`. Old picture: set every effect key to 0, `voxel_res=0`, `voxel_pitch=0`.
+**Debug envs**: `DECK_GL_DEBUG=1` (logs, gl_errors.log), `DECK_FORCE_WEATHER=rain|storm|sun|fog|sand`, `DECK_FORCE_TIME=dawn|noon|dusk|night`, `DECK_RAIN_OFF`, `DECK_PART_OFF`, `DECK_BEND_OFF`, `DECK_POST_NO_X` (plain composite), `DECK_POST_FORCE_FAIL` (legacy path), `DECK_SHOT`, `DECK_AUTOPLAY`.
+
+**Verified (Deck, still.txt 75 s, DECK_GL_DEBUG=1, shots/final, 0 GLERR, no [SHADER] FAILED, no [POST] fallback, no crash)**: default (1120x636); all HIGH (1280x726, pitch 24); all LOW (960); all OFF (crisp flat pre-upgrade look); OFF + `voxel_shaders=0`; storm + night, all HIGH (rain streaks, puddle rings, blue grade, no overlay gap); dusk, all HIGH (warm grade, blue-green shadows); 3D wild battle in tall grass (grass_battle.txt, all HIGH: battle is crisp, no post blur/grade, no rain or blob artefacts, UI complete); settings menu shows RELIEF, LIGHT SHAFTS, TILT-SHIFT, CAMERA TILT, 3D RESOLUTION, LUT GRADE rows.
+**Unverified**: any frame timing (perf), `voxel_res` change at run time, dawn, water glints on real water, indoors/caves, a map crossing, the real feel of every amplitude, audio by ear, Vita and PC builds (nothing here was built for them; all Deck code is `PLATFORM_DECK`), OFF being pixel identical to the old build.
+
+**Known issues**: (1) `Fatal error while decompressing LZ file.` is printed once per wild encounter (also in p4/grass4 before phase 9; `bios.c:199` only prints, game continues; not investigated). (2) At pitch 24 and HIGH tilt-shift the front tree row is very blurred and covers the player's legs. (3) Water tiles get wet tint in rain. (4) Leaves are not tied to tree crowns; glints test blue texels. (5) Bump sampling in the sway program runs after its discard (derivative use after a discard is only well defined with helper lanes; looks fine on Mesa). (6) `[POST] ready` is built even with `voxel_shaders=0` (unused, harmless). (7) Mauville and Ever Grande flowers not covered. (8) 415 MB root-owned leftovers in `SD512/emerald-deck/containers`.
+
+**Visual checks for you (in this order)**: 1 walk Littleroot to Route 101 at day: grass tufts, flowers, tuft over each ground; 2 wind sway amount on trees and grass; 3 step into grass: bend; 4 tilt-shift strength and `CAMERA TILT` 32 vs 24 vs classic; 5 `RELIEF` OFF vs HIGH on roofs, walls, ground (seams on building art, ground dither); 6 a rain route (or `DECK_FORCE_WEATHER=rain`): streaks, puddles, splashes, sheen; 7 dusk and night: grade, fireflies, shafts at dusk; 8 character outline and soft shadows, NPC cards; 9 `3D RESOLUTION` HIGH softness vs MEDIUM; 10 a wild battle and a map change fade (overlay covers the whole picture at 1120/1280); 11 listen: ambient levels, thunder, indoor fade; 12 menu: every EFFECTS row cycles and saves.
+**Deferred perf compare** (one run each, then read `report.txt` p50/p99): `cd /run/media/deck/SD512/emerald-deck/src; for n in legacy:"voxel_shaders=0" low:"<all keys 2> voxel_res=0" mid:"" high:"<all keys 4> voxel_res=4 voxel_pitch=4"; do timeout 140 tools/deck/run_autoplay.sh tools/deck/autoplay/still.txt 75 /run/media/deck/SD512/emerald-deck/shots/perf/${n%%:*}/; done` with `SETKEY="..."` and `EXTRA_ENV="vblank_mode=0"` set per run (one run at a time, absolute outdirs). If p99 > 20 ms at mid, set the default `voxel_res` to 960 and check the 9-tap relief ground program.
+**Next session starter**: read this section, then do the visual checks above and tune by eye (constants listed per phase in `docs/DECK_NOTES.md`), run the perf compare, then decide phase 8 and the Vita/PC build check. Use Marcos' Token Optimizer, caveman chat, Sonnet for review gates.
+
+## Older next-session text (phase 1, superseded)
+
+Read `docs/HANDOFF.md` and `.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/progress.md`, then continue the phase 1 plan (all phases 1-7 and 9 are done now, see the sections below).
 
 ## What works (verified)
 
