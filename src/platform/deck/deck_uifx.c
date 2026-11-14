@@ -13,17 +13,17 @@
 // is pulled toward the panel's own colour (readability), strength of the edge highlight, and the alpha of the panel fill drawn
 // over it (the lower, the more glass shows).
 static const int kGlassPasses[3] = { 1, 1, 2 };
-static const float kGlassStep[3] = { 1.0f, 1.8f, 2.2f };
-static const float kGlassBaseMix[3] = { 0.42f, 0.36f, 0.30f };
-static const float kGlassEdge[3] = { 0.50f, 0.80f, 1.10f };
-static const int kGlassFill[3] = { 200, 168, 142 };
+static const float kGlassStep[3] = { 0.8f, 1.2f, 1.6f };
+static const float kGlassBaseMix[3] = { 0.70f, 0.60f, 0.50f };
+static const float kGlassEdge[3] = { 0.0f, 0.15f, 0.30f };
+static const int kGlassFill[3] = { 244, 232, 214 };
 // Tint: opacity of the gradient, drift speed (1 = about one slow sweep a minute), breathing, moving sheen band; fill alpha when
 // only the tint is on.
-static const float kTintAmt[3] = { 0.16f, 0.22f, 0.28f };
+static const float kTintAmt[3] = { 0.04f, 0.06f, 0.09f };
 static const float kTintSpeed[3] = { 0.25f, 0.80f, 1.20f };
 static const float kTintBreath[3] = { 0.0f, 1.0f, 1.0f };
-static const float kTintSheen[3] = { 0.0f, 0.0f, 1.0f };
-static const int kTintFill[3] = { 232, 215, 196 };
+static const float kTintSheen[3] = { 0.0f, 0.0f, 0.0f };
+static const int kTintFill[3] = { 244, 236, 226 };
 
 static int sEnvAll = -1, sEnvGl = -1;
 
@@ -477,4 +477,44 @@ void DeckUiFx_Panel(const DeckUiPanel *p, float fade, float slideY)
 void DeckUiFx_End(void)
 {
     s.began = false;
+}
+
+void DeckUiFx_Margins(float x0, float x1)
+{
+    const int lvl = DeckUiFx_Level(FAST_EXTRA_VOXEL_UILAYOUT);
+    static const float kShadow[3] = { 0.25f, 0.35f, 0.45f };   // opacity of the canvas shadow at its edge
+    static const float kWidth[3] = { 14.0f, 20.0f, 28.0f };    // its reach in logical px
+    static const float kGrad[3] = { 0.015f, 0.025f, 0.04f };   // brightness of the margin gradient (very faint, same green family)
+
+    if (lvl < 0)
+        return;
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    const float w = kWidth[lvl], a = kShadow[lvl], g = kGrad[lvl];
+    const float breathe = 0.5f + 0.5f * sinf(DeckUiFx_Seconds() * 0.5f);
+    glBegin(GL_QUADS);
+    // faint gradient in each margin, brighter toward the top, breathing very slowly
+    for (int side = 0; side < 2; side++)
+    {
+        const float xa = side ? x1 : 0.0f, xb = side ? 960.0f : x0;
+
+        glColor4f(0.35f, 1.0f, 0.75f, g * (0.6f + 0.8f * breathe));
+        glVertex2f(xa, 0.0f); glVertex2f(xb, 0.0f);
+        glColor4f(0.35f, 1.0f, 0.75f, 0.0f);
+        glVertex2f(xb, 544.0f); glVertex2f(xa, 544.0f);
+    }
+    // the canvas casts a soft shadow on both margins
+    glColor4f(0.0f, 0.0f, 0.0f, a);
+    glVertex2f(x0, 0.0f); glVertex2f(x0, 544.0f);
+    glColor4f(0.0f, 0.0f, 0.0f, 0.0f);
+    glVertex2f(x0 - w, 544.0f); glVertex2f(x0 - w, 0.0f);
+    glColor4f(0.0f, 0.0f, 0.0f, a);
+    glVertex2f(x1, 544.0f); glVertex2f(x1, 0.0f);
+    glColor4f(0.0f, 0.0f, 0.0f, 0.0f);
+    glVertex2f(x1 + w, 0.0f); glVertex2f(x1 + w, 544.0f);
+    glEnd();
+    glPopAttrib();
 }

@@ -49,5 +49,9 @@ bool DeckUiFx_Begin(const DeckUiPanel *panels, int count);
 // Draws one panel's glass / tint, over what is on screen. fade 0..1, slideY in logical px (the panel is moved with the list).
 void DeckUiFx_Panel(const DeckUiPanel *p, float fade, float slideY);
 void DeckUiFx_End(void);
+// Wide layout (voxel_uilayout) for the 4:3 port menus (VitaUI canvas) shown in the 16:9 picture: a soft shadow cast by the
+// canvas onto the side margins and a very faint vertical gradient in them, between logical x0 and x1 (the canvas). Call after
+// the canvas is drawn, in the 960x544 ortho. No-op when the setting is off.
+void DeckUiFx_Margins(float x0, float x1);
 
 #endif

@@ -27,10 +27,10 @@ int UiFx_GlyphMode(void) { return 0; }
 #else
 
 // ---------- Tuning (low, medium, high) ----------
-static const float kPulse[3] = { 0.55f, 1.0f, 1.5f };      // strength of the pulsing highlight on the selected row
+static const float kPulse[3] = { 0.5f, 0.8f, 1.1f };      // strength of the pulsing highlight on the selected row
 static const float kSlide[3] = { 0.22f, 0.30f, 0.38f };    // share of the distance the sliding trail covers a tick
 static const int kAnimTicks[3] = { 6, 9, 12 };              // length of a menu fade / slide in ticks (60 per second)
-static const float kAnimSlide[3] = { 10.0f, 16.0f, 24.0f }; // px a panel slides in from
+static const float kAnimSlide[3] = { 6.0f, 10.0f, 14.0f }; // px a panel slides in from
 static const float kBarRate[3] = { 0.16f, 0.10f, 0.07f };   // share of the gap an HP / EXP bar closes per tick
 
 // ---------- HP / EXP bars ----------
@@ -118,7 +118,7 @@ void UiFx_BarGlow(int32_t x, int32_t y, int32_t w, int32_t h, float pct)
     if (lvl < 0 || pct > 25.0f || pct <= 0.0f)
         return;
     const float k = 0.5f + 0.5f * sinf(DeckUiFx_Seconds() * 4.0f);
-    const uint32_t a = (uint32_t)((28.0f + 46.0f * k) * (lvl == 0 ? 0.6f : 1.0f));
+    const uint32_t a = (uint32_t)((14.0f + 30.0f * k) * (lvl == 0 ? 0.6f : 1.0f));
 
     UiDraw_Rect(x - 3, y - 3, w + 6, h + 6, UI_RGBA(255, 60, 50, a / 2));
     UiDraw_Rect(x - 1, y - 1, w + 2, h + 2, UI_RGBA(255, 70, 60, a));
@@ -144,7 +144,7 @@ void UiFx_SelRow(int32_t x, int32_t y, int32_t w, int32_t h)
     // pulse: a white wash over the selected row, breathing
     {
         const float k = 0.5f + 0.5f * sinf(DeckUiFx_Seconds() * 4.4f);
-        const uint32_t a = (uint32_t)((6.0f + 30.0f * k) * kPulse[lvl]);
+        const uint32_t a = (uint32_t)((2.0f + 12.0f * k) * kPulse[lvl]);
         const int32_t inset = gUiTheme->selRadius > 0 ? gUiTheme->selRadius : 0;
 
         UiDraw_Rect(x + inset, y + 1, w - 2 * inset - (gUiTheme->chamfer ? 12 : 0), h - 4, UI_RGBA(255, 255, 255, a));
@@ -184,8 +184,8 @@ void UiFx_SelFlush(void)
     a = a > 1.0f ? 1.0f : a;
     const uint32_t c = gUiTheme->selBot;
 
-    UiDraw_Rect((int32_t)sSel.x, (int32_t)sSel.y, (int32_t)sSel.w, (int32_t)sSel.h - 2, (c & 0x00FFFFFFu) | ((uint32_t)(a * 120.0f) << 24));
-    UiDraw_Rect((int32_t)sSel.x, (int32_t)sSel.y, (int32_t)sSel.w, 2, UI_RGBA(255, 255, 255, (uint32_t)(a * 90.0f)));
+    UiDraw_Rect((int32_t)sSel.x, (int32_t)sSel.y, (int32_t)sSel.w, (int32_t)sSel.h - 2, (c & 0x00FFFFFFu) | ((uint32_t)(a * 70.0f) << 24));
+    UiDraw_Rect((int32_t)sSel.x, (int32_t)sSel.y, (int32_t)sSel.w, 2, UI_RGBA(255, 255, 255, (uint32_t)(a * 50.0f)));
 }
 
 // ---------- menu fade and slide ----------

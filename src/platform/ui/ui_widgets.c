@@ -369,7 +369,7 @@ void UiW_FullFrame(void)
     if (UiDraw_FillAlpha() < 255)
     {
         UiDraw_AddPanel(0, HEADER_H, UI_SCREEN_W, UI_SCREEN_H - HEADER_H - FOOTER_H, 0, false, UI_COL_FRAME0_A);
-        sTransA = (UiDraw_FillAlpha() + 255) / 2;   // the frame was already see-through: it takes half the fill drop
+        sTransA = 255;   // the frame keeps its own opacity; only what is behind it is blurred
     }
     UiDraw_Rect(0, HEADER_H, UI_SCREEN_W, UI_SCREEN_H - HEADER_H - FOOTER_H, Fa(UI_COL_FRAME0_A));
     TransEnd();
@@ -670,11 +670,7 @@ void UiW_Bar(int32_t x, int32_t y, int32_t w, int32_t h, int32_t percent, uint32
 
         fillW = (int32_t)((float)(w - 4) * shown / 100.0f + 0.5f);
         if (hp)
-        {
-            top = UiFx_HpColour(shown, 0);
-            bottom = UiFx_HpColour(shown, 1);
-            UiFx_BarGlow(x, y, w, h, shown);
-        }
+            UiFx_BarGlow(x, y, w, h, shown);   // the bar keeps its own colours; only a faint glow at low HP
     }
     UiDraw_Rect(x + 1, y, w - 2, h, UI_RGBA(26, 38, 32, 255));
     UiDraw_Rect(x, y + 1, w, h - 2, UI_RGBA(26, 38, 32, 255));

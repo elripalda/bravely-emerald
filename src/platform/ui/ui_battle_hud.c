@@ -178,11 +178,7 @@ static void Bar(int32_t x, int32_t y, int32_t w, int32_t h, int32_t pct, uint32_
 
         fillPct = UiFx_BarShown(x, y, w, (float)pct);
         if (hp)
-        {
-            top = UiFx_HpColour(fillPct, 0);
-            bottom = UiFx_HpColour(fillPct, 1);
-            UiFx_BarGlow(x, y, w, h, fillPct);
-        }
+            UiFx_BarGlow(x, y, w, h, fillPct);   // original colours, smooth fill, faint glow at low HP
     }
     UiDraw_Rect(x, y, w, h, TH->gauge);
     int32_t fill = (int32_t)((float)(w - 4) * fillPct / 100.0f + 0.5f);

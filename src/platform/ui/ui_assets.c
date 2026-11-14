@@ -238,8 +238,9 @@ int32_t UiText_Draw(uint8_t face, uint8_t px, int32_t x, int32_t y, const char *
         return 0;
 #ifdef PLATFORM_DECK
     {
-        // voxel_uitext: a soft drop shadow / dark outline under light text, a faint light halo around dark text (mode 2 and 3),
-        // drawn as the same glyphs shifted, before the text itself. Light text: 1 shadow, 2 outline of 4 + shadow, 3 outline of 8 + shadow.
+        // voxel_uitext: only dark, low-opacity copies of the same glyphs UNDER the text (the glyph pixels themselves are never
+        // changed or thickened). LOW a 1 px drop shadow, MEDIUM a stronger one plus a faint thin halo (4 directions), HIGH the
+        // same with 8 directions. Dark text (ink on paper) gets nothing: it is already readable and a halo would blur it.
         const int mode = DeckUiFx_TextMode();
         const uint32_t a = rgba >> 24;
 
@@ -252,15 +253,8 @@ int32_t UiText_Draw(uint8_t face, uint8_t px, int32_t x, int32_t y, const char *
             {
                 if (mode >= 2)
                     for (int i = 0; i < (mode == 2 ? 4 : 8); i++)
-                        DrawRun(font, x + kRing[i][0], y + kRing[i][1], s, (a * 190 / 255) << 24);
-                DrawRun(font, x + 1, y + 2, s, (a * 140 / 255) << 24);
-                if (mode == 1)
-                    DrawRun(font, x + 2, y + 3, s, (a * 60 / 255) << 24);
-            }
-            else if (mode >= 2)
-            {
-                for (int i = 0; i < (mode == 2 ? 4 : 8); i++)
-                    DrawRun(font, x + kRing[i][0], y + kRing[i][1], s, ((a * 85 / 255) << 24) | 0x00FFFFFFu);
+                        DrawRun(font, x + kRing[i][0], y + kRing[i][1], s, (a * 46 / 255) << 24);
+                DrawRun(font, x + 1, y + 1, s, (a * (mode == 1 ? 80 : 115) / 255) << 24);
             }
         }
     }
