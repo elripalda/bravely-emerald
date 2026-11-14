@@ -32,6 +32,9 @@ extern VoxelSun gVoxelSun;
 void VoxelLighting_Reset(void);
 bool VoxelLighting_SetSun(float dx, float dz, float strength, uint32_t key);
 uint32_t VoxelLighting_Hash(int32_t x0, int32_t z0, int32_t x1, int32_t z1);
+/* Deck sun shadow map: skip the baked cast shadow rays (every sample lit). True when it changed: the samples are dropped
+ * and chunk hashes differ, so the caller bumps its world epoch. The chunk worker must be idle. */
+bool VoxelLighting_SetNoCast(bool noCast);
 float VoxelLighting_Sample(float x, float y, float z);
 /* The same answer for a point lit on its own, every frame (a sprite's card):
  * without the blocks' bound, which pays for itself over a build's rays but

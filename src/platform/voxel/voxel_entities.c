@@ -27,6 +27,7 @@
 #include "voxel_entities.h"
 #ifdef PLATFORM_DECK
 #include "../deck/deck_chars.h"
+#include "../deck/deck_sunshadow.h"
 #endif
 #include "voxel_grade.h"
 #include "voxel_relief.h"
@@ -1150,6 +1151,12 @@ static void EmitCastShadow(VoxelBuilder *shadows, const VoxelSpriteSlot *slot, u
 {
     if (gVoxelSun.strength == 0.0f)
         return;
+#ifdef PLATFORM_DECK
+    /* The sun shadow map casts the characters' shadows (as casters): this flat silhouette would double them.
+     * (The map of the last frame decides: not drawn in battles, indoors or at night.) */
+    if (DeckSunShadow_Resolve() != NULL)
+        return;
+#endif
     uint32_t baseX = (index % VOXEL_SPRITE_COLUMNS) * VOXEL_SPRITE_SLOT_DIM;
     uint32_t baseY = (index / VOXEL_SPRITE_COLUMNS) * VOXEL_SPRITE_SLOT_DIM;
     float u0 = baseX / (float)VOXEL_SPRITE_ATLAS_W;

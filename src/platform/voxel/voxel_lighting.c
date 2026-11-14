@@ -70,6 +70,9 @@ static uint32_t sGeneration;
 static uint32_t sSampleGeneration;
 VoxelSun gVoxelSun = {0.85f, 0.55f, 1.0f, 0};
 static float sAmbient = VOXEL_AMBIENT;
+/* Deck sun shadow map on (voxel_sunshadow): the map casts the shadows, so the chunk builder skips its own rays and
+ * every sample counts as lit (no double darkening). Contact AO and the sun-angle face shading stay. */
+static bool sNoCast;
 static float sStepInverseX = 4.0f / 0.85f, sStepInverseZ = 4.0f / 0.55f;
 static uint32_t sRays;
 /* Lit without the blocks' bound (VoxelLighting_SampleAlone). */
@@ -301,6 +304,15 @@ bool VoxelLighting_SetSun(float dx, float dz, float strength, uint32_t key)
     sAmbient = 1.0f - (1.0f - VOXEL_AMBIENT) * strength;
     sStepInverseX = fabsf(dx) > 0.0001f ? 4.0f / dx : 0.0f;
     sStepInverseZ = fabsf(dz) > 0.0001f ? 4.0f / dz : 0.0f;
+    ResetSamples();
+    return true;
+}
+
+bool VoxelLighting_SetNoCast(bool noCast)
+{
+    if (sNoCast == noCast)
+        return false;
+    sNoCast = noCast;
     ResetSamples();
     return true;
 }
@@ -726,7 +738,7 @@ static bool Lit(float x, float y, float z)
     bool blocks;
     bool stretched;
 
-    if (gVoxelSun.strength == 0.0f)
+    if (gVoxelSun.strength == 0.0f || sNoCast)
         return true;
     if (sGeneration == 0)
         VoxelLighting_Reset();
@@ -962,7 +974,7 @@ static const LightSample *CachedSample(float x, float y, float z)
     if (!sample->rayCast)
     {
         const double start = VitaPerf_NowMs();
-        if (gVoxelSun.strength > 0.0f)
+        if (gVoxelSun.strength > 0.0f && !sNoCast)
             ++sRays;
         sample->lit = Lit(x, y, z);
         sample->rayCast = true;
@@ -1044,6 +1056,8 @@ uint32_t VoxelLighting_Hash(int32_t x0, int32_t z0, int32_t x1, int32_t z1)
     uint32_t hash = VoxelWorld_BlockHash(hx0, hz0, hx1, hz1);
 
     hash = (hash ^ gVoxelSun.key) * 16777619u;
+    if (sNoCast)
+        hash = (hash ^ 0x5A17CA57u) * 16777619u; /* chunks built with the rays differ from those built without */
 
     /* Equal tile IDs in a different tileset/layout do not mean equal casters.
      * Relative origins preserve the hash when the entire world is rebased. */

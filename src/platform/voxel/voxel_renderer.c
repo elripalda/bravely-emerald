@@ -35,6 +35,7 @@
 #include "../deck/deck_rain.h"
 #include "../deck/deck_particles.h"
 #include "../deck/deck_chars.h"
+#include "../deck/deck_sunshadow.h"
 #endif
 
 static int32_t sFrameDrawCalls = 0;
@@ -4336,6 +4337,24 @@ static void Frame_TrackWorldChanges(VoxelFrame *const f)
         }
     }
 
+#ifdef PLATFORM_DECK
+    {
+        // voxel_sunshadow >= LOW: the shadow map casts, the chunk builder skips its baked cast rays (no double darkening).
+        // A change rebuilds the chunks (the lighting hash carries the flag); the worker reads the flag, so it must be idle.
+        const bool noCast = DeckSunShadow_BakedOff();
+        static bool sNoCastSeen = false;
+
+        if (noCast != sNoCastSeen)
+        {
+            EnsureWorkerIdle();
+            VoxelLighting_SetNoCast(noCast);
+            sNoCastSeen = noCast;
+            sWorldEpoch++;
+            DeckGl_Log("[SUNSHADOW] baked cast rays %s: chunks rebuild\n", noCast ? "OFF (the map casts)" : "ON");
+        }
+    }
+#endif
+
     // Resets of the lighting and building caches, and the world epoch: the worker must be done.
     if (liveChanged || crossed || mapChanged)
         EnsureWorkerIdle();
@@ -4984,6 +5003,11 @@ static void Frame_BeginPasses(VoxelFrame *const f)
                     sCamera.targetX, sCamera.targetY, sCamera.targetZ,
                     0.0f, 1.0f, 0.0f);
 
+#ifdef PLATFORM_DECK
+    DeckSunShadow_Reset();
+    if (f->postActive)
+        DeckSunShadow_CaptureCamera(); // P * MV of the scene for the composite's world position
+#endif
     glDepthMask(GL_TRUE);
     glClearColor(fadeAmount >= 0.99f ? fadeRgb[0] : 0.0f,
                  fadeAmount >= 0.99f ? fadeRgb[1] : 0.0f,
@@ -5876,6 +5900,7 @@ static void Pass_DeckPost(const VoxelFrame *const f)
             in.sunX = in.sunX < 0.05f ? 0.05f : (in.sunX > 0.95f ? 0.95f : in.sunX);
         }
     }
+    in.sun = DeckSunShadow_Resolve();
     in.zNear = VOXEL_PERSP_NEAR;
     in.zFar = VOXEL_PERSP_FAR;
     {
@@ -5887,6 +5912,153 @@ static void Pass_DeckPost(const VoxelFrame *const f)
     in.dofTopAlpha = VOXEL_DOF_TOP_ALPHA;
     in.dofBottomAlpha = VOXEL_DOF_BOTTOM_ALPHA;
     DeckPost_Run(&in);
+}
+#endif
+
+#ifdef PLATFORM_DECK
+// Sun shadow map (voxel_sunshadow): the casters seen from the sun, depth only, into deck_sunshadow's target. Trees (and
+// tall grass: they share a range) with the alpha test of their crowns, buildings by page, character cards. No sway: the
+// crowns do not move in the map. The composite resolves the map against the scene depth (receivers: everything).
+static void Pass_SunShadowMap(const VoxelFrame *const f)
+{
+    static uint32_t sFrames, sTreeDraws, sBldgDraws, sCardVerts;
+    static double sMs;
+    const double t0 = VitaPerf_NowMs();
+    VoxelChunkSlot *const *const visibleChunks = f->visible;
+    const int32_t visibleChunkCount = f->visibleCount;
+    int32_t pages[16];
+    int32_t pageCount = 0;
+
+    if (!f->postActive || f->inBattle3D || f->indoor || f->underground)
+        return;
+    if (!DeckSunShadow_Begin(sCamera.targetX, sCamera.targetY, sCamera.targetZ, gVoxelSun.dx, gVoxelSun.dz, gVoxelSun.strength))
+        return;
+
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_TEXTURE_2D);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    glEnableClientState(GL_COLOR_ARRAY);
+    ChunkOffsets_Begin();
+    if (sTreeTex)
+    {
+        glEnable(GL_ALPHA_TEST);
+        glAlphaFunc(GL_GREATER, 0.0f);
+        glBindTexture(GL_TEXTURE_2D, sTreeTex);
+        for (int32_t i = 0; i < visibleChunkCount; i++)
+        {
+            const VoxelChunkSlot *const chunk = visibleChunks[i];
+
+            if (chunk->treeCount == 0)
+                continue;
+            glBindBuffer(GL_ARRAY_BUFFER, chunk->vbo);
+            glVertexPointer(3, GL_FLOAT, sizeof(VoxelGlVertex), (const void *)offsetof(VoxelGlVertex, x));
+            glTexCoordPointer(2, GL_FLOAT, sizeof(VoxelGlVertex), (const void *)offsetof(VoxelGlVertex, u));
+            glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(VoxelGlVertex), (const void *)offsetof(VoxelGlVertex, r));
+            ChunkOffsets_Apply(chunk);
+            glDrawArrays(GL_TRIANGLES, (GLint)chunk->treeFirstVert, (GLsizei)chunk->treeCount);
+            sTreeDraws++;
+        }
+    }
+    // buildings: the pages the visible chunks use, as Pass_Buildings lists them
+    for (int32_t i = 0; i < visibleChunkCount; i++)
+    {
+        const VoxelChunkSlot *const chunk = visibleChunks[i];
+
+        for (uint8_t sp = 0; sp < chunk->buildingSpanCount; sp++)
+        {
+            const int32_t p = chunk->buildingSpans[sp].page;
+            bool known = false;
+
+            if (p < 0 || chunk->buildingSpans[sp].vertCount == 0)
+                continue;
+            for (int32_t k = 0; k < pageCount; k++)
+                known = known || pages[k] == p;
+            if (!known && pageCount < 16)
+                pages[pageCount++] = p;
+        }
+    }
+    for (int32_t ap = 0; ap < pageCount; ap++)
+    {
+        const int32_t p = pages[ap];
+        GLuint tex = 0;
+        GLuint lastVbo = 0;
+
+        if (p >= VOXEL_MAX_BUILDING_PAGES)
+            continue;
+        tex = RequestOrLoadBuildingPage(p, sSyncBuildingLoads);
+        if (!tex)
+            continue;
+        if (sBuildingPageHasAlpha[p] == 2u)
+        {
+            glEnable(GL_ALPHA_TEST);
+            glAlphaFunc(GL_GREATER, 0.0f);
+        }
+        else
+            glDisable(GL_ALPHA_TEST);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        for (int32_t i = 0; i < visibleChunkCount; i++)
+        {
+            const VoxelChunkSlot *const chunk = visibleChunks[i];
+
+            for (uint8_t sp = 0; sp < chunk->buildingSpanCount; sp++)
+            {
+                const VoxelChunkBuildingSpan *const bspan = &chunk->buildingSpans[sp];
+
+                if (bspan->page != (int16_t)p || bspan->vertCount == 0)
+                    continue;
+                if (lastVbo != chunk->vbo)
+                {
+                    glBindBuffer(GL_ARRAY_BUFFER, chunk->vbo);
+                    glVertexPointer(3, GL_FLOAT, sizeof(VoxelGlVertex), (const void *)offsetof(VoxelGlVertex, x));
+                    glTexCoordPointer(2, GL_FLOAT, sizeof(VoxelGlVertex), (const void *)offsetof(VoxelGlVertex, u));
+                    glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(VoxelGlVertex), (const void *)offsetof(VoxelGlVertex, r));
+                    lastVbo = chunk->vbo;
+                }
+                ChunkOffsets_Apply(chunk);
+                glDrawArrays(GL_TRIANGLES, (GLint)(chunk->buildingFirstVert + bspan->firstVert), (GLsizei)bspan->vertCount);
+                sBldgDraws++;
+            }
+        }
+    }
+    ChunkOffsets_End();
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    // character cards (client arrays, the frame's own coordinates)
+    if (sEntityGlCount > 0 && sSpriteTex != 0)
+    {
+        uint32_t cFirst = 0, cEnd = 0;
+
+        VoxelEntities_CharacterRange(&cFirst, &cEnd);
+        if (cEnd > sEntityGlCount)
+            cEnd = sEntityGlCount;
+        if (cFirst < cEnd)
+        {
+            glEnable(GL_ALPHA_TEST);
+            glAlphaFunc(GL_GREATER, 0.0f);
+            glBindTexture(GL_TEXTURE_2D, sSpriteTex);
+            glVertexPointer(3, GL_FLOAT, sizeof(VoxelGlVertex), &sEntityGlVerts[0].x);
+            glTexCoordPointer(2, GL_FLOAT, sizeof(VoxelGlVertex), &sEntityGlVerts[0].u);
+            glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(VoxelGlVertex), &sEntityGlVerts[0].r);
+            glDrawArrays(GL_TRIANGLES, (GLint)cFirst, (GLsizei)(cEnd - cFirst));
+            sCardVerts += cEnd - cFirst;
+        }
+    }
+    glDisable(GL_ALPHA_TEST);
+    glDisableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    DeckSunShadow_End();
+    DeckPost_BindScene();
+    glViewport(0, 0, DeckPost_SceneWidth(), DeckPost_SceneHeight());
+    sMs += VitaPerf_NowMs() - t0;
+    if (++sFrames >= 300)
+    {
+        DeckGl_Log("[SUNSHADOW] 300 frames: map pass cpu %.3f ms/frame, per frame tree draws %.1f building draws %.1f card verts %.1f\n",
+                   sMs / sFrames, (double)sTreeDraws / sFrames, (double)sBldgDraws / sFrames, (double)sCardVerts / sFrames);
+        sFrames = sTreeDraws = sBldgDraws = sCardVerts = 0;
+        sMs = 0.0;
+    }
 }
 #endif
 
@@ -6200,6 +6372,9 @@ bool VoxelRenderer_RenderFrame(void)
     // the same, so the fade-in has nothing left to build.
     if (f.fadeAmount < 0.99f)
     {
+#ifdef PLATFORM_DECK
+        Pass_SunShadowMap(&f);
+#endif
         Pass_SetupWorld3D();
 
         // Chunk VBOs (passes 1-3) are drawn with their crossing offsets.

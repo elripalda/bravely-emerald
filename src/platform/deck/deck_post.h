@@ -2,6 +2,7 @@
 #define GUARD_DECK_POST_H
 
 #include <stdbool.h>
+#include "deck_sunshadow.h"
 
 // Deck post chain on an RGBA8 scene target: bloom, time-of-day grade, vignette, smooth DoF.
 // GL (Core 0) thread only. The legacy diorama FBO and Pass_DepthOfField stay the fallback.
@@ -17,6 +18,7 @@ typedef struct
     float sunAmount;       // 0..1 shaft strength: sun and daylight, 0 at night, indoors, in rain, fog, sand, ash
     float zNear, zFar;     // projection planes of the scene (depth texture linearisation)
     float focusDist;       // eye to target distance (view-space depth of the focus plane), 0 = unknown
+    const DeckSunResolve *sun; // this frame's sun shadow map (NULL: none)
     float dofTopRows, dofBottomRows, dofTopAlpha, dofBottomAlpha; // VOXEL_DOF_* (voxel_tuning.h:89-92)
 } DeckPostFrame;
 
@@ -29,6 +31,8 @@ typedef struct
     bool blur;     // voxel_blur on
     bool tilt;     // voxel_tiltshift on (needs the depth texture, else the band blur runs)
     bool shafts;   // voxel_shafts on
+    bool sun;      // voxel_sunshadow on and the composite can resolve it
+    int sunLvl;
     bool lut;      // voxel_lut on (a generated colour table replaces the procedural grade)
     int gradeLvl, bloomLvl, blurLvl, tiltLvl, shaftLvl, lutLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
 } DeckPostConfig;
@@ -42,6 +46,7 @@ bool DeckPost_WantScene(int renderW, int renderH, bool indoor);
 // Size of the scene target: the 3D viewport of the frame (the projection aspect stays 960/544).
 int DeckPost_SceneWidth(void);
 int DeckPost_SceneHeight(void);
+bool DeckPost_SunReady(void); // the composite has the sun shadow resolve and the scene has a depth texture
 void DeckPost_BindScene(void);
 // Leaves: framebuffer 0 with the letterboxed viewport and scissor, program 0, texture unit 0
 // active with GL_TEXTURE_2D enabled, blend/depth test/alpha test off, depth mask off, client

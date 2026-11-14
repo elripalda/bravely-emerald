@@ -43,6 +43,7 @@ void DeckGl_Set1f(GLint loc, float v);
 void DeckGl_Set2f(GLint loc, float a, float b);
 void DeckGl_Set3f(GLint loc, float a, float b, float c);
 void DeckGl_Set4f(GLint loc, float a, float b, float c, float d);
+void DeckGl_SetMat4(GLint loc, const float *m16); // column-major, as glGetFloatv returns the matrices
 void DeckGl_ActiveTexture(GLenum unit);
 // Per-frame values for every program that declares uTime / uWind (wind = dirX, dirZ, strength).
 void DeckGl_SetFrameUniforms(float timeSeconds, float windX, float windZ, float windStrength);

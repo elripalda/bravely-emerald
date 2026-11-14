@@ -2,6 +2,7 @@
 #include "deck_gl_shader.h"
 #include "deck_video.h"
 #include "deck_levels.h"
+#include "deck_sunshadow.h"
 #include "platform/vita_extras.h"
 #include "../vita/vita_perf.h"
 #include <math.h>
@@ -135,6 +136,14 @@ static const char kCompositeBody[] =
     "uniform vec2 uLutOn;  // x on, y strength (the fade)\n"
     "uniform vec4 uShaft;  // x amount\n"
     "#endif\n"
+    "#ifdef POST_SUN\n"
+    "uniform sampler2D uSunMap;\n"
+    "uniform mat4 uInvVP;   // camera clip -> world\n"
+    "uniform mat4 uSunVP;   // world -> sun clip\n"
+    "uniform vec4 uSunA;    // x on (sun amount), y texel (uv), z PCF radius (0: 2x2, 1: 3x3, 2: 5x5), w multiplier in full shadow\n"
+    "uniform vec4 uSunB;    // x depth range (world), y texel (world), z tap spacing (texels)\n"
+    "uniform vec3 uSunL;    // toward the sun\n"
+    "#endif\n"
     "varying vec2 vPos;\n"
     "void main() {\n"
     "    vec3 c = texture2D(uScene, vPos).rgb;\n"
@@ -160,6 +169,49 @@ static const char kCompositeBody[] =
     "                wsum += w;\n"
     "            }\n"
     "            c = mix(c, acc / wsum, coc);\n"
+    "        }\n"
+    "    }\n"
+    "#endif\n"
+    "#ifdef POST_SUN\n"
+    "    if (uSunA.x > 0.0) {\n"
+    "        float sd = texture2D(uDepth, vPos).r;\n"
+    "        vec4 wq = uInvVP * vec4(vPos * 2.0 - 1.0, sd * 2.0 - 1.0, 1.0);\n"
+    "        vec3 wp = wq.xyz / wq.w;\n"
+    "        vec3 nn = cross(dFdx(wp), dFdy(wp));\n"
+    "        float nl = length(nn);\n"
+    "        nn = nl > 1.0e-12 ? nn / nl : vec3(0.0, 1.0, 0.0);\n"
+    "        float ndl = dot(nn, uSunL);\n"
+    "        if (sd < 0.9999 && ndl > 0.05) {\n"
+    "            float sinT = sqrt(max(1.0 - ndl * ndl, 0.0));\n"
+    "            float tw = uSunB.y;\n"
+    "            float bias = min(tw * (1.0 + 3.0 * sinT / max(ndl, 0.25)), tw * 10.0);\n"
+    "            vec4 sc = uSunVP * vec4(wp + nn * (tw * 1.2 * sinT), 1.0);\n"
+    "            vec2 suv = sc.xy * 0.5 + 0.5;\n"
+    "            float sz = (sc.z * 0.5 + 0.5) * uSunB.x - bias;\n"
+    "            float edge = min(min(suv.x, 1.0 - suv.x), min(suv.y, 1.0 - suv.y));\n"
+    "            float acc = 0.0;\n"
+    "            float cnt = 0.0;\n"
+    "            if (edge > 0.0) {\n"
+    "                if (uSunA.z < 0.5) {\n"
+    "                    for (int j = 0; j < 2; j++) {\n"
+    "                        for (int i = 0; i < 2; i++) {\n"
+    "                            vec2 o = (vec2(float(i), float(j)) - 0.5) * uSunA.y * uSunB.z;\n"
+    "                            acc += (sz > texture2D(uSunMap, suv + o).r * uSunB.x) ? 1.0 : 0.0;\n"
+    "                            cnt += 1.0;\n"
+    "                        }\n"
+    "                    }\n"
+    "                } else {\n"
+    "                    for (int j = -2; j <= 2; j++) {\n"
+    "                        for (int i = -2; i <= 2; i++) {\n"
+    "                            if (abs(float(i)) > uSunA.z || abs(float(j)) > uSunA.z) continue;\n"
+    "                            vec2 o = vec2(float(i), float(j)) * uSunA.y * uSunB.z;\n"
+    "                            acc += (sz > texture2D(uSunMap, suv + o).r * uSunB.x) ? 1.0 : 0.0;\n"
+    "                            cnt += 1.0;\n"
+    "                        }\n"
+    "                    }\n"
+    "                }\n"
+    "                c *= mix(1.0, uSunA.w, (acc / cnt) * smoothstep(0.0, 0.08, edge));\n"
+    "            }\n"
     "        }\n"
     "    }\n"
     "#endif\n"
@@ -203,6 +255,8 @@ static bool sReady;
 static void DeleteTargets(void);
 static bool CreateLut(void);
 static bool sXOk;      // the composite with POST_X built
+static bool sSunOk;    // the composite has the sun shadow resolve (POST_SUN)
+static GLint sCSunMap, sCInvVP, sCSunVP, sCSunA, sCSunB, sCSunL;
 static bool sShaftOk;  // the shaft program built and the composite has POST_X
 static DeckGlProgram sShaft;
 static GLint sShaftScene, sShaftSun, sCShafts, sCShaft;
@@ -242,18 +296,20 @@ DeckPostConfig DeckPost_ReadConfig(void)
     c.tiltLvl = DeckLevel(FAST_EXTRA_VOXEL_TILTSHIFT);
     c.shaftLvl = DeckLevel(FAST_EXTRA_VOXEL_SHAFTS);
     c.lutLvl = DeckLevel(FAST_EXTRA_VOXEL_LUT);
+    c.sunLvl = DeckSunShadow_Level();
     c.grade = c.gradeLvl >= 0;
     c.bloom = c.bloomLvl >= 0;
     c.blur = c.blurLvl >= 0;
     c.tilt = c.tiltLvl >= 0;
     c.shafts = c.shaftLvl >= 0;
     c.lut = c.lutLvl >= 0;
+    c.sun = c.sunLvl >= 0;
     return c;
 }
 
 static bool BuildPrograms(void)
 {
-    static char src[8192];
+    static char src[12288];
     const char *noX = getenv("DECK_POST_NO_X");
 
     if (!DeckGl_BuildProgram(&sBright, "post_bright", kFullscreenVs, kBrightFs)
@@ -262,16 +318,22 @@ static bool BuildPrograms(void)
         return false;
     // The extended composite first; if it does not build (or DECK_POST_NO_X), the phase 1 composite.
     sXOk = false;
+    sSunOk = false;
     if (noX == NULL || strcmp(noX, "0") == 0)
     {
-        if (snprintf(src, sizeof(src), "#version 120\n#define POST_X 1\n%s", kCompositeBody) >= (int)sizeof(src))
+        // POST_X with the sun shadow resolve first, then POST_X alone, then the phase 1 composite
+        for (int withSun = 1; withSun >= 0 && !sXOk; withSun--)
         {
-            DeckGl_Log("[POST] composite source truncated (%d bytes): not built\n", (int)sizeof(src));
-            return false;
+            if (snprintf(src, sizeof(src), "#version 120\n#define POST_X 1\n%s%s", withSun ? "#define POST_SUN 1\n" : "", kCompositeBody) >= (int)sizeof(src))
+            {
+                DeckGl_Log("[POST] composite source truncated (%d bytes): not built\n", (int)sizeof(src));
+                return false;
+            }
+            sXOk = DeckGl_BuildProgram(&sComposite, withSun ? "post_composite_xs" : "post_composite_x", kFullscreenVs, src);
+            sSunOk = sXOk && withSun;
+            if (!sXOk)
+                DeckGl_Log("[POST] composite %s failed\n", withSun ? "with the sun shadow (POST_SUN): trying without" : "extended: plain composite");
         }
-        sXOk = DeckGl_BuildProgram(&sComposite, "post_composite_x", kFullscreenVs, src);
-        if (!sXOk)
-            DeckGl_Log("[POST] extended composite failed: plain composite\n");
     }
     if (!sXOk)
     {
@@ -307,6 +369,12 @@ static bool BuildPrograms(void)
     sCShaft = DeckGl_Uniform(&sComposite, "uShaft");
     sCLut = DeckGl_Uniform(&sComposite, "uLut");
     sCLutOn = DeckGl_Uniform(&sComposite, "uLutOn");
+    sCSunMap = DeckGl_Uniform(&sComposite, "uSunMap");
+    sCInvVP = DeckGl_Uniform(&sComposite, "uInvVP");
+    sCSunVP = DeckGl_Uniform(&sComposite, "uSunVP");
+    sCSunA = DeckGl_Uniform(&sComposite, "uSunA");
+    sCSunB = DeckGl_Uniform(&sComposite, "uSunB");
+    sCSunL = DeckGl_Uniform(&sComposite, "uSunL");
     // The shaft pass is optional: a failed build only switches the shafts off.
     sShaftOk = sXOk && DeckGl_BuildProgram(&sShaft, "post_shaft", kFullscreenVs, kShaftFs);
     if (sShaftOk)
@@ -336,6 +404,8 @@ void DeckPost_Shutdown(void)
     sReady = false;
     sXOk = false;
     sTiltOk = false;
+    sSunOk = false;
+    DeckSunShadow_Shutdown();
 }
 
 // Scene width by voxel_res: OFF and LOW 960, MEDIUM 1120, HIGH 1280 (AUTO follows voxel_quality); height keeps 960:544, even.
@@ -464,7 +534,12 @@ bool DeckPost_WantScene(int renderW, int renderH, bool indoor)
     const DeckPostConfig c = DeckPost_ReadConfig();
     if (!c.shaders)
         return false;
-    return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor) || (c.shafts && sShaftOk) || (c.lut && sLutOk);
+    return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor) || (c.shafts && sShaftOk) || (c.lut && sLutOk) || (c.sun && sSunOk);
+}
+
+bool DeckPost_SunReady(void)
+{
+    return sReady && sSunOk && sScene.depth == DECK_GL_DEPTH_TEXTURE24;
 }
 
 void DeckPost_BindScene(void)
@@ -611,6 +686,7 @@ void DeckPost_Run(const DeckPostFrame *in)
     const bool doLut = cfg.lut && sLutOk;
     const bool doShafts = cfg.shafts && sShaftOk && in->sunAmount > 0.01f;
     const bool doBlur = cfg.blur && !in->indoor && !doTilt;
+    const DeckSunResolve *const sun = (cfg.sun && sSunOk && in->sun != NULL && in->sun->active) ? in->sun : NULL;
     float shadow[3], high[3];
 
     if (doLut)
@@ -679,7 +755,8 @@ void DeckPost_Run(const DeckPostFrame *in)
     DeckGlViewport(0, 0, in->renderW, in->renderH);
     BindTex(5, doShafts ? sHalf[3].color : 0);
     BindTex(4, doLut ? sLutTex : 0);
-    BindTex(3, doTilt ? sScene.depthTex : 0);
+    BindTex(6, sun != NULL ? sun->depthTex : 0);
+    BindTex(3, (doTilt || sun != NULL) ? sScene.depthTex : 0);
     BindTex(2, (doBlur || doTilt) ? sHalf[2].color : 0);
     BindTex(1, doBloom ? sHalf[0].color : 0);
     BindTex(0, sScene.color);
@@ -697,6 +774,17 @@ void DeckPost_Run(const DeckPostFrame *in)
     DeckGl_Set1i(sCShafts, 5);
     DeckGl_Set1i(sCLut, 4);
     DeckGl_Set2f(sCLutOn, doLut ? 1.0f : 0.0f, keep);
+    DeckGl_Set1i(sCSunMap, 6);
+    if (sun != NULL)
+    {
+        DeckGl_SetMat4(sCInvVP, sun->invVP);
+        DeckGl_SetMat4(sCSunVP, sun->sunVP);
+        DeckGl_Set4f(sCSunA, sun->amount, sun->texelUv, (float)sun->radius, sun->mul);
+        DeckGl_Set4f(sCSunB, sun->range, sun->texelWorld, sun->spacing, 0.0f);
+        DeckGl_Set3f(sCSunL, sun->toSun[0], sun->toSun[1], sun->toSun[2]);
+    }
+    else
+        DeckGl_Set4f(sCSunA, 0.0f, 0.0f, 0.0f, 1.0f);
     DeckGl_Set4f(sCShaft, doShafts ? in->sunAmount * kShaftGain[cfg.shaftLvl] * keep : 0.0f, 0.0f, 0.0f, 0.0f);
     {
         const int tl = doTilt ? cfg.tiltLvl : 0;
@@ -717,6 +805,7 @@ void DeckPost_Run(const DeckPostFrame *in)
 
     // Leave the state Pass_DepthOfField leaves (see deck_post.h).
     DeckGl_UseProgram(NULL);
+    BindTex(6, 0);
     BindTex(5, 0);
     BindTex(4, 0);
     BindTex(3, 0);

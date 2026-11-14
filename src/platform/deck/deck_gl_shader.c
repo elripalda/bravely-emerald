@@ -30,6 +30,7 @@ static struct
     PFNGLUNIFORM2FPROC Uniform2f;
     PFNGLUNIFORM3FPROC Uniform3f;
     PFNGLUNIFORM4FPROC Uniform4f;
+    PFNGLUNIFORMMATRIX4FVPROC UniformMatrix4fv;
     PFNGLACTIVETEXTUREPROC ActiveTexture;
     PFNGLGENQUERIESPROC GenQueries;
     PFNGLDELETEQUERIESPROC DeleteQueries;
@@ -116,6 +117,7 @@ bool DeckGl_Init(void)
     DECK_GL_LOAD(Uniform2f, "glUniform2f");
     DECK_GL_LOAD(Uniform3f, "glUniform3f");
     DECK_GL_LOAD(Uniform4f, "glUniform4f");
+    DECK_GL_LOAD(UniformMatrix4fv, "glUniformMatrix4fv");
     DECK_GL_LOAD(ActiveTexture, "glActiveTexture");
     sAvailable = ok;
     DeckGl_Log("[SHADER] GL_VERSION=%s | GLSL=%s | GL 2.0 entry points %s\n",
@@ -217,6 +219,8 @@ void DeckGl_Set1f(GLint loc, float v) { if (loc >= 0) sGl.Uniform1f(loc, v); }
 void DeckGl_Set2f(GLint loc, float a, float b) { if (loc >= 0) sGl.Uniform2f(loc, a, b); }
 void DeckGl_Set3f(GLint loc, float a, float b, float c) { if (loc >= 0) sGl.Uniform3f(loc, a, b, c); }
 void DeckGl_Set4f(GLint loc, float a, float b, float c, float d) { if (loc >= 0) sGl.Uniform4f(loc, a, b, c, d); }
+
+void DeckGl_SetMat4(GLint loc, const float *m16) { if (loc >= 0) sGl.UniformMatrix4fv(loc, 1, GL_FALSE, m16); }
 
 void DeckGl_ActiveTexture(GLenum unit)
 {
