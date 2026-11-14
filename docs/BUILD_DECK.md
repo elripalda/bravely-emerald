@@ -26,7 +26,7 @@ get contains Nintendo's data. Use it for yourself and **do not share it**.
 3. **Open Konsole** (the terminal icon in the taskbar) and clone the repository:
    ```sh
    cd ~
-   git clone https://github.com/marcoscodas/pokeemerald-deck emerald-deck-src
+   git clone https://github.com/marcoscodas/bravely-emerald bravely-emerald
    cd emerald-deck-src
    git checkout deck-port   # only if the port is on that branch
    ```

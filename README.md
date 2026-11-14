@@ -1,4 +1,6 @@
-# Pokémon Emerald Vita 3DS
+# Bravely Emerald
+
+**Pokémon Emerald, reimagined as a Square Enix HD-2D game.**
 
 ## Steam Deck and Windows ports
 
