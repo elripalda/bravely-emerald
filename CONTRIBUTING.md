@@ -1,7 +1,7 @@
 # Contributing
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/THREADS.md](docs/THREADS.md) first.
-Every change is tested on a real PS Vita before it is considered done.
+Every change is tested on a real PS Vita before it is considered done. Code under `PLATFORM_DECK` (the Steam Deck and Windows builds, `src/platform/deck/`) is tested on a Deck instead: build it with `tools/deck/build_deck.sh` ([docs/BUILD_DECK.md](docs/BUILD_DECK.md)) and keep Vita behaviour unchanged behind the guard.
 
 ## Where code goes
 

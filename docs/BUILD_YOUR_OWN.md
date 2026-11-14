@@ -17,6 +17,8 @@ Do not share the VPK or the downloaded files: they contain Nintendo's game data.
 
 Spanish version: [COMPILA_TU_VPK.md](COMPILA_TU_VPK.md).
 
+Steam Deck: [BUILD_DECK.md](BUILD_DECK.md) (one script). Windows: [WINDOWS_BUILD.md](WINDOWS_BUILD.md).
+
 ## Quick way: one script
 
 With MSYS2 installed in `C:\msys64` (step 1.1) and the repository cloned (step 2), this does

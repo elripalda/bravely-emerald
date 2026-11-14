@@ -13,6 +13,9 @@ changing. Contribution rules are in [../CONTRIBUTING.md](../CONTRIBUTING.md).
 | [VITA_UI.md](VITA_UI.md) | The native Emerald 3DS-style interface and the features behind it |
 | [BUILD_YOUR_OWN.md](BUILD_YOUR_OWN.md) | For users: make your own VPK from your Pokémon Emerald cartridge ([Spanish](COMPILA_TU_VPK.md)) |
 | [BUILD.md](BUILD.md) | Toolchain, build steps, CMake options, installing and testing |
+| [BUILD_DECK.md](BUILD_DECK.md) | For users: build the Steam Deck version with one script from your own ROM |
+| [WINDOWS_BUILD.md](WINDOWS_BUILD.md) | The 32-bit Windows build (MSYS2) |
+| [DECK_NOTES.md](DECK_NOTES.md) | Deck and Windows effects: constants, settings levels, container and SDL2 notes |
 | [ASSETS.md](ASSETS.md) | Where every data file comes from and how it is generated |
 | [DEBUGGING.md](DEBUGGING.md) | Logs, per-frame telemetry, crash dumps |
 

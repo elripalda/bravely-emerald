@@ -9,7 +9,7 @@ code and a few third-party components. Each part keeps its own terms. This file 
 Pokémon Emerald's code, data, graphics, audio and text are © Nintendo, Creatures Inc. and
 GAME FREAK inc. The decompiled form of that material in this tree (`src/` outside
 `src/platform/`, `include/`, `asm/`, `data/`, `graphics/`, `sound/`, `constants/`) is not licensed
-by this project. A built VPK contains it: do not distribute builds.
+by this project. A built VPK, Steam Deck or Windows build contains it: do not distribute builds.
 
 ## Upstream decompilation
 
@@ -37,7 +37,7 @@ pokeemerald-multiplatform (MIT). Consequences for this repository:
 
 ## Original PS Vita code
 
-Code written for this port that is not derived from Emerald 3DS (the VitaSDK/vitaGL backend,
+Code written for this port that is not derived from Emerald 3DS (the VitaSDK/vitaGL backend, the Steam Deck and Windows builds under `src/platform/deck/`, `tools/deck/`, `tools/windows/`,
 build scripts, telemetry, the multicore pipeline) is offered under the MIT licence of
 [LICENSE](LICENSE), like the multiplatform port it extends.
 
@@ -50,6 +50,7 @@ build scripts, telemetry, the multicore pipeline) is offered under the MIT licen
 | SDL2, SDL2_image (+ libpng, libjpeg, libwebp, zlib) | zlib and others | Audio device, timing, threads |
 | cJSON (Dave Gamble), in `src/platform/mods/` | MIT | JSON parsing |
 | nlohmann/json (Niels Lohmann), in `tools/jsonproc/` | MIT | Host tool |
+| Cinzel font (The Cinzel Project Authors), SIL Open Font License 1.1 ([docs/licenses/Cinzel-OFL.txt](docs/licenses/Cinzel-OFL.txt)) | OFL | Deck and Windows title lettering, rendered offline into `src/platform/deck/deck_title_font.h` by `tools/deck/gen_title_font.py` |
 | pret host tools (`tools/preproc`, `gbagfx`, `aif2pcm`, `mid2agb`, `mapjson`, `jsonproc`, `scaninc`) | from pret | Asset conversion at build time |
 
 ## Follower Pokémon assets

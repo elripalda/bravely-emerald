@@ -79,8 +79,9 @@ awk '{ print $2 }' "$MANIFEST" > "$WORK/.list"
 # ---------------------------------------------------------------- 3. port files made from them
 # The design exporter reads the converted graphics (.4bpp, .gbapal ...), so the host tools and
 # vita/assets.mk must have run first. Done here when needed (make is a no-op when up to date).
-# FETCH_MAKE_ARGS passes extra arguments to make_tools.mk (Windows: CC="gcc -static" ...).
-if [ ! -f graphics/intro/scene_1/bg.4bpp ] || [ ! -f include/constants/map_groups.h ]; then
+# FETCH_MAKE_ARGS passes extra (simple, unquoted) arguments to make_tools.mk; FETCH_NO_CONVERT=1 skips this
+# (the Windows flow in docs/WINDOWS_BUILD.md builds the static host tools itself).
+if [ -z "${FETCH_NO_CONVERT:-}" ] && { [ ! -f graphics/intro/scene_1/bg.4bpp ] || [ ! -f include/constants/map_groups.h ]; }; then
     echo "=== Building the host tools and converting the game files ==="
     command -v make >/dev/null || die "make is needed"
     make -f make_tools.mk -j"${FETCH_JOBS:-$(nproc 2>/dev/null || echo 2)}" ${FETCH_MAKE_ARGS:-}
