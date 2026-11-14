@@ -47,7 +47,7 @@ Done and verified on the Deck (0 GLERR, screenshots read): see docs/DECK_NOTES.m
 
 ## Phase 3 status (ambient audio bed)
 
-Done and verified by data on the Deck: see docs/DECK_NOTES.md "Phase 3". Plan: docs/superpowers/plans/2026-11-13-deck-phase3-ambient.md. `test_ambient` PASS, still.txt run: 0 GLERR, ambient context and 5 s stat lines in debug.log, queue 6.4k to 11k bytes with the bed on and off alike. Listening pass needed: levels against music, bird and cricket character, waves, thunder, indoor fade; setting AMBIENT VOLUME (GENERAL tab).
+Done and verified by data on the Deck (fix round 2026-11-13 applied: thunder queue, log gate, menu fade, see Autonomous decisions): see docs/DECK_NOTES.md "Phase 3". Plan: docs/superpowers/plans/2026-11-13-deck-phase3-ambient.md. `test_ambient` PASS, still.txt run: 0 GLERR, ambient context and 5 s stat lines in debug.log, queue 6.4k to 11k bytes with the bed on and off alike. Listening pass needed: levels against music, bird and cricket character, waves, thunder, indoor fade; setting AMBIENT VOLUME (GENERAL tab).
 
 ## Phase 4 status (standing tall grass, player bend, flowers)
 
