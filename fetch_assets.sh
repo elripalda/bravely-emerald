@@ -14,7 +14,8 @@
 #    (Python 3 with Pillow). The intro margins need the converted graphics and are made by
 #    build_vita.sh.
 #
-# Needs: git, and Python 3 with Pillow (pip install pillow).
+# Needs: git, make, a C compiler, libpng headers, and Python 3 with Pillow (pip install pillow).
+# Env: FETCH_JOBS (make jobs), FETCH_MAKE_ARGS (extra make_tools.mk arguments).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,6 +77,15 @@ awk '{ print $2 }' "$MANIFEST" > "$WORK/.list"
 (cd "$WORK" && tar cf - -T .list) | tar xf -
 
 # ---------------------------------------------------------------- 3. port files made from them
+# The design exporter reads the converted graphics (.4bpp, .gbapal ...), so the host tools and
+# vita/assets.mk must have run first. Done here when needed (make is a no-op when up to date).
+# FETCH_MAKE_ARGS passes extra arguments to make_tools.mk (Windows: CC="gcc -static" ...).
+if [ ! -f graphics/intro/scene_1/bg.4bpp ] || [ ! -f include/constants/map_groups.h ]; then
+    echo "=== Building the host tools and converting the game files ==="
+    command -v make >/dev/null || die "make is needed"
+    make -f make_tools.mk -j"${FETCH_JOBS:-$(nproc 2>/dev/null || echo 2)}" ${FETCH_MAKE_ARGS:-}
+    make -f vita/assets.mk -j"${FETCH_JOBS:-$(nproc 2>/dev/null || echo 2)}"
+fi
 echo "=== Generating the port's files ==="
 PY=""
 for c in $(type -ap python3 python 2>/dev/null); do
