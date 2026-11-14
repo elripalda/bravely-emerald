@@ -99,3 +99,13 @@ __pycache__/
 /build-win/
 /dist-win/
 /pokeemerald-win.zip
+
+# Windows helper scripts are source: *.bat is ignored above, these are kept
+!/tools/windows/*.bat
+# Deck builder output (tools/deck/build_deck.sh --dir)
+/build-deck/
+/deps32/
+/dist-deck/
+# Local agent logs and scratch screenshots
+/.claude-logs/
+/docs/screens/_tmp/
