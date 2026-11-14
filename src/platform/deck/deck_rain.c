@@ -329,7 +329,7 @@ static const char *kWetFs =
     "    float wet = uWet * flatness;\n"
     "    float bm = 1.0;\n"
     "#ifdef DECK_BUMP\n"
-    "    bm = deckBumpMul(uTex, vUv, t.rgb, vCol.rgb, vEye);\n"
+    "    bm = deckBumpMul(uTex, vUv, t.rgb, vCol.rgb, vEye) * deckGroundMul(vWorld, t.rgb, vCol.rgb, vEye);\n"
     "    bm = 1.0 + (bm - 1.0) * (1.0 - 0.4 * wet);\n"    // a wet surface is smoother: less relief under the sheen
     "#endif\n"
     "    vec3 col = c.rgb * bm * (1.0 - 0.30 * wet - 0.18 * wet * puddle);\n"
@@ -380,7 +380,7 @@ bool DeckRain_WetBegin(const float light[3])
 // Dry ground with relief: the same program with no wetness (uWet 0 is the plain texture times the vertex colour).
 bool DeckRain_BumpBegin(const float light[3])
 {
-    if (sWetProg.program == 0 || !sWetBump.ok || !DeckBump_Enabled())
+    if (sWetProg.program == 0 || !sWetBump.ok || !(DeckBump_Enabled() || DeckBump_GroundOn()))
         return false;
     DeckGl_UseProgram(&sWetProg);
     DeckGl_Set1i(sWetTex, 0);

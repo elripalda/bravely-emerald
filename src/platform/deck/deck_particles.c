@@ -276,7 +276,7 @@ static const char *kGlintFs =
     "    vec4 t = texture2D(uTex, vUv);\n"
     "    vec4 c = t * vCol;\n"
     "#ifdef DECK_BUMP\n"
-    "    c.rgb *= deckBumpMul(uTex, vUv, t.rgb, vCol.rgb, vEye);\n"
+    "    c.rgb *= deckBumpMul(uTex, vUv, t.rgb, vCol.rgb, vEye) * deckGroundMul(vWorld, t.rgb, vCol.rgb, vEye);\n"
     "#endif\n"
     "    float wb = clamp((t.b - max(t.r, t.g * 0.8) - 0.05) * 5.0, 0.0, 1.0);\n"      // blue texels: water
     "    vec2 g = vWorld * 2.2;\n"

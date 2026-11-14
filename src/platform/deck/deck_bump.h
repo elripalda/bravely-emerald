@@ -13,7 +13,7 @@
 typedef struct
 {
     bool ok;                   // the program holds the bump code (else it was built without it)
-    GLint par, sun, tex;       // uBumpP, uBumpSun, uBumpTex
+    GLint par, sun, tex, ground; // uBumpP, uBumpSun, uBumpTex, uGroundP
 } DeckBumpUniforms;
 
 // Builds the program with the bump block in front of the fragment shader body (the body starts with "#version 120\n" and
@@ -22,6 +22,8 @@ bool DeckBump_Build(DeckGlProgram *out, DeckBumpUniforms *u, const char *name, c
 
 // voxel_shaders on and voxel_bump not OFF.
 bool DeckBump_Enabled(void);
+// voxel_shaders on and voxel_groundrelief not OFF (ground programs only: deckGroundMul in the block).
+bool DeckBump_GroundOn(void);
 
 // Once a frame (before the world passes): the sun that lights the relief (same vector the shadows use).
 void DeckBump_SetSun(float dx, float dz, float strength);

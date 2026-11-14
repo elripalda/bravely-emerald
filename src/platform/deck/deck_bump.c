@@ -27,6 +27,47 @@ static const char *kBumpGlsl =
     "    vec4 t = texture2D(s, (q + 0.5) / uBumpTex.xy);\n"
     "    return (slot > 0.5 || t.a > 0.5) ? dbLum(t.rgb) : hc;\n"
     "}\n"
+    // Ground micro-relief (voxel_groundrelief): a procedural height by ground kind (classified from the texel colour: grass
+    // clumps, sand ripples, path grain) plus a low frequency undulation, lit by the sun like the bump. Shading only.
+    "uniform vec4 uGroundP;\n"        // x amplitude (0 = off)
+    "float dgHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
+    "float dgNoise(vec2 p) {\n"
+    "    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
+    "    return mix(mix(dgHash(i), dgHash(i + vec2(1.0, 0.0)), f.x), mix(dgHash(i + vec2(0.0, 1.0)), dgHash(i + vec2(1.0, 1.0)), f.x), f.y);\n"
+    "}\n"
+    "float dgHeight(vec2 w, vec3 k) {\n"       // k: grass, sand, path weights
+    "    float g = dgNoise(w * 1.5) * 0.65 + dgNoise(w * 3.6) * 0.35;\n"
+    "    float r = sin((w.x * 0.6 + w.y) * 5.5 + dgNoise(w * 0.9) * 4.0) * 0.5 + 0.5;\n"
+    "    float p = dgNoise(w * 9.0) * 0.7 + dgNoise(w * 17.0) * 0.3;\n"
+    "    return k.x * g + k.y * r + k.z * p;\n"
+    "}\n"
+    "float dgUndulation(vec2 w) { return dgNoise(w * 0.16) * 2.2 + dgNoise(w * 0.07 + 5.0) * 1.2; }\n"
+    "float deckGroundMul(vec2 w, vec3 base, vec3 vcol, vec3 eye) {\n"
+    "    vec3 dp1 = dFdx(eye);\n"             // derivatives outside any branch
+    "    vec3 dp2 = dFdy(eye);\n"
+    "    if (uGroundP.x <= 0.0) return 1.0;\n"
+    "    vec3 cr = cross(dp1, dp2);\n"
+    "    float crLen = length(cr);\n"
+    "    vec3 up = normalize(mat3(gl_ModelViewMatrix) * vec3(0.0, 1.0, 0.0));\n"
+    "    float flatK = crLen > 1.0e-12 ? smoothstep(0.7, 0.95, abs(dot(cr / crLen, up))) : 1.0;\n"   // cliffs and walls: none
+    "    float lum = dot(base, vec3(0.299, 0.587, 0.114));\n"
+    "    float grass = smoothstep(0.02, 0.12, base.g - max(base.r, base.b));\n"
+    "    float sand = (1.0 - grass) * smoothstep(0.08, 0.20, base.r - base.b) * smoothstep(0.45, 0.70, lum);\n"
+    "    float path = max(0.0, 1.0 - grass - sand);\n"
+    "    float water = clamp((base.b - max(base.r, base.g * 0.8) - 0.05) * 5.0, 0.0, 1.0);\n"
+    "    vec3 k = vec3(grass, sand, path);\n"
+    "    float e = 0.07;\n"
+    "    float h = dgHeight(w, k);\n"
+    "    float gx = (dgHeight(w + vec2(e, 0.0), k) - h) / e;\n"
+    "    float gz = (dgHeight(w + vec2(0.0, e), k) - h) / e;\n"
+    "    float u0 = dgUndulation(w);\n"
+    "    float ux = (dgUndulation(w + vec2(0.5, 0.0)) - u0) / 0.5;\n"
+    "    float uz = (dgUndulation(w + vec2(0.0, 0.5)) - u0) / 0.5;\n"
+    "    vec3 Np = normalize(vec3(-(gx * 0.30 + ux * 0.9), 1.0, -(gz * 0.30 + uz * 0.9)));\n"
+    "    float dd = dot(Np, uBumpSun) - uBumpSun.y;\n"
+    "    float raw = dd * (0.4 + 0.6 * uBumpP.y) * 2.4 + (h - 0.5) * 0.35;\n"
+    "    return 1.0 + uGroundP.x * flatK * (1.0 - water) * clamp(raw, -1.0, 1.0);\n"
+    "}\n"
     "float deckBumpMul(sampler2D s, vec2 uv, vec3 base, vec3 vcol, vec3 eye) {\n"
     "    if (uBumpP.x <= 0.0) return 1.0;\n"
     "    vec2 tp = uv * uBumpTex.xy;\n"
@@ -62,20 +103,25 @@ static const char *kBumpGlsl =
     "        float m = max(dot(T, T), dot(B, B));\n"
     "        if (m > 1.0e-20) {\n"
     "            float inv = inversesqrt(m);\n"
-    "            vec3 Np = normalize(N - 3.0 * (gx * T + gy * B) * inv);\n"
+    "            vec3 Np = normalize(N - 5.0 * (gx * T + gy * B) * inv);\n"
     "            vec3 L = normalize(mat3(gl_ModelViewMatrix) * uBumpSun);\n"
     "            dd = dot(Np, L) - dot(N, L);\n"
     "        }\n"
     "    }\n"
     // the baked vertex colour already holds the cast shadows: where it is dark the sun term fades (no double darkening)
-    "    float lit = mix(0.4, 1.0, smoothstep(0.5, 0.9, dbLum(vcol)));\n"
-    "    float raw = dd * uBumpP.y * lit * 1.6 + lap * 3.0;\n"
+    "    float lit = mix(0.55, 1.0, smoothstep(0.5, 0.9, dbLum(vcol)));\n"
+    "    float raw = dd * uBumpP.y * lit * 2.8 + lap * 4.5;\n"
     "    return 1.0 + uBumpP.x * clamp(raw, -1.0, 1.0);\n"
     "}\n";
 
-static char sSrc[8192];
+static char sSrc[16384];
 static float sSun[3] = { 0.0f, 1.0f, 0.0f };
 static float sSunW = 0.35f;
+
+bool DeckBump_GroundOn(void)
+{
+    return VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0 && DeckLevel(FAST_EXTRA_VOXEL_GROUNDRELIEF) >= 0;
+}
 
 bool DeckBump_Enabled(void)
 {
@@ -88,7 +134,7 @@ bool DeckBump_Build(DeckGlProgram *out, DeckBumpUniforms *u, const char *name, c
     const char *body = strncmp(fs, kVer, sizeof(kVer) - 1) == 0 ? fs + sizeof(kVer) - 1 : fs;
 
     memset(u, 0, sizeof(*u));
-    u->par = u->sun = u->tex = -1;
+    u->par = u->sun = u->tex = u->ground = -1;
     if (snprintf(sSrc, sizeof(sSrc), "%s%s%s", kVer, kBumpGlsl, body) < (int)sizeof(sSrc)
         && DeckGl_BuildProgram(out, name, vs, sSrc))
     {
@@ -96,6 +142,7 @@ bool DeckBump_Build(DeckGlProgram *out, DeckBumpUniforms *u, const char *name, c
         u->par = DeckGl_Uniform(out, "uBumpP");
         u->sun = DeckGl_Uniform(out, "uBumpSun");
         u->tex = DeckGl_Uniform(out, "uBumpTex");
+        u->ground = DeckGl_Uniform(out, "uGroundP");
         return true;
     }
     DeckGl_Log("[BUMP] %s: shader with the bump block failed, building it without\n", name);
@@ -116,10 +163,14 @@ void DeckBump_SetSun(float dx, float dz, float strength)
 
 void DeckBump_Set(const DeckBumpUniforms *u, float texW, float texH, float slot)
 {
-    // amplitude of the multiplier around 1.0: LOW +-10 percent, MEDIUM +-15, HIGH +-20 (0 = OFF, nothing changes)
-    const float amp = u->ok && DeckBump_Enabled() ? DeckLevelPick(FAST_EXTRA_VOXEL_BUMP, 0.10f, 0.15f, 0.20f) : 0.0f;
+    // amplitude of the multiplier around 1.0 (0 = OFF, nothing changes). Phase 9 had 0.10 / 0.15 / 0.20, too faint to see in
+    // a 1280 shot; raised to 0.18 / 0.30 / 0.45 together with the light response in the GLSL block (items of 2026-11-14).
+    const float amp = u->ok && DeckBump_Enabled() ? DeckLevelPick(FAST_EXTRA_VOXEL_BUMP, 0.18f, 0.30f, 0.45f) : 0.0f;
+    // ground micro-relief (voxel_groundrelief): multiplier amplitude of the ground programs' procedural height
+    const float gAmp = u->ok && DeckBump_GroundOn() ? DeckLevelPick(FAST_EXTRA_VOXEL_GROUNDRELIEF, 0.20f, 0.35f, 0.50f) : 0.0f;
 
     DeckGl_Set4f(u->par, amp, sSunW, 0.0f, 0.0f);
+    DeckGl_Set4f(u->ground, gAmp, 0.0f, 0.0f, 0.0f);
     DeckGl_Set3f(u->sun, sSun[0], sSun[1], sSun[2]);
     DeckGl_Set3f(u->tex, texW, texH, slot);
 }
