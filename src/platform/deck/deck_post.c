@@ -678,7 +678,8 @@ void DeckPost_Run(const DeckPostFrame *in)
     // of the letterbox rect, NEAREST would shimmer on diagonal edges: LINEAR (the target is near 1:1 on the Deck).
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sScene.w == DECK_BASE_W ? GL_NEAREST : GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sScene.w == DECK_BASE_W ? GL_NEAREST : GL_LINEAR);
-    GradeTints(in->daylight, in->glow, shadow, high);
+    float wgt[3];
+    GradeTints(in->daylight, in->glow, shadow, high, wgt);
     DeckGl_UseProgram(&sComposite);
     DeckGl_Set1i(sCScene, 0);
     DeckGl_Set1i(sCBloom, 1);
