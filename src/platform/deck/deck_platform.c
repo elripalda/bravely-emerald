@@ -6,7 +6,11 @@
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#else
 #include <unistd.h>
+#endif
 #ifdef __linux__
 #include <pthread.h>
 #endif
@@ -51,8 +55,13 @@ void VitaPlatform_Log(const char *const fmt, ...)
 void VitaPlatform_Init(void)
 {
     // Data directory is relative to the working directory (VITA_DATA_DIR = "userdata/").
+#ifdef _WIN32
+    (void)_mkdir("userdata");
+    (void)_mkdir("userdata/saves");
+#else
     (void)mkdir("userdata", 0777);
     (void)mkdir("userdata/saves", 0777);
+#endif
 #ifdef VITA_LOGGING
     remove(VITA_LOG_PATH);
 #endif
@@ -195,8 +204,22 @@ void VitaPlatform_DelayMicroseconds(const uint32_t microseconds)
     {
         return;
     }
+#ifdef _WIN32
+    // Sleep() has 1 ms granularity (SDL asks the system for a 1 ms timer): sleep the whole
+    // milliseconds that leave a margin, spin on the performance counter for the rest.
+    const uint64_t freq = SDL_GetPerformanceFrequency();
+    const uint64_t end = SDL_GetPerformanceCounter() + (uint64_t)microseconds * freq / 1000000U;
+    if (microseconds >= 2000U)
+    {
+        SDL_Delay((microseconds - 1000U) / 1000U);
+    }
+    while (SDL_GetPerformanceCounter() < end)
+    {
+    }
+#else
     struct timespec ts = { microseconds / 1000000U, (long)(microseconds % 1000000U) * 1000L };
     nanosleep(&ts, NULL);
+#endif
 }
 
 int32_t VitaPlatform_GetCpuMHz(void)
@@ -214,7 +237,11 @@ int32_t VitaPlatform_GetLocalTime(struct VitaLocalTime *const out)
 
     time_t t = time(NULL);
     struct tm tmv;
+#ifdef _WIN32
+    if (localtime_s(&tmv, &t) != 0)
+#else
     if (localtime_r(&t, &tmv) == NULL)
+#endif
     {
         return -1;
     }
@@ -243,9 +270,13 @@ uint64_t VitaPlatform_GetMilliseconds(void)
 {
     static uint64_t sStartMs;
     static bool sStarted;
+#ifdef _WIN32
+    const uint64_t now = SDL_GetTicks64();
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     const uint64_t now = (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+#endif
     if (!sStarted)
     {
         sStartMs = now;

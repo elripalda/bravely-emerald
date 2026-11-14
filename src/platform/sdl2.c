@@ -7,6 +7,9 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#ifdef PLATFORM_WINDOWS
+#include <direct.h>
+#endif
 #include "mods/mod_manager.h"
 #include <setjmp.h>
 #include "vita/vita_perf.h"
@@ -591,6 +594,25 @@ static inline void TickMenuAudioAndVBlank(uint64_t menuIterationStart)
 
 int main(int argc, char **argv)
 {
+#ifdef PLATFORM_WINDOWS
+    // SDL_MAIN_HANDLED: no SDL_main shim, so tell SDL the entry point is ours; the game's files
+    // (app0/, userdata/) sit next to the exe whatever the working directory of the launch was.
+    SDL_SetMainReady();
+    {
+        char *base = SDL_GetBasePath();
+        if (base != NULL)
+        {
+            (void)_chdir(base);
+            SDL_free(base);
+        }
+    }
+    if (_fileno(stderr) < 0)
+    {
+        // no console (windows subsystem build): keep the diagnostics in a file
+        (void)_mkdir("userdata");
+        (void)freopen("userdata/stderr.txt", "w", stderr);
+    }
+#endif
 #ifdef PLATFORM_VITA
     VitaPlatform_PinCurrentThread("MainThread", 0);
 #endif

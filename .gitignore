@@ -96,3 +96,6 @@ __pycache__/
 /.assets_ok
 /vita/sce_sys_custom/
 .superpowers/
+/build-win/
+/dist-win/
+/pokeemerald-win.zip
