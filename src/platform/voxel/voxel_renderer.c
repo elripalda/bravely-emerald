@@ -4404,6 +4404,18 @@ static void Deck_ForceWeather(VoxelFrame *const f)
 }
 #endif
 
+#ifdef PLATFORM_DECK
+// Day/night light colour for the rain effects (the same blend DrawWeather uses for its colour).
+static void Deck_RainLight(float out[3])
+{
+    const VitaDayNightLight *cycle = VitaDayNight_Get();
+    const VitaDayNightBlend moon = VitaDayNight_Moonlight(cycle, 0.0f, cycle->rgb);
+
+    for (int c = 0; c < 3; ++c)
+        out[c] = cycle->rgb[c] * (1.0f - moon.amount) + moon.rgb[c] * moon.amount;
+}
+#endif
+
 // Stage 5: screen fade, weather and the light of the frame.
 static void Frame_ReadAtmosphere(VoxelFrame *const f)
 {
@@ -4981,6 +4993,11 @@ static void Pass_Ground(const VoxelFrame *const f)
 {
     VoxelChunkSlot *const *const visibleChunks = f->visible;
     const int32_t visibleChunkCount = f->visibleCount;
+#ifdef PLATFORM_DECK
+    float rainLight[3];
+    Deck_RainLight(rainLight);
+    const bool wetGround = !f->indoor && DeckRain_WetBegin(rainLight);
+#endif
     for (uint32_t cutPass = 0; cutPass < 2u; cutPass++)
     {
         if (cutPass == 1u)
@@ -5032,12 +5049,20 @@ static void Pass_Ground(const VoxelFrame *const f)
                         }
 
                         ChunkOffsets_Apply(chunk);
+#ifdef PLATFORM_DECK
+                        if (wetGround)
+                            DeckRain_WetChunk(chunk->drawOffsetX - sSwayShiftX, chunk->drawOffsetZ - sSwayShiftZ);
+#endif
                         glDrawArrays(GL_TRIANGLES, (GLint)span->firstVert, (GLsizei)span->vertCount);
                     }
                 }
             }
         }
     }
+#ifdef PLATFORM_DECK
+    if (wetGround)
+        DeckRain_WetEnd();
+#endif
 }
 
 // Pass 2: trees and tall grass (tree atlas), from the chunk VBOs.
@@ -5401,8 +5426,6 @@ static void Pass_Atmosphere3D(const VoxelFrame *const f)
 #ifdef PLATFORM_DECK
             if (wKind == &sRainKind)
             {
-                const VitaDayNightLight *cycle = VitaDayNight_Get();
-                const VitaDayNightBlend moon = VitaDayNight_Moonlight(cycle, 0.0f, cycle->rgb);
                 DeckRainFrame rf;
 
                 rf.seconds = seconds;
@@ -5410,8 +5433,7 @@ static void Pass_Atmosphere3D(const VoxelFrame *const f)
                 rf.bolt = bolt;
                 rf.cam[0] = sCamera.x; rf.cam[1] = sCamera.y; rf.cam[2] = sCamera.z;
                 rf.target[0] = sCamera.targetX; rf.target[1] = sCamera.ground; rf.target[2] = sCamera.targetZ;
-                for (int c = 0; c < 3; ++c)
-                    rf.light[c] = cycle->rgb[c] * (1.0f - moon.amount) + moon.rgb[c] * moon.amount;
+                Deck_RainLight(rf.light);
                 if (DeckRain_DrawStreaks(&rf))
                     wKind = NULL;
             }

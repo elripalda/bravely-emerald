@@ -172,6 +172,97 @@ bool DeckRain_DrawStreaks(const DeckRainFrame *f)
     return true;
 }
 
+// ---- C4 wet ground -------------------------------------------------------------------------------------
+static const char *kWetVs =
+    "#version 120\n"
+    "uniform vec2 uChunk;\n"             // chunk draw offset in the world frame (puddle pattern stays put)
+    "varying vec2 vUv;\n"
+    "varying vec4 vCol;\n"
+    "varying vec3 vEye;\n"
+    "varying vec2 vWorld;\n"
+    "void main() {\n"
+    "    vUv = gl_MultiTexCoord0.xy;\n"
+    "    vCol = gl_Color;\n"
+    "    vEye = (gl_ModelViewMatrix * gl_Vertex).xyz;\n"
+    "    vWorld = gl_Vertex.xz + uChunk;\n"
+    "    gl_Position = ftransform();\n"
+    "}\n";
+
+// No normal attribute on the ground: the normal comes from the screen-space derivatives of the eye position.
+static const char *kWetFs =
+    "#version 120\n"
+    "uniform sampler2D uTex;\n"
+    "uniform float uWet;\n"
+    "uniform vec3 uSky;\n"
+    "varying vec2 vUv;\n"
+    "varying vec4 vCol;\n"
+    "varying vec3 vEye;\n"
+    "varying vec2 vWorld;\n"
+    "float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }\n"
+    "float noise(vec2 p) {\n"
+    "    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);\n"
+    "    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);\n"
+    "}\n"
+    "void main() {\n"
+    "    vec4 c = texture2D(uTex, vUv) * vCol;\n"
+    "    vec3 n = normalize(cross(dFdx(vEye), dFdy(vEye)));\n"
+    "    vec3 up = normalize(mat3(gl_ModelViewMatrix) * vec3(0.0, 1.0, 0.0));\n"
+    "    float flatness = smoothstep(0.7, 0.95, abs(dot(n, up)));\n"
+    "    float puddle = smoothstep(0.52, 0.72, noise(vWorld * 0.45) * 0.65 + noise(vWorld * 1.3) * 0.35);\n"
+    "    float wet = uWet * flatness;\n"
+    "    vec3 col = c.rgb * (1.0 - 0.30 * wet - 0.18 * wet * puddle);\n"
+    "    float l = dot(col, vec3(0.299, 0.587, 0.114));\n"
+    "    col = mix(vec3(l), col, 1.0 + 0.25 * wet);\n"
+    "    float ndv = abs(dot(n, normalize(-vEye)));\n"
+    "    float fres = clamp(pow(1.0 - ndv, 2.0) * 3.0, 0.0, 1.0);\n"
+    "    float refl = wet * (0.08 + 0.45 * puddle) * (0.4 + 0.6 * fres);\n"
+    "    col = mix(col, uSky, clamp(refl, 0.0, 0.6));\n"
+    "    gl_FragColor = vec4(col, c.a);\n"
+    "}\n";
+
+static DeckGlProgram sWetProg;
+static GLint sWetTex = -1, sWetWet = -1, sWetSky = -1, sWetChunk = -1;
+static float sWet = 0.0f;
+static float sLastSeconds = -1.0f;
+static float sLastLog = -100.0f;
+
+static void WetInit(void)
+{
+    if (!DeckGl_BuildProgram(&sWetProg, "rain-wet", kWetVs, kWetFs))
+    {
+        DeckGl_Log("[RAIN] wet ground shader build failed: flat ground stays\n");
+        return;
+    }
+    sWetTex = DeckGl_Uniform(&sWetProg, "uTex");
+    sWetWet = DeckGl_Uniform(&sWetProg, "uWet");
+    sWetSky = DeckGl_Uniform(&sWetProg, "uSky");
+    sWetChunk = DeckGl_Uniform(&sWetProg, "uChunk");
+}
+
+float DeckRain_Wetness(void) { return sWet; }
+
+bool DeckRain_WetBegin(const float light[3])
+{
+    if (!DeckRain_Enabled() || sWetProg.program == 0 || Off("wet") || sWet <= 0.01f)
+        return false;
+    DeckGl_UseProgram(&sWetProg);
+    DeckGl_Set1i(sWetTex, 0);
+    DeckGl_Set1f(sWetWet, sWet);
+    // pale overcast sky x the light of the hour
+    DeckGl_Set3f(sWetSky, 0.62f * light[0], 0.70f * light[1], 0.80f * light[2]);
+    return true;
+}
+
+void DeckRain_WetChunk(float worldX, float worldZ)
+{
+    DeckGl_Set2f(sWetChunk, worldX, worldZ);
+}
+
+void DeckRain_WetEnd(void)
+{
+    DeckGl_UseProgram(NULL);
+}
+
 // ---- State ---------------------------------------------------------------------------------------------
 void DeckRain_Init(void)
 {
@@ -182,14 +273,18 @@ void DeckRain_Init(void)
         strncat(sOff, e, sizeof(sOff) - 1);
     sReady = false;
     StreakInit();
-    sReady = sStreak.program != 0;
-    DeckGl_Log("[RAIN] init: streaks %s, off list '%s'\n", sStreak.program != 0 ? "ready" : "failed", sOff);
+    WetInit();
+    sReady = sStreak.program != 0 || sWetProg.program != 0;
+    DeckGl_Log("[RAIN] init: streaks %s, wet %s, off list '%s'\n", sStreak.program != 0 ? "ready" : "failed",
+               sWetProg.program != 0 ? "ready" : "failed", sOff);
 }
 
 void DeckRain_Shutdown(void)
 {
     if (sStreak.program != 0)
         DeckGl_DeleteProgram(&sStreak);
+    if (sWetProg.program != 0)
+        DeckGl_DeleteProgram(&sWetProg);
     if (sStreakVbo != 0)
         glDeleteBuffers(1, &sStreakVbo);
     sStreakVbo = 0;
@@ -203,5 +298,21 @@ bool DeckRain_Enabled(void)
 
 void DeckRain_Update(bool rain, float amount, bool indoor, float seconds)
 {
-    (void)rain; (void)amount; (void)indoor; (void)seconds;
+    float dt = sLastSeconds < 0.0f ? 0.0f : seconds - sLastSeconds;
+
+    sLastSeconds = seconds;
+    if (dt < 0.0f || dt > 0.25f)
+        dt = 0.0f; // first frame, a pause or a fade: the clock does not jump
+    if (!DeckRain_Enabled() || indoor)
+        return;
+    if (rain)
+        sWet += dt / 20.0f * Clamp01(amount);
+    else
+        sWet -= dt / 90.0f;
+    sWet = Clamp01(sWet);
+    if (seconds - sLastLog >= 10.0f && (rain || sWet > 0.0f))
+    {
+        sLastLog = seconds;
+        DeckGl_Log("[RAIN] t=%.0f s amount %.2f wet %.2f\n", seconds, amount, sWet);
+    }
 }

@@ -25,4 +25,11 @@ void DeckRain_Update(bool rain, float amount, bool indoor, float seconds);
 // C2: draws the streaks, returns true if it did (the caller then skips the legacy rain particles).
 bool DeckRain_DrawStreaks(const DeckRainFrame *f);
 
+// C4: wet ground. WetBegin binds the ground program while the ground is wet and the frame is outdoors (light = day/night
+// colour for the sky reflection); returns false (nothing bound) otherwise. WetChunk sets the chunk's world offset per chunk.
+bool DeckRain_WetBegin(const float light[3]);
+void DeckRain_WetChunk(float worldX, float worldZ);
+void DeckRain_WetEnd(void);
+float DeckRain_Wetness(void);
+
 #endif
