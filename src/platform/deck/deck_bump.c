@@ -47,14 +47,14 @@ static const char *kBumpGlsl =
     // surface frame from the screen derivatives (no normal or tangent attributes on these meshes)
     "    vec3 dp1 = dFdx(eye);\n"
     "    vec3 dp2 = dFdy(eye);\n"
+    "    vec2 du1 = dFdx(uv);\n"   // derivatives outside any branch: undefined inside divergent flow
+    "    vec2 du2 = dFdy(uv);\n"
     "    vec3 N = cross(dp1, dp2);\n"
     "    float nl = length(N);\n"
     "    float dd = 0.0;\n"
     "    if (nl > 1.0e-12) {\n"
     "        N /= nl;\n"
     "        if (dot(N, eye) > 0.0) N = -N;\n"      // face the viewer
-    "        vec2 du1 = dFdx(uv);\n"
-    "        vec2 du2 = dFdy(uv);\n"
     "        vec3 p2 = cross(dp2, N);\n"
     "        vec3 p1 = cross(N, dp1);\n"
     "        vec3 T = p2 * du1.x + p1 * du2.x;\n"

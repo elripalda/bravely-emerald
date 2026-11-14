@@ -35,11 +35,11 @@ static const char *kOutFs =
     "varying vec3 vEye;\n"
     "void main() {\n"
     "    vec4 c = texture2D(uTex, vUv);\n"
-    "    if (c.a > 0.5) {\n"
-    "        float bm = 1.0;\n"
+    "    float bm = 1.0;\n"
     "#ifdef DECK_BUMP\n"
-    "        bm = deckBumpMul(uTex, vUv, c.rgb, vCol.rgb, vEye);\n"   // the card faces the camera: its normal tilts by the height gradient
+    "    bm = deckBumpMul(uTex, vUv, c.rgb, vCol.rgb, vEye);\n"   // before the branch: the screen derivatives need the whole quad
     "#endif\n"
+    "    if (c.a > 0.5) {\n"
     "        float toSun = texture2D(uTex, vUv + uSunDir * uTexel).a;\n"
     "        float rim = (1.0 - step(0.5, toSun)) * uParams.y;\n"
     "        vec3 rgb = c.rgb * vCol.rgb * bm + vec3(0.34, 0.24, 0.10) * rim * vCol.rgb;\n"
