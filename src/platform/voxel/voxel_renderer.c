@@ -5572,6 +5572,11 @@ static void Pass_Atmosphere2D(const VoxelFrame *const f)
         0.0f, 1.0f
     };
 
+#ifdef PLATFORM_DECK
+    if (f->postActive)
+        glViewport(0, 0, DeckPost_SceneWidth(), DeckPost_SceneHeight()); // the scene target is still bound (voxel_res may be above 960)
+    else
+#endif
     glViewport(0, 0, VitaPlatform_GetRenderWidth(), VitaPlatform_GetRenderHeight());
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
