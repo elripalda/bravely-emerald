@@ -118,6 +118,7 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_tiltshift") == 0) return FAST_EXTRA_VOXEL_TILTSHIFT;
         if (strcmp(key, "voxel_shafts") == 0) return FAST_EXTRA_VOXEL_SHAFTS;
         if (strcmp(key, "voxel_lut") == 0) return FAST_EXTRA_VOXEL_LUT;
+        if (strcmp(key, "voxel_bump") == 0) return FAST_EXTRA_VOXEL_BUMP;
 #endif
         break;
     default:
@@ -328,6 +329,7 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS", "SOFT SHADOWS",     "voxel_shadow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "3D RESOLUTION",    "voxel_res", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "LUT GRADE",        "voxel_lut", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "RELIEF (BUMP)",    "voxel_bump", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "LIGHT SHAFTS",     "voxel_shafts", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "TILT-SHIFT",       "voxel_tiltshift", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "CAMERA TILT",       "voxel_pitch",      5, 2, sVoxelPitchValues,   NULL, NULL, NULL },

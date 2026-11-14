@@ -90,6 +90,7 @@ typedef enum
     FAST_EXTRA_VOXEL_SHAFTS,   // Deck light shafts (screen-space radial blur toward the sun, strength)
     FAST_EXTRA_VOXEL_TILTSHIFT, // Deck depth-based tilt-shift with bokeh (strength); off = the band blur
     FAST_EXTRA_VOXEL_PITCH,    // Deck camera tilt: 0 classic 40 deg, 1 36, 2 32 (default), 3 28, 4 24
+    FAST_EXTRA_VOXEL_BUMP,     // Deck pseudo normal map: relief from the albedo luminance, lit by the sun (strength)
     FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume: 0 off (no DSP) to 10, default 6
 #endif
     FAST_EXTRA_COUNT
