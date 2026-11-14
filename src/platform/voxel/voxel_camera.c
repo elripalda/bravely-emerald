@@ -118,8 +118,7 @@ static void AdaptDistance(VoxelCamera *cam)
         if (key != sLogged && dbg != NULL && strcmp(dbg, "0") != 0)
         {
             sLogged = key;
-            DeckGl_Log("[CAM] voxel_pitch key %d -> CtrSettings_VoxelPitch %d, cam->pitch %.1f, distance %.2f
-", key,
+            DeckGl_Log("[CAM] voxel_pitch key %d -> CtrSettings_VoxelPitch %d, cam->pitch %.1f, distance %.2f\n", key,
                        (int)CtrSettings_VoxelPitch(), cam->pitch, cam->distance);
         }
     }
