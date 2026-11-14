@@ -7,7 +7,9 @@
 #include <float.h>
 
 #ifdef PLATFORM_DECK
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 #include <time.h>
 #endif
 
@@ -467,11 +469,15 @@ static long DeckReadRssKb(void)
 // Process CPU time (user + system, all threads) in ms.
 static double DeckProcessCpuMs(void)
 {
+#ifdef _WIN32
+    return -1.0; // no getrusage on Windows; the readout is optional telemetry
+#else
     struct rusage ru;
     if (getrusage(RUSAGE_SELF, &ru) != 0)
         return -1.0;
     return (double)ru.ru_utime.tv_sec * 1000.0 + (double)ru.ru_utime.tv_usec / 1000.0
          + (double)ru.ru_stime.tv_sec * 1000.0 + (double)ru.ru_stime.tv_usec / 1000.0;
+#endif
 }
 
 // amdgpu exposes gpu_busy_percent; try the first few cards, skip when absent.

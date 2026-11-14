@@ -10,12 +10,23 @@
 cmake_minimum_required(VERSION 3.16)
 
 option(DECK "Build for the Steam Deck (32-bit x86 Linux) instead of the PS Vita" OFF)
+option(WINDOWS "Build for Windows (32-bit MinGW, see docs/WINDOWS_BUILD.md): the Deck build on desktop OpenGL" OFF)
+if(WINDOWS)
+    # Every PLATFORM_DECK code path (post chain, shaders, UI polish) is kept; the pieces that
+    # differ on Windows are marked PLATFORM_WINDOWS / _WIN32 in the sources.
+    set(DECK ON)
+endif()
 
 if(DECK)
     # 32-bit x86: the game data is assembled with 4-byte pointers (.4byte).
-    set(CMAKE_C_FLAGS_INIT "-m32")
-    set(CMAKE_EXE_LINKER_FLAGS_INIT "-m32")
-    project(pokeemerald_deck C)
+    if(WINDOWS)
+        # i686-w64-mingw32 is 32-bit already; the compiler comes from the MSYS2 /mingw32 folder.
+        project(pokeemerald_win C)
+    else()
+        set(CMAKE_C_FLAGS_INIT "-m32")
+        set(CMAKE_EXE_LINKER_FLAGS_INIT "-m32")
+        project(pokeemerald_deck C)
+    endif()
 else()
     if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
         if(NOT DEFINED ENV{VITASDK})
@@ -45,11 +56,20 @@ if(NOT EXISTS "${PREPROC}" OR NOT EXISTS "${ROOT}/include/constants/map_groups.h
 endif()
 
 if(DECK)
-    set(DECK_DEPS32 "/run/media/deck/SD512/emerald-deck/deps32" CACHE PATH "Prefix of the 32-bit static SDL2/SDL2_image build")
-    find_program(VITA_CPP     cpp     REQUIRED)
-    find_program(VITA_AS      as      REQUIRED)
-    find_program(VITA_LD      ld      REQUIRED)
-    find_program(VITA_OBJCOPY objcopy REQUIRED)
+    if(WINDOWS)
+        set(DECK_DEPS32 "${CMAKE_CURRENT_SOURCE_DIR}/build-win/deps" CACHE PATH "Prefix of the 32-bit static SDL2/SDL2_image build (tools/windows/build_deps.sh)")
+        get_filename_component(WIN_TOOLS_HINT "${CMAKE_C_COMPILER}" DIRECTORY)
+        find_program(VITA_CPP     cpp     HINTS "${WIN_TOOLS_HINT}" NO_DEFAULT_PATH REQUIRED)
+        find_program(VITA_AS      as      HINTS "${WIN_TOOLS_HINT}" NO_DEFAULT_PATH REQUIRED)
+        find_program(VITA_LD      ld      HINTS "${WIN_TOOLS_HINT}" NO_DEFAULT_PATH REQUIRED)
+        find_program(VITA_OBJCOPY objcopy HINTS "${WIN_TOOLS_HINT}" NO_DEFAULT_PATH REQUIRED)
+    else()
+        set(DECK_DEPS32 "/run/media/deck/SD512/emerald-deck/deps32" CACHE PATH "Prefix of the 32-bit static SDL2/SDL2_image build")
+        find_program(VITA_CPP     cpp     REQUIRED)
+        find_program(VITA_AS      as      REQUIRED)
+        find_program(VITA_LD      ld      REQUIRED)
+        find_program(VITA_OBJCOPY objcopy REQUIRED)
+    endif()
 else()
     find_program(VITA_CPP     arm-vita-eabi-cpp     HINTS "$ENV{VITASDK}/bin" REQUIRED)
     find_program(VITA_AS      arm-vita-eabi-as      HINTS "$ENV{VITASDK}/bin" REQUIRED)
@@ -86,7 +106,14 @@ if(DECK)
     endif()
     set(ASM_ARCH --32)
     set(ASM_WORD ".long")
-    set(LD_EMULATION -m elf_i386)
+    if(WINDOWS)
+        # SDL_MAIN_HANDLED: sdl2.c keeps its own main(); the exe is a console-less program
+        # unless WINDOWS_CONSOLE is ON.
+        list(APPEND GAME_DEFINES -DPLATFORM_WINDOWS -DSDL_MAIN_HANDLED)
+        set(LD_EMULATION -m i386pe)
+    else()
+        set(LD_EMULATION -m elf_i386)
+    endif()
 else()
     set(ASM_ARCH -march=armv7-a)
     set(ASM_WORD ".word")
@@ -116,7 +143,11 @@ foreach(SOURCE IN LISTS GAME_C)
     set(EXTRA_PREPROC_FLAGS "")
     if(DECK)
         # the cpp step also sees platform files that include SDL and the vitaGL/psp2 compat headers
-        set(EXTRA_PREPROC_FLAGS "-m32 -march=znver2 -msse2 -include stddef.h -DGL_GLEXT_PROTOTYPES -I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat' -I'${ROOT}/src/platform/vita'")
+        if(WINDOWS)
+            set(EXTRA_PREPROC_FLAGS "-msse2 -include stddef.h -I'${ROOT}/src/platform/deck/compat/win' -I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat' -I'${ROOT}/src/platform/vita'")
+        else()
+            set(EXTRA_PREPROC_FLAGS "-m32 -march=znver2 -msse2 -include stddef.h -DGL_GLEXT_PROTOTYPES -I'${DECK_DEPS32}/include' -I'${ROOT}/src/platform/deck/compat' -I'${ROOT}/src/platform/vita'")
+        endif()
     endif()
     # Stage scenes (one whole GBA picture each): their VBlank callbacks are reported to
     # vita_stage.c through a forced include, so the platform knows a stage is on screen without
@@ -173,6 +204,11 @@ endforeach()
 # Game data holds pointers, so it goes to a writable section.
 # The object list goes through a response file with relative paths: the full command line
 # exceeds the Windows limit, and paths inside the file are not translated under MSYS2.
+set(GAME_DATA_OBJCOPY_EXTRA "")
+if(WINDOWS)
+    # 32-bit COFF puts "_" in front of every C symbol; the assembly data names them bare.
+    set(GAME_DATA_OBJCOPY_EXTRA --prefix-symbols=_)
+endif()
 set(GAME_DATA_OBJECT "${CMAKE_BINARY_DIR}/generated/game_data.o")
 set(GAME_DATA_RSP "${CMAKE_BINARY_DIR}/generated/game_data.rsp")
 set(GAME_DATA_RSP_CONTENT "")
@@ -184,7 +220,7 @@ file(WRITE "${GAME_DATA_RSP}" "${GAME_DATA_RSP_CONTENT}")
 add_custom_command(
     OUTPUT "${GAME_DATA_OBJECT}"
     COMMAND "${VITA_LD}" ${LD_EMULATION} -r -o game_data.o.tmp @game_data.rsp
-    COMMAND "${VITA_OBJCOPY}" --rename-section .rodata=.data,alloc,load,data,contents game_data.o.tmp game_data.o
+    COMMAND "${VITA_OBJCOPY}" --rename-section .rodata=.data,alloc,load,data,contents ${GAME_DATA_OBJCOPY_EXTRA} game_data.o.tmp game_data.o
     DEPENDS ${GENERATED_ASM} "${GAME_DATA_RSP}"
     WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/generated"
     VERBATIM)
@@ -210,7 +246,11 @@ endforeach()
 
 # -fno-strict-aliasing / -fwrapv: the decomp relies on type punning and signed overflow
 # that the GBA tolerates; without them GCC 15 may optimise that code away.
-if(DECK)
+if(WINDOWS)
+    # Any PC of the last 20 years: SSE2 baseline, no Zen 2 instructions.
+    set(VITA_CPU_TUNING_OPTIONS -msse2 -mtune=generic)
+    set(OPT_LEVEL -O3)
+elseif(DECK)
     # Deck CPU is Zen 2. SSE2 is the baseline for the PPU conversion (Task 6).
     set(VITA_CPU_TUNING_OPTIONS -march=znver2 -mtune=znver2 -msse2)
     set(OPT_LEVEL -O3)
@@ -273,7 +313,20 @@ set_source_files_properties("${GAME_COMBINED_OBJECT}" PROPERTIES GENERATED TRUE 
 add_executable(pokeemerald ${PLATFORM_SIDE_C} "${GAME_COMBINED_OBJECT}" "${GAME_DATA_OBJECT}")
 target_include_directories(pokeemerald PRIVATE "${ROOT}" "${ROOT}/sound")
 target_compile_options(pokeemerald PRIVATE ${PLATFORM_COMPILE_OPTIONS})
-if(DECK)
+if(WINDOWS)
+    option(WINDOWS_CONSOLE "Windows: keep a console window next to the game (stdout / stderr visible)" OFF)
+    # tools/windows/build_deps.sh puts the static SDL2 and SDL2_image under DECK_DEPS32. The system
+    # libraries are the ones SDL2.pc lists for a static link; SDL2main is not used (SDL_MAIN_HANDLED).
+    target_include_directories(pokeemerald PRIVATE "${ROOT}/src/platform/deck/compat/win" "${ROOT}/src/platform/deck/compat" "${ROOT}/src/platform/vita" "${DECK_DEPS32}/include")
+    target_link_libraries(pokeemerald PRIVATE
+        "${DECK_DEPS32}/lib/libSDL2_image.a" "${DECK_DEPS32}/lib/libSDL2.a"
+        -lopengl32 -lm -ldinput8 -ldxguid -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32
+        -lshell32 -lsetupapi -lversion -luuid -static)
+    if(NOT WINDOWS_CONSOLE)
+        target_link_options(pokeemerald PRIVATE -mwindows)
+    endif()
+    target_link_options(pokeemerald PRIVATE -Wl,--wrap=fopen)
+elseif(DECK)
     # Static 32-bit SDL2 + SDL2_image live under DECK_DEPS32 (built on the Deck, see docs/DECK_NOTES.md).
     list(PREPEND CMAKE_PREFIX_PATH "${DECK_DEPS32}")
     set(ENV{PKG_CONFIG_PATH} "${DECK_DEPS32}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
@@ -394,16 +447,27 @@ endif()  # NOT DECK
 if(DECK)
     # Platform-side sources: Vita-SDK files are swapped for the Deck versions by the source filter above.
     set(DECK_DIST "${CMAKE_BINARY_DIR}/dist")
+    if(WINDOWS)
+        set(DECK_EXE_NAME "pokeemerald.exe")
+    else()
+        set(DECK_EXE_NAME "pokeemerald")
+    endif()
     add_custom_command(TARGET pokeemerald POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECK_DIST}/app0"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/voxel" "${DECK_DIST}/app0/voxel"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/ui" "${DECK_DIST}/app0/ui"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECK_DIST}/userdata"
-        COMMAND "${CMAKE_COMMAND}" -E copy "${ROOT}/tools/deck/run.sh" "${DECK_DIST}/run.sh"
-        COMMAND chmod +x "${DECK_DIST}/run.sh"
         # Stage 1 runs 2D only: seed settings.txt (voxel_3d=0) unless one already exists.
         COMMAND sh "${ROOT}/tools/deck/seed.sh" "${ROOT}/tools/deck/settings.txt" "${DECK_DIST}/userdata/settings.txt"
-        COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:pokeemerald>" "${DECK_DIST}/pokeemerald")
+        COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:pokeemerald>" "${DECK_DIST}/${DECK_EXE_NAME}")
+    if(WINDOWS)
+        add_custom_command(TARGET pokeemerald POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy "${ROOT}/tools/windows/run.bat" "${DECK_DIST}/run.bat")
+    else()
+        add_custom_command(TARGET pokeemerald POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy "${ROOT}/tools/deck/run.sh" "${DECK_DIST}/run.sh"
+            COMMAND chmod +x "${DECK_DIST}/run.sh")
+    endif()
     # The VPK also packs followers/ and ui2/ (each only when present).
     if(EXISTS "${ROOT}/assets/followers")
         add_custom_command(TARGET pokeemerald POST_BUILD

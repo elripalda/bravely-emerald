@@ -116,8 +116,22 @@ bool DeckVideo_Init(SDL_Window **outWindow)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
+    Uint32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN_DESKTOP;
+    int windowW = 1280, windowH = 800;
+#ifdef PLATFORM_WINDOWS
+    // A desktop PC starts in a resizable window; DECK_FULLSCREEN=1 gives the Deck behaviour.
+    {
+        const char *fs = getenv("DECK_FULLSCREEN");
+        if (fs == NULL || strcmp(fs, "0") == 0)
+        {
+            windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+            windowW = 1280;
+            windowH = 720;
+        }
+    }
+#endif
     sWindow = SDL_CreateWindow("Pokemon Emerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                               1280, 800, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN_DESKTOP);
+                               windowW, windowH, windowFlags);
     if (sWindow == NULL)
     {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
@@ -129,6 +143,14 @@ bool DeckVideo_Init(SDL_Window **outWindow)
         fprintf(stderr, "SDL_GL_CreateContext: %s\n", SDL_GetError());
         return false;
     }
+#ifdef PLATFORM_WINDOWS
+    {
+        // opengl32.dll exports GL 1.1 only: load buffers, framebuffers, programs by name
+        const int missing = WinGl_Load();
+        if (missing != 0)
+            fprintf(stderr, "[WINGL] %d GL entry points missing: this driver is too old\n", missing);
+    }
+#endif
     DeckVideo_SetSwapInterval(1);
     {
         const char *dbg = getenv("DECK_GL_DEBUG");
