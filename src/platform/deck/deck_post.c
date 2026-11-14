@@ -144,7 +144,7 @@ static const char kCompositeBody[] =
     "        float z = 2.0 * uZ.x * uZ.y / (uZ.y + uZ.x - (2.0 * d - 1.0) * (uZ.y - uZ.x));\n"
     "        float rel = (z - uTilt.y) / uTilt.y;\n"
     "        rel = rel < 0.0 ? -rel * 1.4 : rel;\n"
-    "        float coc = smoothstep(0.06, 0.40, rel);\n"
+    "        float coc = d >= 0.9999 ? 0.0 : smoothstep(0.06, 0.40, rel);\n"   // sky (cleared depth) stays sharp
     "        if (coc > 0.01) {\n"
     "            vec2 rad = vec2(1.0 / uAspect, 1.0) * (coc * uTilt.z);\n"
     "            vec3 acc = vec3(0.0);\n"
@@ -264,14 +264,22 @@ static bool BuildPrograms(void)
     sXOk = false;
     if (noX == NULL || strcmp(noX, "0") == 0)
     {
-        snprintf(src, sizeof(src), "#version 120\n#define POST_X 1\n%s", kCompositeBody);
+        if (snprintf(src, sizeof(src), "#version 120\n#define POST_X 1\n%s", kCompositeBody) >= (int)sizeof(src))
+        {
+            DeckGl_Log("[POST] composite source truncated (%d bytes): not built\n", (int)sizeof(src));
+            return false;
+        }
         sXOk = DeckGl_BuildProgram(&sComposite, "post_composite_x", kFullscreenVs, src);
         if (!sXOk)
             DeckGl_Log("[POST] extended composite failed: plain composite\n");
     }
     if (!sXOk)
     {
-        snprintf(src, sizeof(src), "#version 120\n%s", kCompositeBody);
+        if (snprintf(src, sizeof(src), "#version 120\n%s", kCompositeBody) >= (int)sizeof(src))
+        {
+            DeckGl_Log("[POST] composite source truncated (%d bytes): not built\n", (int)sizeof(src));
+            return false;
+        }
         if (!DeckGl_BuildProgram(&sComposite, "post_composite", kFullscreenVs, src))
             return false;
     }
@@ -378,6 +386,7 @@ void DeckPost_Init(int sceneW, int sceneH)
     if (!ok && sceneW != DECK_BASE_W)
     {
         DeckGl_Log("[POST] %dx%d target failed at init: %dx%d\n", sceneW, sceneH, DECK_BASE_W, DECK_BASE_H);
+        sFailW = sceneW; // not tried again by ApplyWantedSize
         DeleteTargets();
         ok = CreateTargets(DECK_BASE_W, DECK_BASE_H);
     }

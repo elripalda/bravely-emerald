@@ -37,7 +37,7 @@ void DeckPost_Init(int sceneW, int sceneH); // the size arguments are replaced b
 void DeckPost_Shutdown(void);
 DeckPostConfig DeckPost_ReadConfig(void);
 // true: this frame's 3D scene goes to the RGBA8 scene target. Call before binding a framebuffer.
-// May recreate the scene target when voxel_res changed (960 / 1120 / 1280 wide, 16:9 like the picture).
+// May recreate the scene target when voxel_res changed (960 / 1120 / 1280 wide; the picture is 960:544, the heights 544 / 636 / 726 are that ratio rounded to even).
 bool DeckPost_WantScene(int renderW, int renderH, bool indoor);
 // Size of the scene target: the 3D viewport of the frame (the projection aspect stays 960/544).
 int DeckPost_SceneWidth(void);
