@@ -32,6 +32,7 @@
 #include "../deck/deck_sway.h"
 #include "../deck/deck_flowers.h"
 #include "../deck/deck_rain.h"
+#include "../deck/deck_particles.h"
 #endif
 
 static int32_t sFrameDrawCalls = 0;
@@ -3721,6 +3722,7 @@ bool VoxelRenderer_Init(void)
     DeckPost_Init(VOXEL_DIORAMA_FBO_W, VOXEL_DIORAMA_FBO_H);
     DeckSway_Init();
     DeckRain_Init();
+    DeckParticles_Init();
 #endif
 
     MakeFog();
@@ -3794,6 +3796,7 @@ void VoxelRenderer_Shutdown(void)
     DeckPost_Shutdown();
     DeckSway_Shutdown();
     DeckRain_Shutdown();
+    DeckParticles_Shutdown();
 #endif
 
     if (sChunkStaging)
@@ -4997,6 +5000,10 @@ static void Pass_Ground(const VoxelFrame *const f)
     float rainLight[3];
     Deck_RainLight(rainLight);
     const bool wetGround = !f->indoor && DeckRain_WetBegin(rainLight);
+    // Water glints use the ground program the wet shader does not: outdoors, daylight or moon, not in rain, not in battle
+    const bool glintGround = !wetGround && !f->indoor && !f->inBattle3D
+                             && DeckParticles_GlintBegin(VitaDayNight_GetSun()->strength, VitaDayNight_Get()->glow,
+                                                         f->weather == VOXEL_WEATHER_RAIN);
 #endif
     for (uint32_t cutPass = 0; cutPass < 2u; cutPass++)
     {
@@ -5052,6 +5059,8 @@ static void Pass_Ground(const VoxelFrame *const f)
 #ifdef PLATFORM_DECK
                         if (wetGround)
                             DeckRain_WetChunk(chunk->drawOffsetX - sSwayShiftX, chunk->drawOffsetZ - sSwayShiftZ);
+                        else if (glintGround)
+                            DeckParticles_GlintChunk(chunk->drawOffsetX - sSwayShiftX, chunk->drawOffsetZ - sSwayShiftZ);
 #endif
                         glDrawArrays(GL_TRIANGLES, (GLint)span->firstVert, (GLsizei)span->vertCount);
                     }
@@ -5062,6 +5071,8 @@ static void Pass_Ground(const VoxelFrame *const f)
 #ifdef PLATFORM_DECK
     if (wetGround)
         DeckRain_WetEnd();
+    else if (glintGround)
+        DeckParticles_GlintEnd();
 #endif
 }
 
@@ -5426,7 +5437,30 @@ static void Pass_Atmosphere3D(const VoxelFrame *const f)
 #endif
 
         // ---- PASS 5.6: 3D Sunlit Dust Motes ----
-        if (f->light.motes > 0.005f)
+        bool motesDone = false;
+#ifdef PLATFORM_DECK
+        // Phase 6 particles: pollen (replaces the 32 legacy motes), fireflies, leaves. Not in battles or caves.
+        if (!f->inBattle3D && !underground)
+        {
+            DeckPartFrame pf;
+            int treeVerts = 0;
+
+            for (int32_t i = 0; i < f->visibleCount; i++)
+                treeVerts += (int)f->visible[i]->treeCount;
+            pf.seconds = seconds;
+            pf.target[0] = sCamera.targetX; pf.target[1] = sCamera.ground; pf.target[2] = sCamera.targetZ;
+            pf.pitchCosSin[0] = cosf(sCamera.pitch * (3.14159265f / 180.0f));
+            pf.pitchCosSin[1] = sinf(sCamera.pitch * (3.14159265f / 180.0f));
+            Deck_RainLight(pf.light);
+            pf.motes = f->light.motes;
+            pf.glow = VitaDayNight_Get()->glow;
+            pf.treeVerts = treeVerts;
+            pf.rain = weather == VOXEL_WEATHER_RAIN;
+            pf.calm = !(weather == VOXEL_WEATHER_CLEAR || weather == VOXEL_WEATHER_SUN);
+            motesDone = DeckParticles_Draw(&pf);
+        }
+#endif
+        if (f->light.motes > 0.005f && !motesDone)
         {
             DrawMotes(f->light.motes, seconds);
         }

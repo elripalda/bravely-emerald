@@ -107,6 +107,9 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_sway") == 0) return FAST_EXTRA_VOXEL_SWAY;
         if (strcmp(key, "voxel_grass") == 0) return FAST_EXTRA_VOXEL_GRASS;
         if (strcmp(key, "voxel_rain") == 0) return FAST_EXTRA_VOXEL_RAIN;
+        if (strcmp(key, "voxel_particles") == 0) return FAST_EXTRA_VOXEL_PARTICLES;
+        if (strcmp(key, "voxel_outline") == 0) return FAST_EXTRA_VOXEL_OUTLINE;
+        if (strcmp(key, "voxel_shadow") == 0) return FAST_EXTRA_VOXEL_SHADOW;
 #endif
         break;
     default:
@@ -302,6 +305,9 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS",    "WIND SWAY",         "voxel_sway",       2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "GRASS & FLOWERS",    "voxel_grass",      2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "RAIN EFFECTS",      "voxel_rain",       2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "PARTICLES",         "voxel_particles",  2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "CHARACTER OUTLINE", "voxel_outline",    2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "SOFT SHADOWS",      "voxel_shadow",     2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
 #endif
     { VITA_TAB_WORLD,   "TIME & SKY", "DAY / NIGHT CYCLE", "day_night",        2, 1, sDayNightValues,    NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "TIME & SKY", "TIMED ENCOUNTERS",  "timed_encounters", 2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },

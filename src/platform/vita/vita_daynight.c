@@ -1,5 +1,7 @@
 #include <stdint.h>
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #include "global.h"
 #include "main.h"
 #include "overworld.h"
@@ -209,6 +211,33 @@ void VitaDayNight_Update(void)
         sLight = VitaDayNight_At(sClock.timeMs);
         sSun = VitaDayNight_SunAt(sClock.timeMs);
     }
+#ifdef PLATFORM_DECK
+    // Debug aid (Deck only): env DECK_FORCE_TIME=dawn|noon|dusk|night holds the light and sun of the scene at that hour
+    // outdoors, whatever the clock or the day/night setting says. Read once. Not the clock itself (saves, berries, audio).
+    {
+        static int sForced = -2;
+        static const unsigned sHoursMs[4] = {5u * 3600000u + 1800000u, 12u * 3600000u, 17u * 3600000u + 1800000u, 23u * 3600000u};
+
+        if (sForced == -2)
+        {
+            const char *e = getenv("DECK_FORCE_TIME");
+
+            sForced = -1;
+            if (e != NULL)
+            {
+                if (strcmp(e, "dawn") == 0) sForced = 0;
+                else if (strcmp(e, "noon") == 0) sForced = 1;
+                else if (strcmp(e, "dusk") == 0) sForced = 2;
+                else if (strcmp(e, "night") == 0) sForced = 3;
+            }
+        }
+        if (sForced >= 0 && VitaGame_IsOutdoor())
+        {
+            sLight = VitaDayNight_At(sHoursMs[sForced]);
+            sSun = VitaDayNight_SunAt(sHoursMs[sForced]);
+        }
+    }
+#endif
 }
 
 bool VitaDayNight_Time(uint32_t *const seconds, uint32_t *const rate)
