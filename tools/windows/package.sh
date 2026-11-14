@@ -11,13 +11,14 @@ OUT="dist-win"
 rm -rf "$OUT" pokeemerald-win.zip
 mkdir -p "$OUT/userdata"
 cp "$SRC/pokeemerald.exe" "$SRC/run.bat" "$OUT/"
+/mingw32/bin/strip "$OUT/pokeemerald.exe"   # 32 MB with symbols, about a third without
 cp -r "$SRC/app0" "$OUT/app0"
 cp "$SRC/userdata/settings.txt" "$OUT/userdata/settings.txt"
 cp tools/windows/README_WINDOWS.txt "$OUT/README.txt"
 # SDL2 is linked statically; list any DLL the exe still needs besides the Windows ones
 if command -v objdump >/dev/null; then
     echo "DLL imports of pokeemerald.exe:"
-    objdump -p "$OUT/pokeemerald.exe" | grep "DLL Name" | sort -u
+    /mingw32/bin/objdump -p "$OUT/pokeemerald.exe" | grep "DLL Name" | sort -u
 fi
 python -m zipfile -c pokeemerald-win.zip "$OUT"
 ls -l pokeemerald-win.zip

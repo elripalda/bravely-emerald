@@ -148,8 +148,7 @@ bool DeckVideo_Init(SDL_Window **outWindow)
         // opengl32.dll exports GL 1.1 only: load buffers, framebuffers, programs by name
         const int missing = WinGl_Load();
         if (missing != 0)
-            fprintf(stderr, "[WINGL] %d GL entry points missing: this driver is too old
-", missing);
+            fprintf(stderr, "[WINGL] %d GL entry points missing: this driver is too old\n", missing);
     }
 #endif
     DeckVideo_SetSwapInterval(1);

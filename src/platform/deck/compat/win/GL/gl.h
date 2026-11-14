@@ -7,6 +7,17 @@
 // a macro for a function pointer, so no source file has to change. This header sits first on the
 // include path of the Windows build and hands over to MinGW's own GL/gl.h.
 
+// MinGW's gl.h includes <windows.h> unless these two are already defined; windows.h would clash
+// with the game's own names (ScrollWindow, abs, ...). Define them here, as windows.h would.
+#ifndef WINGDIAPI
+#define WINGDIAPI __declspec(dllimport)
+#endif
+#ifndef APIENTRY
+#define APIENTRY __stdcall
+#endif
+#ifndef GLAPI
+#define GLAPI extern
+#endif
 #include_next <GL/gl.h>
 #include <GL/glext.h>
 

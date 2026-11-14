@@ -1,4 +1,6 @@
 #include <stdint.h>
+#include <math.h>   // before global.h: its abs() macro clashes with the declaration in MinGW's math.h
+#include <stdlib.h>
 #include "vita_ui_internal.h"
 
 #include "global.h"
