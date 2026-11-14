@@ -2264,7 +2264,7 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
     // 2. Trees & Tall Grass across all overlapping instances
     phaseStart = VitaPerf_NowMs();
 #ifdef PLATFORM_DECK
-    const uint32_t tuftsBefore = VoxelTree_TuftsEmitted();
+    const uint32_t tuftsBefore = VoxelTree_TuftsEmitted(), flowersBefore = VoxelTree_FlowerCellsEmitted();
 #endif
     VoxelBuilder_Init(&builder, sScratch, SCRATCH_VERTICES);
     builder.swayW = SwayWeights(); // Deck wind weights (NULL elsewhere)
@@ -2307,11 +2307,12 @@ static void ComputeChunkJob(const VoxelChunkJobInput *in, VoxelChunkJobOutput *o
         // debug aid for the grass phase: tufts and tree vertices per chunk, build ms, truncation
         static unsigned sTuftLogs;
         const uint32_t tufts = VoxelTree_TuftsEmitted() - tuftsBefore;
-        if (tufts > 0 && sTuftLogs < 150)
+        const uint32_t flowerCells = VoxelTree_FlowerCellsEmitted() - flowersBefore;
+        if ((tufts > 0 || flowerCells > 0) && sTuftLogs < 150)
         {
             ++sTuftLogs;
-            DeckGl_Log("[GRASS] chunk %d,%d tufts %u treeVerts %u (built %u, cap %d) treesMs %.2f\n", x0, y0,
-                       (unsigned)tufts, (unsigned)out->treeCount, (unsigned)builder.count, CHUNK_TREE_CAP,
+            DeckGl_Log("[GRASS] chunk %d,%d tufts %u flowerCells %u treeVerts %u (built %u, cap %d) treesMs %.2f\n", x0, y0,
+                       (unsigned)tufts, (unsigned)flowerCells, (unsigned)out->treeCount, (unsigned)builder.count, CHUNK_TREE_CAP,
                        out->treesMs);
         }
     }

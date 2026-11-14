@@ -405,6 +405,11 @@ uint32_t VoxelTree_TuftsEmitted(void)
     return sTufts;
 }
 
+uint32_t VoxelTree_FlowerCellsEmitted(void)
+{
+    return sFlowerCells;
+}
+
 static void EmitTallGrass(VoxelBuilder *builder, int32_t x, int32_t y)
 {
     const float rise = 1.532089f * TALL_GRASS_HEIGHT, run = 1.285575f * TALL_GRASS_HEIGHT;
