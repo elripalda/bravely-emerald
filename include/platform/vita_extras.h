@@ -76,6 +76,7 @@ typedef enum
     FAST_EXTRA_VOXEL_GRADE,    // Deck colour grade + vignette: 0 off, 1 on, 2 auto (preset)
     FAST_EXTRA_VOXEL_BLOOM,    // Deck bloom: 0 off, 1 on, 2 auto (preset)
     FAST_EXTRA_VOXEL_SWAY,     // Deck wind sway of tree crowns and long grass: 0 off, 1 on
+    FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume: 0 off (no DSP) to 10, default 6
 #endif
     FAST_EXTRA_COUNT
 } FastExtraId;

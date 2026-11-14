@@ -15,6 +15,9 @@
 #include "platform/ui.h"
 #include "constants/moves.h"
 #include "vita/vita_reset.h"
+#ifdef PLATFORM_DECK
+#include "deck/deck_ambient_game.h"
+#endif
 // Catch-up game frames run their scanline events without being drawn (see the main loop).
 #define VITA_SKIP_CATCHUP_DRAW
 #if defined(VITA_PARALLEL_DRAW)
@@ -1086,6 +1089,10 @@ void Platform_QueueAudio(float *audioBuffer, u32 bufferSizeBytes)
         float volume = sPlatformSettings[PLATFORM_SETTING_VOLUME] / 10.0f;
         for (int32_t i = 0; i < floatCount; i++)
             sAdjustedAudio[i] = audioBuffer[i] * volume;
+#ifdef PLATFORM_DECK
+        // Procedural ambient bed (docs/superpowers/plans/2026-11-13-deck-phase3-ambient.md): adds into this same frame, count unchanged.
+        DeckAmbient_Frame(sAdjustedAudio, floatCount / 2, VITA_AUDIO_RATE, volume, sFastForward || speedUp, queued);
+#endif
 
         // DC-blocking high-pass, like the capacitor on the GBA's audio output: CGB channels
         // left at a non-zero level otherwise cause pops.

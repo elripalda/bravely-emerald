@@ -43,6 +43,9 @@ static inline int32_t LookupFastId(const char *key)
     case 'a':
         if (strcmp(key, "auto_run") == 0) return FAST_EXTRA_AUTO_RUN;
         if (strcmp(key, "always_catch") == 0) return FAST_EXTRA_ALWAYS_CATCH;
+#ifdef PLATFORM_DECK
+        if (strcmp(key, "ambient_volume") == 0) return FAST_EXTRA_AMBIENT_VOLUME;
+#endif
         break;
     case 'b':
         if (strcmp(key, "battle_speed") == 0) return FAST_EXTRA_BATTLE_SPEED;
@@ -142,6 +145,7 @@ static const char *const sVoxelFpsValues[] = { "30", "60", NULL };
 #ifdef PLATFORM_DECK
 static const char *const sVoxelQualityValues[] = { "LOW", "MEDIUM", "HIGH", NULL };
 static const char *const sVoxelFxValues[] = { "OFF", "ON", "AUTO", NULL };
+static const char *const sAmbientValues[] = { "OFF", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", NULL };
 #endif
 static const char *const sSaveSlotValues[] = { "SLOT 1", "SLOT 2", "SLOT 3", NULL };
 static const char *const sDayNightValues[] = { "OFF", "AUTO", NULL };
@@ -278,6 +282,9 @@ const VitaExtra gVitaExtras[] = {
     // ---- [GENERAL] ----
     { VITA_TAB_GENERAL, "PACING",     "FAST FWD SPEED",    "speed",            4, 1, sSpeedValues,       NULL, NULL, NULL },
     { VITA_TAB_GENERAL, "PACING",     "FF BUTTON MODE",    "ff_button",        2, 0, sFFButtonValues,    NULL, NULL, NULL },
+#ifdef PLATFORM_DECK
+    { VITA_TAB_GENERAL, "SOUND",      "AMBIENT VOLUME",    "ambient_volume",   11, 6, sAmbientValues,    NULL, NULL, NULL },
+#endif
     { VITA_TAB_GENERAL, "DISPLAY",    "2D SCALER",         "filter",           3, 0, sFilterValues,      NULL, NULL, NULL },
     { VITA_TAB_GENERAL, "DISPLAY",    "MENU COLOR",        "ui_theme",         5, 0, sUiThemeValues,     NULL, NULL, NULL },
 
