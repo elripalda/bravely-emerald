@@ -45,6 +45,10 @@ All in the SDD ledger (`.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/p
 
 Done and verified on the Deck (0 GLERR, screenshots read): see docs/DECK_NOTES.md "Phase 2". Plan: docs/superpowers/plans/2026-11-13-deck-phase2-wind.md. Visual pass: judge amplitude, check a map crossing and Route 119/120 grass.
 
+## Phase 3 status (ambient audio bed)
+
+Done and verified by data on the Deck: see docs/DECK_NOTES.md "Phase 3". Plan: docs/superpowers/plans/2026-11-13-deck-phase3-ambient.md. `test_ambient` PASS, still.txt run: 0 GLERR, ambient context and 5 s stat lines in debug.log, queue 6.4k to 11k bytes with the bed on and off alike. Listening pass needed: levels against music, bird and cricket character, waves, thunder, indoor fade; setting AMBIENT VOLUME (GENERAL tab).
+
 ## Autonomous run (user asleep, from 2026-11-13 night)
 
 User ruling: full autonomy through all remaining phases (2 to 8) of `docs/superpowers/specs/2026-11-13-deck-visual-upgrade-design.md`; ask nothing, decide and record below; visual checks, tuning and the perf compare happen when the user wakes. Reviews use Sonnet only. Ledger: `.superpowers/sdd/2026-11-13-deck-visual-phase1-shaders/progress.md` (git-ignored). Rules: one Deck run at a time, no detached loops, absolute outdirs for `run_autoplay.sh`, exactly one normal game instance at the end.
