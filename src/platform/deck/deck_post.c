@@ -26,7 +26,7 @@ static const float kBloomGain[3] = { 1.5f, 3.0f, 5.0f };
 // Share of the diorama blur at the band edges by level (MEDIUM and HIGH are the old look).
 static const float kBlurMul[3] = { 0.5f, 1.0f, 1.0f };
 // Light shaft gain by level (times the frame's sun amount).
-static const float kShaftGain[3] = { 0.25f, 0.47f, 0.65f };
+static const float kShaftGain[3] = { 0.125f, 0.235f, 0.325f };
 // Beam layers by level (item 5), and the colours: warm day, golden dawn and dusk, pale blue moon.
 static const float kShaftLayers[3] = { 3.0f, 4.0f, 6.0f };
 static const float kShaftDay[3] = { 1.0f, 0.92f, 0.74f };

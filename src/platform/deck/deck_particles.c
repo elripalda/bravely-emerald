@@ -64,6 +64,7 @@ static GLuint MakeVbo(void)
 static const char *kPartVs =
     "#version 120\n"
     "uniform float uTime;\n"
+    "uniform float uViewH;\n"      // height in pixels of the viewport the particles draw into
     "uniform vec3 uTarget;\n"      // camera target x, ground, z
     "uniform vec2 uUp;\n"          // cos, sin of the camera pitch
     "uniform float uKind;\n"       // 0 pollen, 1 firefly, 2 leaf
@@ -93,14 +94,24 @@ static const char *kPartVs =
     "    vec3 w = vec3(uTarget.x - 11.0 + p.x * span.x, 0.0, uTarget.z - 14.0 + p.y * span.y);\n"
     "    vec3 rgb = uColor.rgb;\n"
     "    if (uKind < 0.5) {\n"
-    "        y = 0.25 + seed.y * 2.9 + 0.12 * sin(uTime * (0.8 + r.x) + r.y * 6.2832);\n"
-    "        float tw = 0.5 + 0.5 * sin(uTime * (1.5 + 2.0 * r.y) + r.z * 20.0);\n"
-    "        a = edge * (0.3 + 0.7 * tw * tw);\n"
+    // Smooth motion: everything below is a sum of slow sines of the continuous clock uTime (seconds), each particle with its own
+    // phase and rate: no frame counts, no ticks, no rounding of positions. Dust: the straight wind drift above plus a lazy
+    // sway on both axes, a slow bob and a gust that leans the higher motes more. Fireflies: wandering paths of three
+    // incommensurate sines per axis (never a closed circle), a slow vertical bob, a slow smooth pulse.
+    "        vec2 ph = r.xy * 6.2832;\n"
+    "        w.xz += vec2(0.30 * sin(uTime * 0.31 * (0.7 + r.x) + ph.x) + 0.14 * sin(uTime * 0.83 * (0.6 + r.y) + ph.y * 1.7),\n"
+    "                     0.26 * sin(uTime * 0.27 * (0.7 + r.y) + ph.y) + 0.12 * sin(uTime * 0.71 * (0.6 + r.z) + ph.x * 1.3));\n"
+    "        y = 0.25 + seed.y * 2.9 + 0.14 * sin(uTime * (0.45 + 0.5 * r.x) + r.y * 6.2832) + 0.06 * sin(uTime * (1.3 + 0.6 * r.z) + ph.x);\n"
+    "        w.x += y * 0.10 * sin(uTime * 0.23 + r.z * 6.2832);\n"
+    "        float tw = 0.5 + 0.5 * sin(uTime * (0.5 + 0.9 * r.y) + r.z * 20.0);\n"
+    "        a = edge * (0.35 + 0.65 * tw);\n"
     "    } else if (uKind < 1.5) {\n"
-    "        y = 0.35 + seed.y * 1.4 + 0.25 * sin(uTime * 0.9 + r.x * 6.2832);\n"
-    "        w.xz += 0.7 * vec2(sin(uTime * 0.6 + r.y * 6.2832), cos(uTime * 0.5 + r.z * 6.2832));\n"
-    "        float b = 0.5 + 0.5 * sin(uTime * (0.9 + 0.6 * r.x) + r.z * 40.0);\n"
-    "        a = edge * (0.10 + 0.90 * smoothstep(0.30, 0.75, b));\n"
+    "        vec2 ph = r.xy * 6.2832;\n"
+    "        w.xz += vec2(0.80 * sin(uTime * 0.23 * (0.8 + r.x) + ph.x) + 0.45 * sin(uTime * 0.51 * (0.7 + r.y) + ph.y * 2.3) + 0.20 * sin(uTime * 1.07 * (0.8 + r.z) + ph.x * 3.1),\n"
+    "                     0.80 * cos(uTime * 0.19 * (0.8 + r.y) + ph.y) + 0.45 * sin(uTime * 0.47 * (0.7 + r.z) + ph.x * 1.9) + 0.20 * sin(uTime * 0.97 * (0.8 + r.x) + ph.y * 2.7));\n"
+    "        y = 0.35 + seed.y * 1.4 + 0.22 * sin(uTime * (0.50 + 0.30 * r.x) + r.x * 6.2832) + 0.08 * sin(uTime * (1.4 + 0.5 * r.y) + ph.y);\n"
+    "        float b = 0.5 + 0.5 * sin(uTime * (0.55 + 0.45 * r.x) + r.z * 40.0);\n"
+    "        a = edge * (0.10 + 0.90 * smoothstep(0.15, 0.85, b));\n"
     "    } else {\n"
     "        float py = fract(seed.y - uTime * (0.30 + 0.2 * r.x) / 5.0);\n"
     "        y = py * 5.0;\n"
@@ -112,7 +123,13 @@ static const char *kPartVs =
     "        rgb *= mix(vec3(0.42, 0.62, 0.20), vec3(0.85, 0.52, 0.16), r.z);\n"
     "    }\n"
     "    w.y = uTarget.y + y;\n"
-    "    vec3 pos = w + vec3(1.0, 0.0, 0.0) * c.x * size + vec3(0.0, uUp.x, uUp.y) * c.y * size;\n"
+    // Sub-pixel smoothness: a quad narrower than about 2.6 pixels is widened to that and its alpha scaled by the area ratio, so a
+    // slow drift moves brightness across neighbouring pixels instead of jumping a whole pixel.
+    "    float clipW = max((gl_ModelViewProjectionMatrix * vec4(w, 1.0)).w, 0.1);\n"
+    "    float pxPerUnit = gl_ProjectionMatrix[1][1] * 0.5 * uViewH / clipW;\n"
+    "    float sz = max(size, 2.6 / pxPerUnit);\n"
+    "    a *= (size * size) / (sz * sz);\n"
+    "    vec3 pos = w + vec3(1.0, 0.0, 0.0) * c.x * sz + vec3(0.0, uUp.x, uUp.y) * c.y * sz;\n"
     "    vCol = vec4(rgb, a * uColor.a);\n"
     "    vUv = gl_MultiTexCoord0.xy;\n"
     "    gl_Position = gl_ModelViewProjectionMatrix * vec4(pos, 1.0);\n"
@@ -126,7 +143,7 @@ static const char *kPartFs =
     "void main() {\n"
     "    float r2 = dot(vUv, vUv);\n"
     "    float s;\n"
-    "    if (uKind < 0.5) s = 1.0 - smoothstep(0.3, 1.0, r2);\n"
+    "    if (uKind < 0.5) s = exp(-r2 * 3.0) * (1.0 - smoothstep(0.7, 1.0, r2));\n"
     "    else if (uKind < 1.5) s = exp(-r2 * 3.5) * 0.8 + 0.5 * (1.0 - smoothstep(0.0, 0.12, r2));\n"
     "    else s = 1.0 - smoothstep(0.55, 1.0, length(vUv * vec2(1.5, 0.8)));\n"
     "    float a = s * vCol.a;\n"
@@ -135,7 +152,7 @@ static const char *kPartFs =
     "}\n";
 
 static DeckGlProgram sPart;
-static GLint sUTarget = -1, sUUp = -1, sUKind = -1, sUColor = -1;
+static GLint sUTarget = -1, sUUp = -1, sUKind = -1, sUColor = -1, sUViewH = -1;
 static GLuint sVbo = 0;
 
 static void PartInit(void)
@@ -149,6 +166,7 @@ static void PartInit(void)
     sUUp = DeckGl_Uniform(&sPart, "uUp");
     sUKind = DeckGl_Uniform(&sPart, "uKind");
     sUColor = DeckGl_Uniform(&sPart, "uColor");
+    sUViewH = DeckGl_Uniform(&sPart, "uViewH");
     sVbo = MakeVbo();
     if (sVbo == 0)
         DeckGl_DeleteProgram(&sPart);
@@ -216,6 +234,12 @@ bool DeckParticles_Draw(const DeckPartFrame *f)
     DeckGl_UseProgram(&sPart);
     DeckGl_Set3f(sUTarget, f->target[0], f->target[1], f->target[2]);
     DeckGl_Set2f(sUUp, f->pitchCosSin[0], f->pitchCosSin[1]);
+    {
+        GLint vp[4] = { 0, 0, 960, 544 };
+
+        glGetIntegerv(GL_VIEWPORT, vp);
+        DeckGl_Set1f(sUViewH, (float)vp[3]);
+    }
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_ALPHA_TEST);
     glEnable(GL_BLEND);
