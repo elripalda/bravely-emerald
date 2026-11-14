@@ -10,6 +10,11 @@
 #include "voxel_camera.h"
 #include "voxel_relief.h"
 #include "voxel_world.h"
+#ifdef PLATFORM_DECK
+#include <stdlib.h>
+#include <string.h>
+#include "../deck/deck_gl_shader.h"
+#endif
 
 #define VOXEL_DEG_TO_RAD (3.14159265358979323846f / 180.0f)
 #define VOXEL_FOLLOW 0.15f
@@ -103,6 +108,22 @@ static void AdaptDistance(VoxelCamera *cam)
     }
     cam->distance = ((8.0f + scale) * 0.90f) * 100.0f / (float)CtrSettings_VoxelZoom();
     cam->pitch = (float)CtrSettings_VoxelPitch();
+#ifdef PLATFORM_DECK
+    {
+        // DECK_GL_DEBUG: once, and again whenever the key changes (pitch finding of phase 7)
+        static int sLogged = -1;
+        const int key = VitaExtras_GetFast(FAST_EXTRA_VOXEL_PITCH);
+        const char *dbg = getenv("DECK_GL_DEBUG");
+
+        if (key != sLogged && dbg != NULL && strcmp(dbg, "0") != 0)
+        {
+            sLogged = key;
+            DeckGl_Log("[CAM] voxel_pitch key %d -> CtrSettings_VoxelPitch %d, cam->pitch %.1f, distance %.2f
+", key,
+                       (int)CtrSettings_VoxelPitch(), cam->pitch, cam->distance);
+        }
+    }
+#endif
     /* The distance above is horizontal, tuned at 40 degrees. A lower pitch at the same horizontal distance would
      * bring the eye closer along the line of sight (zoom in); keep that length, so tiles keep their size on screen. */
     cam->distance *= cosf(cam->pitch * VOXEL_DEG_TO_RAD) / cosf(40.0f * VOXEL_DEG_TO_RAD);
