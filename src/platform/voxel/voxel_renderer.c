@@ -122,6 +122,8 @@ static GLuint sLampPoolTex = 0;
 static GLuint sFogTex = 0;
 
 // ---- Downscaled Scratch Diorama Blur (DoF) FBOs ----
+#define VOXEL_PERSP_NEAR 1.0f   /* scene projection planes (the Deck tilt-shift linearises the depth with them) */
+#define VOXEL_PERSP_FAR 62.0f
 #define VOXEL_DIORAMA_FBO_W 960
 #define VOXEL_DIORAMA_FBO_H 544
 #define VOXEL_SCRATCH_FBO_W 240
@@ -4968,7 +4970,7 @@ static void Frame_BeginPasses(VoxelFrame *const f)
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    Voxel_gluPerspective(sCamera.fov, 960.0f / 544.0f, 1.0f, 62.0f);
+    Voxel_gluPerspective(sCamera.fov, 960.0f / 544.0f, VOXEL_PERSP_NEAR, VOXEL_PERSP_FAR);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -5824,6 +5826,12 @@ static void Pass_DeckPost(const VoxelFrame *const f)
     in.bloom = f->light.bloom;
     in.daylight = (isIndoor || dn == NULL) ? 1.0f : dn->daylight;
     in.glow = (isIndoor || dn == NULL) ? 0.0f : dn->glow;
+    in.zNear = VOXEL_PERSP_NEAR;
+    in.zFar = VOXEL_PERSP_FAR;
+    {
+        const float fx = sCamera.targetX - sCamera.x, fy = sCamera.targetY - sCamera.y, fz = sCamera.targetZ - sCamera.z;
+        in.focusDist = sqrtf(fx * fx + fy * fy + fz * fz); // the target sits on the view axis: its view depth
+    }
     in.dofTopRows = VOXEL_DOF_TOP_ROWS;
     in.dofBottomRows = VOXEL_DOF_BOTTOM_ROWS;
     in.dofTopAlpha = VOXEL_DOF_TOP_ALPHA;

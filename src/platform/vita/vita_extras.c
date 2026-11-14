@@ -115,6 +115,7 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_splash") == 0) return FAST_EXTRA_VOXEL_SPLASH;
         if (strcmp(key, "voxel_glint") == 0) return FAST_EXTRA_VOXEL_GLINT;
         if (strcmp(key, "voxel_pitch") == 0) return FAST_EXTRA_VOXEL_PITCH;
+        if (strcmp(key, "voxel_tiltshift") == 0) return FAST_EXTRA_VOXEL_TILTSHIFT;
 #endif
         break;
     default:
@@ -323,6 +324,7 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_WORLD,   "EFFECTS", "WATER GLINTS",     "voxel_glint", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "CHARACTER OUTLINE","voxel_outline", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS", "SOFT SHADOWS",     "voxel_shadow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "TILT-SHIFT",       "voxel_tiltshift", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "CAMERA TILT",       "voxel_pitch",      5, 2, sVoxelPitchValues,   NULL, NULL, NULL },
 #endif
     { VITA_TAB_WORLD,   "TIME & SKY", "DAY / NIGHT CYCLE", "day_night",        2, 1, sDayNightValues,    NULL, NULL, NULL },

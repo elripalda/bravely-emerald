@@ -4,6 +4,7 @@
 #include "deck_levels.h"
 #include "platform/vita_extras.h"
 #include "../vita/vita_perf.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -22,6 +23,9 @@ typedef struct
 static const float kBloomGain[3] = { 1.5f, 3.0f, 5.0f };
 // Share of the diorama blur at the band edges by level (MEDIUM and HIGH are the old look).
 static const float kBlurMul[3] = { 0.5f, 1.0f, 1.0f };
+// Tilt-shift by level: largest gather radius (fraction of the picture height at full circle of confusion) and taps.
+static const float kTiltRadius[3] = { 0.6f * 0.014f, 0.014f, 1.4f * 0.014f };
+static const float kTiltTaps[3] = { 8.0f, 12.0f, 16.0f };
 
 static const DeckPostPreset kPresets[3] = {
     /* low    */ { 0.60f, 1.04f, 0.12f, 0.0f, 0.70f, 1 },
@@ -77,10 +81,11 @@ static const char kBlurFs[] =
     "    gl_FragColor = vec4(c, 1.0);\n"
     "}\n";
 
+// Composite body. Built twice (BuildPrograms): with POST_X defined (tilt-shift and the other phase 7 features)
+// and, if that fails to compile, without it (the phase 1 composite).
 // uDof: x top band height, y bottom band height (fractions of the frame), z/w blur at the edges.
 // Same band shape as Pass_DepthOfField (linear ramp from the edge alpha to 0), smooth blur.
-static const char kCompositeFs[] =
-    "#version 120\n"
+static const char kCompositeBody[] =
     "uniform sampler2D uScene;\n"
     "uniform sampler2D uBloom;\n"
     "uniform sampler2D uBlur;\n"
@@ -93,9 +98,39 @@ static const char kCompositeFs[] =
     "uniform float uSaturation;\n"
     "uniform float uVignette;\n"
     "uniform float uAspect;\n"
+    "#ifdef POST_X\n"
+    "uniform sampler2D uDepth;\n"
+    "uniform vec4 uTilt;   // x on, y focus distance, z max radius (fraction of the height), w taps\n"
+    "uniform vec2 uZ;      // near, far\n"
+    "#endif\n"
     "varying vec2 vPos;\n"
     "void main() {\n"
     "    vec3 c = texture2D(uScene, vPos).rgb;\n"
+    "#ifdef POST_X\n"
+    "    if (uTilt.x > 0.5) {\n"
+    "        float d = texture2D(uDepth, vPos).r;\n"
+    "        float z = 2.0 * uZ.x * uZ.y / (uZ.y + uZ.x - (2.0 * d - 1.0) * (uZ.y - uZ.x));\n"
+    "        float rel = (z - uTilt.y) / uTilt.y;\n"
+    "        rel = rel < 0.0 ? -rel * 1.4 : rel;\n"
+    "        float coc = smoothstep(0.06, 0.40, rel);\n"
+    "        if (coc > 0.01) {\n"
+    "            vec2 rad = vec2(1.0 / uAspect, 1.0) * (coc * uTilt.z);\n"
+    "            vec3 acc = vec3(0.0);\n"
+    "            float wsum = 0.0;\n"
+    "            for (int i = 0; i < 16; i++) {\n"
+    "                if (float(i) >= uTilt.w) break;\n"
+    "                float fi = float(i) + 0.5;\n"
+    "                float a = fi * 2.39996323;\n"
+    "                vec3 s = texture2D(uBlur, vPos + vec2(cos(a), sin(a)) * sqrt(fi / uTilt.w) * rad).rgb;\n"
+    "                float l = dot(s, vec3(0.299, 0.587, 0.114));\n"
+    "                float w = 1.0 + 3.0 * l * l;\n"
+    "                acc += s * w;\n"
+    "                wsum += w;\n"
+    "            }\n"
+    "            c = mix(c, acc / wsum, coc);\n"
+    "        }\n"
+    "    }\n"
+    "#endif\n"
     "    if (uBlurOn > 0.5) {\n"
     "        float wTop = uDof.z * clamp((vPos.y - (1.0 - uDof.x)) / uDof.x, 0.0, 1.0);\n"
     "        float wBot = uDof.w * clamp((uDof.y - vPos.y) / uDof.y, 0.0, 1.0);\n"
@@ -113,12 +148,14 @@ static const char kCompositeFs[] =
     "}\n";
 
 static bool sReady;
+static bool sXOk;      // the composite with POST_X built
+static bool sTiltOk;   // tilt-shift can run: POST_X composite and a depth texture on the scene target
 static bool sSizeWarned;
 static DeckGlTarget sScene;
 static DeckGlTarget sHalf[3]; // 0 bloom, 1 blur scratch, 2 DoF
 static DeckGlProgram sBright, sCopy, sBlur, sComposite;
 static GLint sBrightScene, sBrightThreshold, sCopyScene, sBlurSrc, sBlurStep;
-static GLint sCScene, sCBloom, sCBlur, sCBloomAmt, sCBlurOn, sCDof, sCGradeAmt, sCShadow, sCHigh, sCSat, sCVignette, sCAspect;
+static GLint sCScene, sCBloom, sCBlur, sCBloomAmt, sCBlurOn, sCDof, sCGradeAmt, sCShadow, sCHigh, sCSat, sCVignette, sCAspect, sCDepth, sCTilt, sCZ;
 
 static const float kQuad[8] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f };
 
@@ -140,19 +177,42 @@ DeckPostConfig DeckPost_ReadConfig(void)
     c.gradeLvl = DeckLevel(FAST_EXTRA_VOXEL_GRADE);
     c.bloomLvl = DeckLevel(FAST_EXTRA_VOXEL_BLOOM);
     c.blurLvl = DeckLevel(FAST_EXTRA_VOXEL_BLUR);
+    c.tiltLvl = DeckLevel(FAST_EXTRA_VOXEL_TILTSHIFT);
     c.grade = c.gradeLvl >= 0;
     c.bloom = c.bloomLvl >= 0;
     c.blur = c.blurLvl >= 0;
+    c.tilt = c.tiltLvl >= 0;
     return c;
 }
 
 static bool BuildPrograms(void)
 {
+    static char src[8192];
+    const char *noX = getenv("DECK_POST_NO_X");
+
     if (!DeckGl_BuildProgram(&sBright, "post_bright", kFullscreenVs, kBrightFs)
         || !DeckGl_BuildProgram(&sCopy, "post_copy", kFullscreenVs, kCopyFs)
-        || !DeckGl_BuildProgram(&sBlur, "post_blur", kFullscreenVs, kBlurFs)
-        || !DeckGl_BuildProgram(&sComposite, "post_composite", kFullscreenVs, kCompositeFs))
+        || !DeckGl_BuildProgram(&sBlur, "post_blur", kFullscreenVs, kBlurFs))
         return false;
+    // The extended composite first; if it does not build (or DECK_POST_NO_X), the phase 1 composite.
+    sXOk = false;
+    if (noX == NULL || strcmp(noX, "0") == 0)
+    {
+        snprintf(src, sizeof(src), "#version 120
+#define POST_X 1
+%s", kCompositeBody);
+        sXOk = DeckGl_BuildProgram(&sComposite, "post_composite_x", kFullscreenVs, src);
+        if (!sXOk)
+            DeckGl_Log("[POST] extended composite failed: plain composite
+");
+    }
+    if (!sXOk)
+    {
+        snprintf(src, sizeof(src), "#version 120
+%s", kCompositeBody);
+        if (!DeckGl_BuildProgram(&sComposite, "post_composite", kFullscreenVs, src))
+            return false;
+    }
     sBrightScene = DeckGl_Uniform(&sBright, "uScene");
     sBrightThreshold = DeckGl_Uniform(&sBright, "uThreshold");
     sCopyScene = DeckGl_Uniform(&sCopy, "uScene");
@@ -170,6 +230,9 @@ static bool BuildPrograms(void)
     sCSat = DeckGl_Uniform(&sComposite, "uSaturation");
     sCVignette = DeckGl_Uniform(&sComposite, "uVignette");
     sCAspect = DeckGl_Uniform(&sComposite, "uAspect");
+    sCDepth = DeckGl_Uniform(&sComposite, "uDepth");   // -1 in the plain composite (setters ignore it)
+    sCTilt = DeckGl_Uniform(&sComposite, "uTilt");
+    sCZ = DeckGl_Uniform(&sComposite, "uZ");
     return true;
 }
 
@@ -184,6 +247,8 @@ void DeckPost_Shutdown(void)
         DeckGl_DeleteTarget(&sHalf[i]);
     DeckGl_TimerShutdown();
     sReady = false;
+    sXOk = false;
+    sTiltOk = false;
 }
 
 void DeckPost_Init(int sceneW, int sceneH)
@@ -219,10 +284,11 @@ void DeckPost_Init(int sceneW, int sceneH)
     }
     DeckGl_TimerInit();
     sReady = true;
+    sTiltOk = sXOk && sScene.depth == DECK_GL_DEPTH_TEXTURE24;
     const DeckPostConfig c = DeckPost_ReadConfig();
-    DeckGl_Log("[POST] ready: scene %dx%d RGBA8 depth=%s | config quality=%d shaders=%d grade=%d bloom=%d blur=%d\n",
+    DeckGl_Log("[POST] ready: scene %dx%d RGBA8 depth=%s extended=%d tilt=%d | config quality=%d shaders=%d grade=%d bloom=%d blur=%d tiltlvl=%d\n",
                sScene.w, sScene.h, sScene.depth == DECK_GL_DEPTH_TEXTURE24 ? "texture24" : "renderbuffer24",
-               c.quality, (int)c.shaders, (int)c.grade, (int)c.bloom, (int)c.blur);
+               (int)sXOk, (int)sTiltOk, c.quality, (int)c.shaders, (int)c.grade, (int)c.bloom, (int)c.blur, (int)c.tilt);
 }
 
 bool DeckPost_WantScene(int renderW, int renderH, bool indoor)
@@ -240,7 +306,7 @@ bool DeckPost_WantScene(int renderW, int renderH, bool indoor)
     const DeckPostConfig c = DeckPost_ReadConfig();
     if (!c.shaders)
         return false;
-    return c.grade || c.bloom || (c.blur && !indoor);
+    return c.grade || c.bloom || (c.blur && !indoor) || (c.tilt && sTiltOk && !indoor);
 }
 
 void DeckPost_BindScene(void)
@@ -310,7 +376,8 @@ void DeckPost_Run(const DeckPostFrame *in)
     const float blurMul = cfg.blurLvl >= 0 ? kBlurMul[cfg.blurLvl] : 0.0f;
     const float keep = 1.0f - Clamp01(in->fade);
     const bool doBloom = cfg.bloom && in->bloom > 0.0f && bloomGain > 0.0f;
-    const bool doBlur = cfg.blur && !in->indoor;
+    const bool doTilt = cfg.tilt && sTiltOk && !in->indoor && in->focusDist > 0.0f; // replaces the band blur
+    const bool doBlur = cfg.blur && !in->indoor && !doTilt;
     float shadow[3], high[3];
 
     VitaPerf_DeckMarkPostStart();
@@ -340,21 +407,23 @@ void DeckPost_Run(const DeckPostFrame *in)
         DrawQuad();
         Blur(&sHalf[0], &sHalf[1], pb->bloomPasses);
     }
-    if (doBlur)
+    if (doBlur || doTilt)
     {
         BindTex(0, sScene.color);
         BeginTarget(&sHalf[2]);
         DeckGl_UseProgram(&sCopy);
         DeckGl_Set1i(sCopyScene, 0);
         DrawQuad();
-        Blur(&sHalf[2], &sHalf[1], 1);
+        if (doBlur)
+            Blur(&sHalf[2], &sHalf[1], 1); // the tilt-shift gathers from the plain half-res copy
     }
 
     // Composite into the letterbox: same viewport call as the legacy present (DeckGlViewport maps
     // (0,0,960,544) on framebuffer 0 to the letterboxed rect and enables the scissor).
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     DeckGlViewport(0, 0, in->renderW, in->renderH);
-    BindTex(2, doBlur ? sHalf[2].color : 0);
+    BindTex(3, doTilt ? sScene.depthTex : 0);
+    BindTex(2, (doBlur || doTilt) ? sHalf[2].color : 0);
     BindTex(1, doBloom ? sHalf[0].color : 0);
     BindTex(0, sScene.color);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); // pixel art stays sharp
@@ -364,6 +433,12 @@ void DeckPost_Run(const DeckPostFrame *in)
     DeckGl_Set1i(sCScene, 0);
     DeckGl_Set1i(sCBloom, 1);
     DeckGl_Set1i(sCBlur, 2);
+    DeckGl_Set1i(sCDepth, 3);
+    {
+        const int tl = doTilt ? cfg.tiltLvl : 0;
+        DeckGl_Set4f(sCTilt, doTilt ? 1.0f : 0.0f, in->focusDist, kTiltRadius[tl], kTiltTaps[tl]);
+        DeckGl_Set2f(sCZ, in->zNear, in->zFar);
+    }
     DeckGl_Set1f(sCBloomAmt, doBloom ? in->bloom * bloomGain * keep : 0.0f);
     DeckGl_Set1f(sCBlurOn, doBlur ? 1.0f : 0.0f);
     // Legacy band height: VOXEL_DOF_*_ROWS * (renderH / 544) / renderH = rows / 544.
@@ -378,6 +453,7 @@ void DeckPost_Run(const DeckPostFrame *in)
 
     // Leave the state Pass_DepthOfField leaves (see deck_post.h).
     DeckGl_UseProgram(NULL);
+    BindTex(3, 0);
     BindTex(2, 0);
     BindTex(1, 0);
     BindTex(0, 0);

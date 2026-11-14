@@ -13,6 +13,8 @@ typedef struct
     float fade;            // f->fadeAmount: grade, vignette and bloom fade out with it
     float bloom;           // f->light.bloom (per weather, BaseLightFor)
     float daylight, glow;  // VitaDayNight_Get(); indoor passes 1 and 0 (neutral day)
+    float zNear, zFar;     // projection planes of the scene (depth texture linearisation)
+    float focusDist;       // eye to target distance (view-space depth of the focus plane), 0 = unknown
     float dofTopRows, dofBottomRows, dofTopAlpha, dofBottomAlpha; // VOXEL_DOF_* (voxel_tuning.h:89-92)
 } DeckPostFrame;
 
@@ -23,7 +25,8 @@ typedef struct
     bool grade;    // voxel_grade on (grade + vignette)
     bool bloom;    // voxel_bloom on
     bool blur;     // voxel_blur on
-    int gradeLvl, bloomLvl, blurLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
+    bool tilt;     // voxel_tiltshift on (needs the depth texture, else the band blur runs)
+    int gradeLvl, bloomLvl, blurLvl, tiltLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
 } DeckPostConfig;
 
 void DeckPost_Init(int sceneW, int sceneH);
