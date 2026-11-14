@@ -128,8 +128,7 @@ void DeckSway_SetWalkers(const float (*xz)[2], int n)
         if (sWalkN > 0 && now != sLast)
         {
             sLast = now;
-            DeckGl_Log("[BEND] walkers %d: (%.2f,%.2f) (%.2f,%.2f) (%.2f,%.2f) (%.2f,%.2f)
-", sWalkN,
+            DeckGl_Log("[BEND] walkers %d: (%.2f,%.2f) (%.2f,%.2f) (%.2f,%.2f) (%.2f,%.2f)\n", sWalkN,
                        sWalk[0][0], sWalk[0][1], sWalkN > 1 ? sWalk[1][0] : 0.0f, sWalkN > 1 ? sWalk[1][1] : 0.0f,
                        sWalkN > 2 ? sWalk[2][0] : 0.0f, sWalkN > 2 ? sWalk[2][1] : 0.0f,
                        sWalkN > 3 ? sWalk[3][0] : 0.0f, sWalkN > 3 ? sWalk[3][1] : 0.0f);

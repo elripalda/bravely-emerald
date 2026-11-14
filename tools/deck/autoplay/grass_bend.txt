@@ -1,0 +1,17 @@
+# title -> Continue, then try to leave Littleroot north to Route 101 and walk about in its tall grass (phase 4). Blind path (no map knowledge): east of the lab, then between the houses. Format: <start_ms> <button> <duration_ms>
+6000 A 200
+9000 A 200
+12000 A 200
+16000 A 200
+20000 A 200
+24000 A 200
+29000 RIGHT 1400
+31000 UP 1500
+33000 LEFT 600
+34000 UP 12000
+46500 LEFT 1500
+48500 UP 8000
+57000 DOWN 900
+58500 RIGHT 700
+63000 LEFT 1500
+65500 DOWN 500
