@@ -256,7 +256,8 @@ if [ "$RUN" -eq 1 ]; then
         sleep 12
         pids=""
         for p in $(ps -eo pid,args | awk '/[.]\/pokeemerald/ { print $1 }'); do
-            [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$DIST" ] && pids="$pids $p"
+            # inside the container the path shows as /run/host/<path>, so compare the end
+            case "$(readlink "/proc/$p/cwd" 2>/dev/null)" in *"$DIST") pids="$pids $p" ;; esac
         done
         if [ -n "$pids" ]; then
             RESULT="OK: the game ran for 12 seconds"
