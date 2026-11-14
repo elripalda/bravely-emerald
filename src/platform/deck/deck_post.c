@@ -198,18 +198,14 @@ static bool BuildPrograms(void)
     sXOk = false;
     if (noX == NULL || strcmp(noX, "0") == 0)
     {
-        snprintf(src, sizeof(src), "#version 120
-#define POST_X 1
-%s", kCompositeBody);
+        snprintf(src, sizeof(src), "#version 120\n#define POST_X 1\n%s", kCompositeBody);
         sXOk = DeckGl_BuildProgram(&sComposite, "post_composite_x", kFullscreenVs, src);
         if (!sXOk)
-            DeckGl_Log("[POST] extended composite failed: plain composite
-");
+            DeckGl_Log("[POST] extended composite failed: plain composite\n");
     }
     if (!sXOk)
     {
-        snprintf(src, sizeof(src), "#version 120
-%s", kCompositeBody);
+        snprintf(src, sizeof(src), "#version 120\n%s", kCompositeBody);
         if (!DeckGl_BuildProgram(&sComposite, "post_composite", kFullscreenVs, src))
             return false;
     }
