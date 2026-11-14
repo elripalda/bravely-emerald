@@ -1,0 +1,6 @@
+# title -> Continue: A presses, then walk a square. Format: <start_ms> <button> <duration_ms>
+6000 A 200
+9000 A 200
+12000 A 200
+16000 A 200
+20000 A 200
