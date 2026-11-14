@@ -214,6 +214,7 @@ Every Deck effect has its own row in WORLD > EFFECTS (ambient volume stays in GE
 | 3D RESOLUTION | voxel_res | 960x544 | 960 wide | MEDIUM 1120x636, HIGH 1280x726 (AUTO follows the preset) |
 | TILT-SHIFT | voxel_tiltshift | the old band blur | radius x0.6, 8 taps | x1 12 taps / x1.4 16 taps |
 | LIGHT SHAFTS | voxel_shafts | none | gain 0.35 | gain 0.65 / 0.9 |
+| RELIEF (BUMP) | voxel_bump | the old picture (old programs and paths) | multiplier +-10% | +-15% / +-20% |
 | LUT GRADE | voxel_lut | the procedural grade | S-curve x0.5 | x1 / x1.3 |
 | CAMERA TILT | voxel_pitch | CLASSIC 40, 36, 32 (default), 28, 24 degrees (own values, not levels) | | |
 
@@ -231,3 +232,7 @@ Plan: docs/superpowers/plans/2026-11-13-deck-phase7-post2.md. All in `deck_post.
 
 ### Adding a setting
 A leveled row is three edits: (1) a `FAST_EXTRA_VOXEL_<NAME>` id in `include/platform/vita_extras.h` (Deck block), (2) one `if (strcmp(key, "voxel_<name>") == 0) return ...` in `LookupFastId` (vita_extras.c, case 'v'), (3) one row in `gVitaExtras` with `5, 1, sVoxelLevelValues` (count 5, default AUTO). In the reader include `deck_levels.h` and use `DeckLevel(id)` (-1 off, else 0..2) or `DeckLevelPick(id, low, medium, high)` (0 when off). Labels: at most about 18 characters (the label column is 156 px of the 320 px menu); values at most 8. Tab row arrays hold 48 rows (vita_ui_options.c) and 64 (ui_scr_options.c).
+
+
+## Phase 9: relief (voxel_bump)
+Pseudo normal map, Deck only. The height is the luminance of the albedo texel; a 3x3 Sobel on the texel neighbours (nearest, integer offsets, so the pixel art stays crisp) tilts a per pixel normal built from the screen derivatives; the sun from `gVoxelSun` (toward-the-sun = -dx, up, -dz, 45 degrees) lights it, a cavity term adds light independent depth, and the result is a multiplier around 1.0 on the colour each program already computes (LOW 0.10, MEDIUM 0.15, HIGH 0.20). Dusk and night keep a third of the directional term. Where the baked vertex colour is dark the directional part fades (no double darkening with cast shadows); in rain the relief is scaled by 1 - 0.4 x wet and the wet sheen is untouched. Shared GLSL and the plain program for buildings: `deck_bump.c`. Surfaces: ground (wet and glint programs, plus the wet program at wetness 0 for dry ground without glints), building pages (plain bump program), trees and grass (sway program, amplitude 0 when sway is OFF), character cards (outline program, outline alpha 0 when the outline is OFF). Not done: parallax (sub-texel offsets tear nearest edges and move alpha tested edges; not judgeable without tuning rounds). Plan: docs/superpowers/plans/2026-11-14-deck-phase9-bump.md. Building pages have no slot (a clear neighbour takes the centre height), so seams between pieces of building art can show faint lines (the gradient is soft clamped).
