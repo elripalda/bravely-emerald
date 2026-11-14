@@ -45,7 +45,7 @@ static const char *kBumpGlsl =
     "    float g = dgNoise(w * 5.0) * 0.65 + (dgNoise(w * 12.0) * a2 + 0.5 * (1.0 - a2)) * 0.35;\n"
     "    float r = sin((w.x * 0.6 + w.y) * 15.0 + dgNoise(w * 3.0) * 4.0) * 0.5 + 0.5;\n"
     "    float p = dgNoise(w * 18.0) * 0.7 + (dgNoise(w * 29.0) * a3 + 0.5 * (1.0 - a3)) * 0.3;\n"
-    "    return k.x * g + k.y * r + k.z * p;\n"
+    "    return k.x * g * 0.8 + k.y * r + k.z * p;\n"
     "}\n"
     "float dgUndulation(vec2 w) { return (dgNoise(w * 0.16) * 2.2 + dgNoise(w * 0.07 + 5.0) * 1.2) * 0.25; }\n"
     "float deckGroundMul(vec2 w, vec3 base, vec3 vcol, vec3 eye) {\n"
@@ -68,8 +68,8 @@ static const char *kBumpGlsl =
     "    float gx = (dgHeight(w + vec2(e, 0.0), k, fp) - h) / e;\n"
     "    float gz = (dgHeight(w + vec2(0.0, e), k, fp) - h) / e;\n"
     "    float u0 = dgUndulation(w);\n"
-    "    float ux = (dgUndulation(w + vec2(0.5, 0.0)) - u0) / 0.5;\n"
-    "    float uz = (dgUndulation(w + vec2(0.0, 0.5)) - u0) / 0.5;\n"
+    "    float ux = (dgUndulation(w + vec2(0.5, 0.0)) - u0) / 0.5 * (1.0 - uGroundP.y);\n"   // indoors (uGroundP.y = 1): no slow undulation at all
+    "    float uz = (dgUndulation(w + vec2(0.0, 0.5)) - u0) / 0.5 * (1.0 - uGroundP.y);\n"
     "    vec3 Np = normalize(vec3(-(gx * 0.09 + ux * 0.9), 1.0, -(gz * 0.09 + uz * 0.9)));\n"
     "    float dd = dot(Np, uBumpSun) - uBumpSun.y;\n"
     "    float raw = dd * (0.4 + 0.6 * uBumpP.y) * 2.4 + (h - 0.5) * 0.25;\n"
@@ -154,6 +154,29 @@ bool DeckBump_Build(DeckGlProgram *out, DeckBumpUniforms *u, const char *name, c
     }
     DeckGl_Log("[BUMP] %s: shader with the bump block failed, building it without\n", name);
     return DeckGl_BuildProgram(out, name, vs, fs);
+}
+
+static bool sIndoor;
+
+void DeckBump_SetIndoor(bool indoor)
+{
+    sIndoor = indoor;
+}
+
+// Indoor floors (houses, Pokemon Center, lab: tile patterns, carpets, wood): the colour classification of deckGroundMul has no kind for them (they
+// fall into "path" grain) and deckBumpMul would run its Sobel over the tile pattern at 0.18 / 0.30 / 0.45. Indoors both are cut to a faint
+// fine grain: the albedo relief x0.12 and the procedural ground x0.35, and the slow undulation is off.
+void DeckBump_ApplyIndoor(const DeckBumpUniforms *u)
+{
+    if (!sIndoor || !u->ok)
+        return;
+    {
+        const float amp = DeckBump_Enabled() ? 0.12f * DeckLevelPick(FAST_EXTRA_VOXEL_BUMP, 0.18f, 0.30f, 0.45f) : 0.0f;
+        const float gAmp = DeckBump_GroundOn() ? 0.35f * DeckLevelPick(FAST_EXTRA_VOXEL_GROUNDRELIEF, 0.20f, 0.35f, 0.50f) : 0.0f;
+
+        DeckGl_Set4f(u->par, amp, sSunW, 0.0f, 0.0f);
+        DeckGl_Set4f(u->ground, gAmp, 1.0f, 0.0f, 0.0f);
+    }
 }
 
 void DeckBump_SetSun(float dx, float dz, float strength)

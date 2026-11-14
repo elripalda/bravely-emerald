@@ -5062,6 +5062,7 @@ static void Pass_Ground(const VoxelFrame *const f)
                                                          f->weather == VOXEL_WEATHER_RAIN);
     // Relief only: neither wet nor glints (night, indoors, the glint level off) but voxel_bump on = the wet program at 0 wetness
     DeckBump_SetSun(gVoxelSun.dx, gVoxelSun.dz, gVoxelSun.strength);
+    DeckBump_SetIndoor(f->indoor);
     const bool bumpGround = !wetGround && !glintGround && DeckRain_BumpBegin(rainLight);
 #endif
     for (uint32_t cutPass = 0; cutPass < 2u; cutPass++)

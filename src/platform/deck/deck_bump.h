@@ -25,6 +25,11 @@ bool DeckBump_Enabled(void);
 // voxel_shaders on and voxel_groundrelief not OFF (ground programs only: deckGroundMul in the block).
 bool DeckBump_GroundOn(void);
 
+// Once a frame: the scene is indoors (floors get a faint fine grain only, see DeckBump_ApplyIndoor); the ground programs call ApplyIndoor
+// after DeckBump_Set.
+void DeckBump_SetIndoor(bool indoor);
+void DeckBump_ApplyIndoor(const DeckBumpUniforms *u);
+
 // Once a frame (before the world passes): the sun that lights the relief (same vector the shadows use).
 void DeckBump_SetSun(float dx, float dz, float strength);
 

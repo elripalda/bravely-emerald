@@ -374,6 +374,7 @@ bool DeckRain_WetBegin(const float light[3])
     // pale overcast sky x the light of the hour
     DeckGl_Set3f(sWetSky, 0.62f * light[0], 0.70f * light[1], 0.80f * light[2]);
     DeckBump_Set(&sWetBump, (float)VOXEL_ATLAS_W, (float)VOXEL_ATLAS_H, (float)VOXEL_ATLAS_SLOT);
+    DeckBump_ApplyIndoor(&sWetBump);
     return true;
 }
 
@@ -387,6 +388,7 @@ bool DeckRain_BumpBegin(const float light[3])
     DeckGl_Set1f(sWetWet, 0.0f);
     DeckGl_Set3f(sWetSky, 0.62f * light[0], 0.70f * light[1], 0.80f * light[2]);
     DeckBump_Set(&sWetBump, (float)VOXEL_ATLAS_W, (float)VOXEL_ATLAS_H, (float)VOXEL_ATLAS_SLOT);
+    DeckBump_ApplyIndoor(&sWetBump);
     return true;
 }
 
