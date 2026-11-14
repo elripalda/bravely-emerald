@@ -192,8 +192,7 @@ static bool sInit, sFailed, sEnvRead, sEnvOrig, sArtOk;
 static DeckGlProgram sLayer, sRay, sFront, sShine, sSoft, sRays;
 static GLint sLyTex, sLyBias, sRyTex, sRyMark, sRySize, sRyScale, sRyMarkCol, sRyRim;
 static GLint sFrTex, sFrTexel, sFrRad, sFrMode, sFrAmt, sShTex, sShPos, sShAmt, sRaysT, sRaysAmt;
-static GLuint sSkyTex, sRayTex, sMarkTex, sCloudTex, sBadgeTex;
-static int sBadgeW, sBadgeH;
+static GLuint sSkyTex, sRayTex, sMarkTex, sCloudTex;
 static int sPrevPhase;
 static double sStart, sPhase3At = -1.0;
 static unsigned sFrames;
@@ -368,40 +367,43 @@ static int GlyphId(char c)
     return 0;   // space
 }
 
-// Decompresses one 8x16 glyph (four tiles) into 16 rows of up to 8 values 0..3, returns its advance in texels.
+// Decodes one 8x16 glyph (four 8x8 tiles of 2bpp rows, 0 clear, 1 face, 2 the game's shadow) straight from the font data, so it
+// does not depend on the text engine's current colours. Returns its advance in texels.
 static int Glyph(char c, uint8_t out[16][8])
 {
     const int id = GlyphId(c);
-    uint32_t tiles[4][8];
     const u16 *g = gFontNormalLatinGlyphs + 0x20 * id;
 
     memset(out, 0, 16 * 8);
     if (id == 0)
         return 5;
-    DecompressGlyphTile(g, tiles[0]);
-    DecompressGlyphTile(g + 0x8, tiles[1]);
-    DecompressGlyphTile(g + 0x10, tiles[2]);
-    DecompressGlyphTile(g + 0x18, tiles[3]);
     for (int t = 0; t < 4; t++)
         for (int y = 0; y < 8; y++)
+        {
+            const uint16_t r = g[t * 8 + y];
+
             for (int x = 0; x < 8; x++)
-                out[(t / 2) * 8 + y][(t % 2) * 8 + x] = (tiles[t][y] >> (4 * x)) & 15;
+                out[(t / 2) * 8 + y][(t % 2) * 8 + x] = (x < 4) ? ((r >> (8 + 2 * x)) & 3) : ((r >> (2 * (x - 4))) & 3);
+        }
     return gFontNormalLatinGlyphWidths[id];
 }
 
-// "BRAVELY  2D-HD", scale 2, white face with a grey underside and a dark outline, like the EMERALD VERSION lettering.
-static bool BuildBadge(void)
+typedef struct { GLuint tex; int w, h; } TextTex;
+static TextTex sBravely, sHd;
+
+// Lettering from the game's own font, scaled with nearest sampling, outlined like the logo art: style 0 is the EMERALD VERSION
+// look (white face, grey underside, dark navy outline), style 1 the POKEMON logo look (yellow face, blue outline).
+static bool BuildText(TextTex *tt, const char *text, int sc, int style)
 {
-    static const char kText[] = "BRAVELY  2D-HD";
-    const int sc = 2, pad = 4;
-    int adv[16], total = 0, n = (int)strlen(kText);
+    const int pad = 2 * sc + 2;
+    int adv[16], total = 0, n = (int)strlen(text);
     uint8_t glyphs[16][16][8];
     uint8_t *mask, *rgba;
     int w, h;
 
     for (int i = 0; i < n; i++)
     {
-        adv[i] = Glyph(kText[i], glyphs[i]) + 1;
+        adv[i] = Glyph(text[i], glyphs[i]) + 1;
         total += adv[i];
     }
     w = total * sc + 2 * pad;
@@ -432,42 +434,52 @@ static bool BuildBadge(void)
         for (int x = 0; x < w; x++)
         {
             uint8_t *o = &rgba[((size_t)y * w + x) * 4];
+            const int r = sc + sc / 2 + 1;
             int outline = 0;
 
-            for (int dy = -2; dy <= 2; dy++)
-                for (int dx = -2; dx <= 2; dx++)
+            for (int dy = -r; dy <= r && !outline; dy++)
+                for (int dx = -r; dx <= r; dx++)
                 {
                     const int xx = x + dx, yy = y + dy;
 
-                    if (xx >= 0 && xx < w && yy >= 0 && yy < h && mask[yy * w + xx] && dx * dx + dy * dy <= 5)
+                    if (xx >= 0 && xx < w && yy >= 0 && yy < h && mask[yy * w + xx] && dx * dx + dy * dy <= r * r + 1)
+                    {
                         outline = 1;
+                        break;
+                    }
                 }
             if (mask[y * w + x])
             {
-                const bool low = (y - pad) / sc >= 10;
-                const int v = low ? 196 : 255;
+                const bool low = (y - pad) / sc >= 11;
+                const uint8_t fr = style == 0 ? (low ? 190 : 255) : 255, fg = style == 0 ? (low ? 190 : 255) : (low ? 200 : 244);
+                const uint8_t fb = style == 0 ? (low ? 205 : 255) : (low ? 20 : 40);
 
-                o[0] = (uint8_t)v;
-                o[1] = (uint8_t)v;
-                o[2] = (uint8_t)(low ? 210 : 255);
+                o[0] = fr;
+                o[1] = fg;
+                o[2] = fb;
                 o[3] = 255;
             }
             else if (outline)
             {
-                o[0] = 8;
-                o[1] = 14;
-                o[2] = 34;
+                o[0] = style == 0 ? 20 : 40;
+                o[1] = style == 0 ? 24 : 48;
+                o[2] = style == 0 ? 52 : 176;
                 o[3] = 255;
             }
         }
-    if (sBadgeTex)
-        glDeleteTextures(1, &sBadgeTex);
-    sBadgeTex = MakeTexture(rgba, w, h, GL_RGBA, GL_LINEAR, GL_NEAREST, GL_CLAMP_TO_EDGE, false);
-    sBadgeW = w;
-    sBadgeH = h;
+    if (tt->tex)
+        glDeleteTextures(1, &tt->tex);
+    tt->tex = MakeTexture(rgba, w, h, GL_RGBA, GL_LINEAR, GL_NEAREST, GL_CLAMP_TO_EDGE, false);
+    tt->w = w;
+    tt->h = h;
     free(mask);
     free(rgba);
-    return sBadgeTex != 0;
+    return tt->tex != 0;
+}
+
+static bool BuildBadge(void)
+{
+    return BuildText(&sBravely, "BRAVELY", 3, 0) && BuildText(&sHd, "2D-HD", 2, 1);
 }
 
 static bool Build(void)
@@ -750,19 +762,20 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         glEnd();
     }
 
-    // ---- badge "BRAVELY 2D-HD" under the EMERALD VERSION banner
+    // ---- lettering "BRAVELY" (left of EMERALD, EMERALD VERSION style) and the "2D-HD" badge (right of VERSION, POKEMON logo
+    // style), drawn from the game's own font; they appear with the banner and fade with the game's palette fade
     if (phase >= 2)
     {
-        const float a = phase >= 3 ? 1.0f : Smooth(0.0f, 1.0f, t - 4.8f);
-        const float bw = (float)sBadgeW * 1.55f, bh = (float)sBadgeH * 1.55f;
-        const float cx = 480.0f + sinf(t * 0.5f) * 1.5f, cy = 318.0f;
+        const float a = (phase >= 3 ? 1.0f : Smooth(0.0f, 1.0f, t - 4.8f)) * (1.0f - fade);
 
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         DeckGl_UseProgram(&sLayer);
         DeckGl_Set1i(sLyTex, 0);
         DeckGl_Set1f(sLyBias, 0.0f);
-        glBindTexture(GL_TEXTURE_2D, sBadgeTex);
-        QuadT(cx - bw * 0.5f, cy - bh * 0.5f, cx + bw * 0.5f, cy + bh * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, a * (1.0f - fade));
+        glBindTexture(GL_TEXTURE_2D, sBravely.tex);
+        QuadT(300.0f - (float)sBravely.w, 242.0f - (float)sBravely.h * 0.5f, 300.0f, 242.0f + (float)sBravely.h * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, a);
+        glBindTexture(GL_TEXTURE_2D, sHd.tex);
+        QuadT(690.0f, 262.0f - (float)sHd.h * 0.5f, 690.0f + (float)sHd.w, 262.0f + (float)sHd.h * 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0, 1, 1, 1, a);
     }
 
     // ---- front layer: soft glow behind, the picture (rim lit), a shine sweep
@@ -777,7 +790,7 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
         DeckGl_Set2f(sFrRad, 7.0f / fw * fu, 7.0f / SH);
         glBlendFunc(GL_ONE, GL_ONE);
         DeckGl_Set1f(sFrMode, 0.0f);
-        DeckGl_Set1f(sFrAmt, 0.55f * intro);
+        DeckGl_Set1f(sFrAmt, 0.35f * intro);
         QuadT(vx0, 0.0f, vx1, SH, u0, 0.0f, u1, 1.0f, 0, 0, 1, 1, 1, 1);
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         DeckGl_Set1f(sFrMode, 1.0f);
