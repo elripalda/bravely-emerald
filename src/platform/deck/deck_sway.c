@@ -1,4 +1,5 @@
 #include "deck_sway.h"
+#include <stdlib.h>
 #include <time.h>
 #include "deck_gl_shader.h"
 #include "platform/vita_extras.h"
@@ -114,6 +115,8 @@ void DeckSway_SetChunkOffset(float x, float z, float frameX, float frameZ)
 
 void DeckSway_SetWalkers(const float (*xz)[2], int n)
 {
+    if (getenv("DECK_BEND_OFF") != NULL) // A/B test aid: no walkers, no bend
+        n = 0;
     sWalkN = n < 0 ? 0 : (n > DECK_SWAY_WALKERS ? DECK_SWAY_WALKERS : n);
     for (int i = 0; i < sWalkN; ++i)
     {
