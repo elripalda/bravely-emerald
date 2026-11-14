@@ -199,15 +199,15 @@ bool DeckParticles_Draw(const DeckPartFrame *f)
         fire = (int)(Clamp01((f->glow - 0.3f) / 0.7f) * (float)N_FIRE + 0.5f);
     if (!f->rain && !f->calm && !Off("leaf") && f->treeVerts > 300 && f->glow < 0.6f)
         leaf = (int)(Clamp01((float)f->treeVerts / 2500.0f) * (float)N_LEAF + 0.5f);
+    pollen = (int)((float)pollen * lvl);
+    fire = (int)((float)fire * lvl);
+    leaf = (int)((float)leaf * lvl);
     if (DebugOn() && f->seconds - sLastLog >= 5.0f)
     {
         sLastLog = f->seconds;
         DeckGl_Log("[PART] t=%.0f s drawn: pollen %d fireflies %d leaves %d (total %d) motes %.2f glow %.2f treeVerts %d mapType %d\n",
                    f->seconds, pollen, fire, leaf, pollen + fire + leaf, f->motes, f->glow, f->treeVerts, (int)mapType);
     }
-    pollen = (int)((float)pollen * lvl);
-    fire = (int)((float)fire * lvl);
-    leaf = (int)((float)leaf * lvl);
     if (pollen + fire + leaf == 0)
         return false;
 

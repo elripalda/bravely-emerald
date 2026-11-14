@@ -186,9 +186,36 @@ To judge later (Marcos):
 ## Phase 6: particles (F2), water glints, character outline (G4), soft shadows (B4)
 
 - Plan: `docs/superpowers/plans/2026-11-13-deck-phase6-particles.md`. Code: `src/platform/deck/deck_particles.c/.h` (particles, glints), `deck_chars.c/.h` (outline, blobs); hooks in `voxel_renderer.c` (`Pass_Ground`, `Pass_CastShadows`, `Pass_Entities`, `Pass_Atmosphere3D`, entity shadow alpha) and `voxel_entities.c/.h` (`VoxelEntities_GetBlobs`, `VoxelEntities_CharacterRange`, behind PLATFORM_DECK). Settings (EFFECTS, default 1, also off with `voxel_shaders=0` or a failed program): `voxel_particles` ("PARTICLES": pollen, fireflies, leaves, glints), `voxel_outline` ("CHARACTER OUTLINE"), `voxel_shadow` ("SOFT SHADOWS").
-- Debug env (read once): `DECK_FORCE_TIME=dawn|noon|dusk|night` (Deck only, `VitaDayNight_Update` overrides light and sun after its own computation, outdoors only; the clock, saves and audio are not touched, scene consumers read `VitaDayNight_Get/GetSun`: grade, glow, motes, sun for shadows). `DECK_PART_OFF=pollen,fire,leaf,glint` single effects off. Example: `EXTRA_ENV="DECK_FORCE_TIME=night DECK_FORCE_WEATHER=sun" tools/deck/run_autoplay.sh tools/deck/autoplay/still.txt 75 <abs outdir>`; `SETKEY="voxel_particles=0"` for the B shot.
+- Debug env (read once): `DECK_FORCE_TIME=dawn|noon|dusk|night` (Deck only, `VitaDayNight_Update` overrides light and sun after its own computation, outdoors only; the clock and saves are not touched; consumers of `VitaDayNight_Get/GetSun` see the forced hour, including the ambient bed (it reads `VitaDayNight_Get`, so birds and crickets follow it), grade, glow, motes, sun for shadows). `DECK_PART_OFF=pollen,fire,leaf,glint` single effects off. Example: `EXTRA_ENV="DECK_FORCE_TIME=night DECK_FORCE_WEATHER=sun" tools/deck/run_autoplay.sh tools/deck/autoplay/still.txt 75 <abs outdir>`; `SETKEY="voxel_particles=0"` for the B shot.
 - Particles: 288 quads in one static VBO (pollen 192, fireflies 64, leaves 32), seed in the vertex, motion in the vertex shader inside the mote box (22 x 18 around the camera target), wrapped like the rain; three draws (pollen and leaves alpha, fireflies additive). Pollen count follows `light.motes` (sun, daylight) and replaces the 32 legacy motes when drawn; fireflies when `glow` > 0.3 on route and town maps; leaves by the tree vertex count of the visible chunks (not anchored to trees). None in rain, none indoors, underground or in 3D battles; no pollen or leaves in fog, sand, ash or snow. `[PART]` line in gl_errors.log every 5 s under `DECK_GL_DEBUG`: counts per kind (the exit test's particle count).
 - Glints: the ground uses a glint program (texture x colour as the fixed path) where the wet program is not bound; sparkles from a cell hash of the world position on blue texels (`b - max(r, 0.8 g)`), strength from sun and glow, none in rain. No builder change (no water flag in the vertices).
 - Outline and rim: only the object cards' vertex range goes through the outline program (doors, effects and the occluded-player silhouette stay fixed pipeline). Dark one-texel outline on clear texels beside a sprite texel; warm rim on texels whose neighbour toward the sun is clear. The quad is the sprite rectangle, so the outline only shows inside it.
 - Soft shadows: a radial blob (0.8 x 0.52 tiles, peak 0.20 x light of the card) under every outdoor, non-riding card, pushed 0.07 along the sun, drawn before the silhouette shadows whose alpha is x0.62 while blobs are on (peak 0.22; overlap about 0.38 vs 0.36 before).
 - Verified: see HANDOFF "Phase 6 status".
+
+## Settings levels and camera tilt (2026-11-14)
+Every Deck effect has its own row in WORLD > EFFECTS (ambient volume stays in GENERAL > SOUND). Level encoding of the effect keys, stored by key name in settings.txt: 0 OFF, 1 AUTO (follows `voxel_quality`: LOW/MEDIUM/HIGH), 2 LOW, 3 MEDIUM, 4 HIGH; any other value counts as AUTO. AUTO is 1 on purpose: old files stored 1 for "on", so old 0/1 keys keep their meaning with no migration. Only `voxel_bloom` and `voxel_grade` used 2 for AUTO: `MigrateLevelSettings` (vita_extras.c) maps 2 to 1 when the file has no `fx_levels` key (then writes `fx_levels=1`). The old `voxel_rain=0` also switches off the keys split from it (wet, mist, splash), and `voxel_particles=0` the glints. `voxel_shaders` stays the master switch.
+
+| Row | Key | OFF | LOW | MEDIUM and HIGH |
+|---|---|---|---|---|
+| COLOR GRADE | voxel_grade | none | preset 0 strength | preset of AUTO/level (HIGH = strongest tint, vignette) |
+| BLOOM | voxel_bloom | none | gain 1.5 | gain 3.0 / 5.0 (old presets) |
+| DIORAMA BLUR (DOF) | voxel_blur | none | band blur x0.5 | x1 |
+| WIND SWAY | voxel_sway | fixed trees (also no grass bend) | amplitude x0.5 | x1 |
+| GRASS & FLOWERS | voxel_grass | flat ground | 50% of the cells (hash of the cell) | 100% |
+| RAIN STREAKS | voxel_rain | legacy rain | count x0.5 | x1 |
+| WET GROUND | voxel_wet | dry | puddles x0.5 | x1 |
+| RAIN MIST | voxel_mist | none | opacity x0.5 | x1 |
+| RAIN SPLASHES | voxel_splash | none | count x0.5 | x1 |
+| PARTICLES | voxel_particles | legacy motes | count x0.5 | x1 |
+| WATER GLINTS | voxel_glint | none | strength x0.5 | x1 |
+| CHARACTER OUTLINE | voxel_outline | none | strength x0.5 | x1 |
+| SOFT SHADOWS | voxel_shadow | silhouette only | blob alpha x0.5 | x1 |
+| CAMERA TILT | voxel_pitch | CLASSIC 40, 36, 32 (default), 28, 24 degrees (own values, not levels) | | |
+
+MEDIUM equals the look before the levels, HIGH equals MEDIUM except for bloom and grade (which had presets). Bloom LOW is a weak glow instead of none (the LOW preset used to have no bloom).
+
+Camera tilt: `CtrSettings_VoxelPitch()` (voxel_platform stub header, Deck branch) reads `voxel_pitch` every frame through `AdaptDistance`, so a change applies live. The horizontal camera distance is multiplied by cos(pitch)/cos(40) to keep the eye-to-target length (tile size on screen); the chunk rows north of the target grow with the pitch (the top ray of a low camera reaches further): `northTiles` in the chunk scan, max 46. Battle pitch (30) and the swoop (lands at 45 from whatever pitch it starts) are untouched. The DoF band rows (226 top, 127 bottom, tuned at 40) are left as they are.
+
+### Adding a setting
+A leveled row is three edits: (1) a `FAST_EXTRA_VOXEL_<NAME>` id in `include/platform/vita_extras.h` (Deck block), (2) one `if (strcmp(key, "voxel_<name>") == 0) return ...` in `LookupFastId` (vita_extras.c, case 'v'), (3) one row in `gVitaExtras` with `5, 1, sVoxelLevelValues` (count 5, default AUTO). In the reader include `deck_levels.h` and use `DeckLevel(id)` (-1 off, else 0..2) or `DeckLevelPick(id, low, medium, high)` (0 when off). Labels: at most about 18 characters (the label column is 156 px of the 320 px menu); values at most 8. Tab row arrays hold 48 rows (vita_ui_options.c) and 64 (ui_scr_options.c).
