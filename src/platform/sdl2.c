@@ -18,6 +18,7 @@
 #ifdef PLATFORM_DECK
 #include "deck/deck_ambient_game.h"
 #include "deck/deck_flatfx.h"
+#include "deck/deck_title.h"
 #endif
 // Catch-up game frames run their scanline events without being drawn (see the main loop).
 #define VITA_SKIP_CATCHUP_DRAW
@@ -379,6 +380,18 @@ static void RenderGameTexture(void)
 
     VitaStage_UpdateSceneState();
     const int32_t stageKind = VitaStage_GetActiveKind();
+#ifdef PLATFORM_DECK
+    // Deck: the title screen is drawn by deck_title.c (the state machine in title_screen.c keeps running under it); any failure
+    // there lands on the original picture below.
+    if (DeckTitle_Wanted())
+    {
+        DeckTitle_Draw();
+        if (flatFx)
+            DeckFlat_End();
+        glDepthMask(GL_FALSE);
+        return;
+    }
+#endif
 
     float vx0, vx1, vy0 = 0.0f, vy1 = 544.0f;
     float u0, u1;
