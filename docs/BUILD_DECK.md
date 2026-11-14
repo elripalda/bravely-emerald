@@ -27,7 +27,7 @@ get contains Nintendo's data. Use it for yourself and **do not share it**.
    ```sh
    cd ~
    git clone https://github.com/marcoscodas/bravely-emerald bravely-emerald
-   cd emerald-deck-src
+   cd bravely-emerald
    git checkout deck-port   # only if the port is on that branch
    ```
    (The Deck and Windows ports are on the default branch.)
@@ -108,7 +108,7 @@ never touches them.
 ## Update
 
 ```sh
-cd ~/emerald-deck-src
+cd ~/bravely-emerald
 git pull
 bash tools/deck/build_deck.sh
 ```
