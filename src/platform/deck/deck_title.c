@@ -696,17 +696,6 @@ static void Disc(float x, float y, float rad, float r, float g, float b, float a
     glEnd();
 }
 
-static void DiscXY(float x, float y, float rx, float ry, float r, float g, float b, float a, float hard)
-{
-    glColor4f(r, g, b, a);
-    glBegin(GL_QUADS);
-    glTexCoord3f(-1.0f, -1.0f, hard); glVertex2f(x - rx, y - ry);
-    glTexCoord3f(1.0f, -1.0f, hard); glVertex2f(x + rx, y - ry);
-    glTexCoord3f(1.0f, 1.0f, hard); glVertex2f(x + rx, y + ry);
-    glTexCoord3f(-1.0f, 1.0f, hard); glVertex2f(x - rx, y + ry);
-    glEnd();
-}
-
 typedef struct { float x, y, sp, amp, ph, size, depth; } Mote;
 #define N_MOTES 64
 static Mote sMotes[N_MOTES];
@@ -745,7 +734,7 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
     // BRAVELY drops in and EMERALD VERSION is pushed down when PRESS START comes (the logo has finished its own slide then)
     const float td = DeckReveal_On() ? (sPhase3At >= 0.0 ? (float)(now - sPhase3At) : -1.0f) : 1000.0f;
     const float dropU = Clamp01((td - 0.45f) / 0.95f), bannerU = Clamp01((td - 0.35f) / 1.0f);
-    const float bannerShift = 52.0f * (bannerU * bannerU * (3.0f - 2.0f * bannerU));
+    const float bannerShift = 76.0f * (bannerU * bannerU * (3.0f - 2.0f * bannerU));
     const float p3 = sPhase3At >= 0.0 ? Smooth(0.0f, 1.6f, (float)(now - sPhase3At)) : 0.0f;
     const int fadeY = gPaletteFade.y;
     float fade = (float)fadeY / 16.0f;
@@ -898,8 +887,8 @@ void DeckTitle_Draw(GLuint frontTex, float vx0, float vx1, float u0, float u1)
     {
         const float u = dropU, back = 1.2f, v = u - 1.0f;
         const float ease = 1.0f + (back + 1.0f) * v * v * v + back * v * v;
-        const float pw = (float)sPlateW * 0.60f, ph = (float)sPlateH * 0.60f;
-        const float cx = 480.0f - camX * 3.0f, cy = 190.0f - (1.0f - ease) * 120.0f;
+        const float pw = (float)sPlateW * 0.58f, ph = (float)sPlateH * 0.58f;
+        const float cx = 480.0f - camX * 3.0f, cy = 222.0f - (1.0f - ease) * 120.0f;
 
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         DeckGl_UseProgram(&sLayer);
