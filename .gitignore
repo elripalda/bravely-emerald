@@ -109,3 +109,6 @@ __pycache__/
 # Local agent logs and scratch screenshots
 /.claude-logs/
 /docs/screens/_tmp/
+
+# scratch screenshots from test runs
+/.shots_tmp/

@@ -26,11 +26,11 @@ get contains Nintendo's data. Use it for yourself and **do not share it**.
 3. **Open Konsole** (the terminal icon in the taskbar) and clone the repository:
    ```sh
    cd ~
-   git clone <repository URL> emerald-deck-src
+   git clone https://github.com/marcoscodas/pokeemerald-deck emerald-deck-src
    cd emerald-deck-src
    git checkout deck-port   # only if the port is on that branch
    ```
-   (`<repository URL>` is where you got this project. If the Deck port is not on the default branch, check out the branch it lives on, for example `deck-port`.)
+   (The Deck and Windows ports are on the default branch.)
 4. **Run the builder:**
    ```sh
    bash tools/deck/build_deck.sh --rom /home/deck/emerald.gba
