@@ -3964,8 +3964,8 @@ static inline uint32_t ChunkContentHash(const int32_t cx0, const int32_t cy0, co
         : VoxelLighting_Hash(cx0, cy0, cx1, cy1);
 #ifdef PLATFORM_DECK
     // standing tall grass changes the tree region of every outdoor chunk (voxel_grass)
-    if (!indoor && DeckGrass_Enabled())
-        hash ^= 0x9E3779B9u;
+    if (!indoor && DeckGrass_Density() > 0)
+        hash ^= 0x9E3779B9u + (uint32_t)DeckGrass_Density() * 0x01000193u;
 #endif
     return hash;
 }
@@ -3983,7 +3983,7 @@ static bool Frame_Begin(VoxelFrame *const f)
     {
         // a changed voxel_grass setting: every chunk checks its hash again (ChunkContentHash holds it)
         static int sGrassSeen = -1;
-        const int grass = DeckGrass_Enabled() ? 1 : 0;
+        const int grass = DeckGrass_Density();
         if (grass != sGrassSeen)
         {
             if (sGrassSeen >= 0)
@@ -4649,7 +4649,22 @@ static void Frame_SelectChunks(VoxelFrame *const f)
     const float camTargetX = sCamera.targetX;
     const float camTargetZ = sCamera.targetZ;
 
-    int32_t minTileY = (int32_t)floorf(camTargetZ - VOXEL_VIEW_NORTH_TILES);
+    float northTiles = VOXEL_VIEW_NORTH_TILES;
+#ifdef PLATFORM_DECK
+    {
+        // a lower camera tilt shows the ground further north at the top of the picture: where the top ray meets it
+        const float p = sCamera.pitch * (3.14159265f / 180.0f), h = sCamera.fov * 0.5f * (3.14159265f / 180.0f);
+
+        if (p - h > 0.02f)
+        {
+            const float reach = tanf(p) * sCamera.distance / tanf(p - h) - sCamera.distance + 3.0f;
+
+            if (reach > northTiles)
+                northTiles = reach < 46.0f ? reach : 46.0f;
+        }
+    }
+#endif
+    int32_t minTileY = (int32_t)floorf(camTargetZ - northTiles);
     int32_t maxTileY = (int32_t)ceilf(camTargetZ + VOXEL_VIEW_SOUTH_TILES);
 
     int32_t minChunkY = FloorDivChunk(minTileY - sChunkOriginY);
@@ -4820,6 +4835,10 @@ static void Frame_EmitEntities(const VoxelFrame *const f)
 {
     const bool inBattle3D = f->inBattle3D;
     const bool indoor = f->indoor;
+#ifdef PLATFORM_DECK
+    if (inBattle3D)
+        VoxelEntities_ClearBlobs(); // Emit does not run in a battle: the overworld's blobs must not linger
+#endif
     if (!inBattle3D)
     {
         VitaPerf_SubBegin(VITA_PERF_T_ENTITIES);
@@ -4867,9 +4886,6 @@ static void Frame_EmitEntities(const VoxelFrame *const f)
                 sShadowGlVerts[i].g = 20;
                 sShadowGlVerts[i].b = 40;
                 float a = sShadowVerts[i].shade;
-#ifdef PLATFORM_DECK
-                a *= DeckChars_SilhouetteScale();
-#endif
                 if (a < 0.0f) a = 0.0f;
                 if (a > 1.0f) a = 1.0f;
                 sShadowGlVerts[i].a = (uint8_t)(a * 255.0f);
@@ -5005,7 +5021,7 @@ static void Pass_Ground(const VoxelFrame *const f)
     Deck_RainLight(rainLight);
     const bool wetGround = !f->indoor && !f->inBattle3D && DeckRain_WetBegin(rainLight);
     // Water glints use the ground program the wet shader does not: outdoors, daylight or moon, not in rain, not in battle
-    const bool glintGround = !wetGround && !f->indoor && !f->inBattle3D
+    const bool glintGround = !wetGround && !f->indoor && !f->inBattle3D && !f->underground
                              && DeckParticles_GlintBegin(VitaDayNight_GetSun()->strength, VitaDayNight_Get()->glow,
                                                          f->weather == VOXEL_WEATHER_RAIN);
 #endif
@@ -5092,7 +5108,7 @@ static void Pass_Trees(const VoxelFrame *const f)
 #ifdef PLATFORM_DECK
         {
             float walkers[DECK_SWAY_WALKERS][2];
-            DeckSway_SetWalkers((const float (*)[2])walkers, VitaExtras_GetFast(FAST_EXTRA_VOXEL_GRASS) != 0
+            DeckSway_SetWalkers((const float (*)[2])walkers, DeckGrass_Enabled()
                                     ? VoxelEntities_GetWalkers(walkers, DECK_SWAY_WALKERS) : 0);
         }
         const bool sway = DeckSway_Begin();

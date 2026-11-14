@@ -103,6 +103,9 @@ static void AdaptDistance(VoxelCamera *cam)
     }
     cam->distance = ((8.0f + scale) * 0.90f) * 100.0f / (float)CtrSettings_VoxelZoom();
     cam->pitch = (float)CtrSettings_VoxelPitch();
+    /* The distance above is horizontal, tuned at 40 degrees. A lower pitch at the same horizontal distance would
+     * bring the eye closer along the line of sight (zoom in); keep that length, so tiles keep their size on screen. */
+    cam->distance *= cosf(cam->pitch * VOXEL_DEG_TO_RAD) / cosf(40.0f * VOXEL_DEG_TO_RAD);
 }
 
 static float Between(float value, float lo, float hi)

@@ -1,6 +1,7 @@
 #include "deck_post.h"
 #include "deck_gl_shader.h"
 #include "deck_video.h"
+#include "deck_levels.h"
 #include "platform/vita_extras.h"
 #include "../vita/vita_perf.h"
 #include <stdlib.h>
@@ -16,6 +17,11 @@ typedef struct
     float threshold;   // bright pass luminance threshold
     int bloomPasses;   // separable blur iterations at half resolution
 } DeckPostPreset;
+
+// Bloom gain by level (the old preset values, but LOW now glows a little instead of nothing).
+static const float kBloomGain[3] = { 1.5f, 3.0f, 5.0f };
+// Share of the diorama blur at the band edges by level (MEDIUM and HIGH are the old look).
+static const float kBlurMul[3] = { 0.5f, 1.0f, 1.0f };
 
 static const DeckPostPreset kPresets[3] = {
     /* low    */ { 0.60f, 1.04f, 0.12f, 0.0f, 0.70f, 1 },
@@ -131,11 +137,12 @@ DeckPostConfig DeckPost_ReadConfig(void)
     DeckPostConfig c;
     c.quality = ClampKey(VitaExtras_GetFast(FAST_EXTRA_VOXEL_QUALITY), 0, 2, 1);
     c.shaders = ClampKey(VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS), 0, 1, 1) != 0;
-    const int grade = ClampKey(VitaExtras_GetFast(FAST_EXTRA_VOXEL_GRADE), 0, 2, 2);
-    const int bloom = ClampKey(VitaExtras_GetFast(FAST_EXTRA_VOXEL_BLOOM), 0, 2, 2);
-    c.grade = (grade == 2) ? true : (grade == 1);                          // on in every preset
-    c.bloom = (bloom == 2) ? (kPresets[c.quality].bloomGain > 0.0f) : (bloom == 1);
-    c.blur = VitaExtras_GetFast(FAST_EXTRA_VOXEL_BLUR) != 0;
+    c.gradeLvl = DeckLevel(FAST_EXTRA_VOXEL_GRADE);
+    c.bloomLvl = DeckLevel(FAST_EXTRA_VOXEL_BLOOM);
+    c.blurLvl = DeckLevel(FAST_EXTRA_VOXEL_BLUR);
+    c.grade = c.gradeLvl >= 0;
+    c.bloom = c.bloomLvl >= 0;
+    c.blur = c.blurLvl >= 0;
     return c;
 }
 
@@ -297,9 +304,12 @@ static void GradeTints(float daylight, float glow, float shadow[3], float high[3
 void DeckPost_Run(const DeckPostFrame *in)
 {
     const DeckPostConfig cfg = DeckPost_ReadConfig();
-    const DeckPostPreset *const pr = &kPresets[cfg.quality];
+    const DeckPostPreset *const pr = &kPresets[cfg.gradeLvl >= 0 ? cfg.gradeLvl : cfg.quality];      // grade, saturation, vignette
+    const DeckPostPreset *const pb = &kPresets[cfg.bloomLvl >= 0 ? cfg.bloomLvl : cfg.quality];      // bloom threshold and blur passes
+    const float bloomGain = cfg.bloomLvl >= 0 ? kBloomGain[cfg.bloomLvl] : 0.0f;
+    const float blurMul = cfg.blurLvl >= 0 ? kBlurMul[cfg.blurLvl] : 0.0f;
     const float keep = 1.0f - Clamp01(in->fade);
-    const bool doBloom = cfg.bloom && in->bloom > 0.0f && pr->bloomGain > 0.0f;
+    const bool doBloom = cfg.bloom && in->bloom > 0.0f && bloomGain > 0.0f;
     const bool doBlur = cfg.blur && !in->indoor;
     float shadow[3], high[3];
 
@@ -326,9 +336,9 @@ void DeckPost_Run(const DeckPostFrame *in)
         BeginTarget(&sHalf[0]);
         DeckGl_UseProgram(&sBright);
         DeckGl_Set1i(sBrightScene, 0);
-        DeckGl_Set1f(sBrightThreshold, pr->threshold);
+        DeckGl_Set1f(sBrightThreshold, pb->threshold);
         DrawQuad();
-        Blur(&sHalf[0], &sHalf[1], pr->bloomPasses);
+        Blur(&sHalf[0], &sHalf[1], pb->bloomPasses);
     }
     if (doBlur)
     {
@@ -354,10 +364,10 @@ void DeckPost_Run(const DeckPostFrame *in)
     DeckGl_Set1i(sCScene, 0);
     DeckGl_Set1i(sCBloom, 1);
     DeckGl_Set1i(sCBlur, 2);
-    DeckGl_Set1f(sCBloomAmt, doBloom ? in->bloom * pr->bloomGain * keep : 0.0f);
+    DeckGl_Set1f(sCBloomAmt, doBloom ? in->bloom * bloomGain * keep : 0.0f);
     DeckGl_Set1f(sCBlurOn, doBlur ? 1.0f : 0.0f);
     // Legacy band height: VOXEL_DOF_*_ROWS * (renderH / 544) / renderH = rows / 544.
-    DeckGl_Set4f(sCDof, in->dofTopRows / 544.0f, in->dofBottomRows / 544.0f, in->dofTopAlpha, in->dofBottomAlpha);
+    DeckGl_Set4f(sCDof, in->dofTopRows / 544.0f, in->dofBottomRows / 544.0f, in->dofTopAlpha * blurMul, in->dofBottomAlpha * blurMul);
     DeckGl_Set1f(sCGradeAmt, cfg.grade ? pr->grade * keep : 0.0f);
     DeckGl_Set3f(sCShadow, shadow[0], shadow[1], shadow[2]);
     DeckGl_Set3f(sCHigh, high[0], high[1], high[2]);

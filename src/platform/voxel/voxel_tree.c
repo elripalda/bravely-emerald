@@ -369,12 +369,26 @@ static void EmitSmallCell(VoxelBuilder *builder, const VoxelMapInstance *inst, i
  * ground under it is untouched, so behaviour, encounters and the ground pass do not change. */
 #define TALL_GRASS_HEIGHT 0.55f
 
+#ifdef PLATFORM_DECK
+// voxel_grass level: a fixed hash of the cell decides which cells keep their tuft below 100 percent (no flicker, no seams).
+static bool GrassCellKept(int32_t x, int32_t y)
+{
+    const int density = DeckGrass_Density();
+    uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u;
+
+    h ^= h >> 13;
+    h *= 0x5bd1e995u;
+    h ^= h >> 15;
+    return density >= 100 || (density > 0 && (int)(h % 100u) < density);
+}
+#endif
+
 bool VoxelTree_TallGrassStands(int32_t x, int32_t y)
 {
 #ifdef PLATFORM_DECK
     const VoxelMapInstance *inst = VoxelWorld_GetInstanceAt(x, y);
 
-    return inst != NULL && DeckGrass_Enabled() && VoxelWorld_UsesTreeSprites(inst)
+    return inst != NULL && GrassCellKept(x, y) && VoxelWorld_UsesTreeSprites(inst)
         && VoxelTree_Part(inst->secondaryTileset, VoxelWorld_GetMetatileId(x, y)) < 0
         && VoxelWorld_IsTallGrassCell(x, y);
 #else
@@ -388,7 +402,7 @@ bool VoxelTree_FlowersStand(int32_t x, int32_t y)
 #ifdef PLATFORM_DECK
     const VoxelMapInstance *inst = VoxelWorld_GetInstanceAt(x, y);
 
-    return inst != NULL && DeckGrass_Enabled() && VoxelWorld_UsesTreeSprites(inst)
+    return inst != NULL && GrassCellKept(x, y) && VoxelWorld_UsesTreeSprites(inst)
         && VoxelTree_Part(inst->secondaryTileset, VoxelWorld_GetMetatileId(x, y)) < 0
         && !VoxelWorld_IsTallGrassCell(x, y) && VoxelWorld_IsFlowerCell(x, y);
 #else

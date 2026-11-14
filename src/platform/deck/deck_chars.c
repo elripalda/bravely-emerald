@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "deck_chars.h"
+#include "deck_levels.h"
+#include "../voxel/voxel_entities.h"
 #include "deck_gl_shader.h"
 #include "platform/vita_extras.h"
 
@@ -111,13 +113,15 @@ void DeckChars_Shutdown(void)
 
 bool DeckChars_OutlineBegin(float sunDx, float sunDz, float sunStrength)
 {
-    if (sOut.program == 0 || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || VitaExtras_GetFast(FAST_EXTRA_VOXEL_OUTLINE) == 0)
+    const float lvl = DeckLevelPick(FAST_EXTRA_VOXEL_OUTLINE, 0.5f, 1.0f, 1.0f);
+
+    if (sOut.program == 0 || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || lvl <= 0.0f)
         return false;
     DeckGl_UseProgram(&sOut);
     DeckGl_Set1i(sOTex, 0);
-    DeckGl_Set2f(sOTexel, 1.0f / 512.0f, 1.0f / 256.0f);          // VOXEL_SPRITE_ATLAS_W x H
+    DeckGl_Set2f(sOTexel, 1.0f / (float)VOXEL_SPRITE_ATLAS_W, 1.0f / (float)VOXEL_SPRITE_ATLAS_H);
     DeckGl_Set2f(sOSun, sunDx > 0.0f ? -1.0f : 1.0f, sunDz > 0.0f ? 1.0f : -1.0f);
-    DeckGl_Set2f(sOParams, 0.62f, 0.9f * sunStrength);
+    DeckGl_Set2f(sOParams, 0.62f, 0.9f * sunStrength * lvl);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     sBlend = true;
@@ -134,7 +138,8 @@ void DeckChars_OutlineEnd(void)
 
 bool DeckChars_ShadowEnabled(void)
 {
-    return sBlob.program != 0 && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0 && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADOW) != 0;
+    return sBlob.program != 0 && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0
+        && DeckLevel(FAST_EXTRA_VOXEL_SHADOW) >= 0;
 }
 
 // Silhouette peak 0.36 x 0.62 = 0.22, blob peak 0.20: where they overlap the sum is about 0.38, the old single shadow was 0.36.
@@ -146,6 +151,7 @@ float DeckChars_SilhouetteScale(void)
 void DeckChars_DrawBlobs(const float (*blobs)[4], int count, float sunDx, float sunDz)
 {
     static const float kCorner[6][2] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 } };
+    const float lvl = DeckLevelPick(FAST_EXTRA_VOXEL_SHADOW, 0.5f, 1.0f, 1.0f);
     int n = 0;
 
     if (!DeckChars_ShadowEnabled() || count <= 0)
@@ -159,7 +165,7 @@ void DeckChars_DrawBlobs(const float (*blobs)[4], int count, float sunDx, float 
 
         for (int i = 0; i < count; ++i)
         {
-            const uint8_t a = (uint8_t)(blobs[i][3] * 255.0f + 0.5f);
+            const uint8_t a = (uint8_t)(blobs[i][3] * lvl * 255.0f + 0.5f);
 
             if (a == 0)
                 continue;

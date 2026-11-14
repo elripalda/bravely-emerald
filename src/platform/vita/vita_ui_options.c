@@ -262,8 +262,8 @@ bool VitaUiOptions_Update(const VitaUiInput *in)
         }
     }
 
-    OptRow rows[24];
-    const int32_t rowCount = BuildTabRows(sTab, rows, 24);
+    OptRow rows[48];
+    const int32_t rowCount = BuildTabRows(sTab, rows, 48);
     if (rowCount <= 0)
         return changed;
 
@@ -367,8 +367,8 @@ void VitaUiOptions_Render(uint16_t *dst, const size_t pitch, const uint8_t blink
 
     VitaUiPlate_Draw(dst, pitch, clip, 6, 43, 308, 163, 4, kPlateCream, VITA_PLATE_NORMAL, blinkPhase, 0);
 
-    OptRow rows[24];
-    const int32_t rowCount = BuildTabRows(sTab, rows, 24);
+    OptRow rows[48];
+    const int32_t rowCount = BuildTabRows(sTab, rows, 48);
     for (int32_t r = 0; r < 6 && (sScroll[sTab] + r) < rowCount; r++)
     {
         const int32_t idx = sScroll[sTab] + r;

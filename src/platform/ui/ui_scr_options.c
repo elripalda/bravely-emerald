@@ -25,7 +25,7 @@ typedef struct { uint8_t kind; uint16_t sub; const char *group, *label; const Vi
 #define LIST_Y 72
 #define ROW_H 40
 #define ROWS 9
-#define MAX_ROWS 40
+#define MAX_ROWS 64
 
 static const char *const sTabs[VITA_TAB_COUNT] = { "GENERAL", "WORLD", "BATTLE", "MODES", "CHEATS" };
 static const char *const sCoreNames[6] = { "TEXT SPEED", "BATTLE SCENE", "BATTLE STYLE", "SOUND OUTPUT", "MASTER VOLUME", "BUTTON MODE" };

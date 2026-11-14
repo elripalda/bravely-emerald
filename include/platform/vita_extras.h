@@ -73,14 +73,20 @@ typedef enum
 #ifdef PLATFORM_DECK
     FAST_EXTRA_VOXEL_QUALITY,  // Deck effects preset: 0 low, 1 medium, 2 high
     FAST_EXTRA_VOXEL_SHADERS,  // Deck shader master switch: 0 off (legacy picture), 1 on
-    FAST_EXTRA_VOXEL_GRADE,    // Deck colour grade + vignette: 0 off, 1 on, 2 auto (preset)
-    FAST_EXTRA_VOXEL_BLOOM,    // Deck bloom: 0 off, 1 on, 2 auto (preset)
-    FAST_EXTRA_VOXEL_SWAY,     // Deck wind sway of tree crowns and long grass: 0 off, 1 on
-    FAST_EXTRA_VOXEL_GRASS,    // Deck standing tall grass + player bend: 0 off (flat ground), 1 on
-    FAST_EXTRA_VOXEL_RAIN,     // Deck rain effects (GPU streaks, wet ground, mist, splashes): 0 off (legacy rain), 1 on
-    FAST_EXTRA_VOXEL_PARTICLES, // Deck particles (pollen, fireflies, leaves) and water glints: 0 off (legacy motes), 1 on
-    FAST_EXTRA_VOXEL_OUTLINE,  // Deck character outline and sun rim: 0 off, 1 on
-    FAST_EXTRA_VOXEL_SHADOW,   // Deck soft blob shadow under characters: 0 off, 1 on
+    // Leveled effect keys (deck_levels.h): 0 OFF, 1 AUTO (follow voxel_quality; what old files stored as "on"), 2 LOW, 3 MEDIUM, 4 HIGH
+    FAST_EXTRA_VOXEL_GRADE,    // Deck colour grade + vignette
+    FAST_EXTRA_VOXEL_BLOOM,    // Deck bloom
+    FAST_EXTRA_VOXEL_SWAY,     // Deck wind sway of tree crowns and long grass (amplitude)
+    FAST_EXTRA_VOXEL_GRASS,    // Deck standing tall grass + flowers (density)
+    FAST_EXTRA_VOXEL_RAIN,     // Deck rain streaks (count); off = legacy rain particles
+    FAST_EXTRA_VOXEL_PARTICLES, // Deck particles (pollen, fireflies, leaves) density; off = legacy motes
+    FAST_EXTRA_VOXEL_OUTLINE,  // Deck character outline and sun rim (strength)
+    FAST_EXTRA_VOXEL_SHADOW,   // Deck soft blob shadow under characters (strength)
+    FAST_EXTRA_VOXEL_WET,      // Deck wet ground in rain (puddle strength)
+    FAST_EXTRA_VOXEL_MIST,     // Deck rain mist (opacity)
+    FAST_EXTRA_VOXEL_SPLASH,   // Deck rain splash rings (count)
+    FAST_EXTRA_VOXEL_GLINT,    // Deck water glints (density)
+    FAST_EXTRA_VOXEL_PITCH,    // Deck camera tilt: 0 classic 40 deg, 1 36, 2 32 (default), 3 28, 4 24
     FAST_EXTRA_AMBIENT_VOLUME, // Deck ambient bed volume: 0 off (no DSP) to 10, default 6
 #endif
     FAST_EXTRA_COUNT

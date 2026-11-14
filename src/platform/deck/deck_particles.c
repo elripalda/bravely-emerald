@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "deck_particles.h"
+#include "deck_levels.h"
 #include "deck_gl_shader.h"
 #include "global.h"
 #include "constants/map_types.h"
@@ -164,9 +165,10 @@ static bool DebugOn(void)
     return s == 1;
 }
 
+// voxel_particles level: OFF = the legacy motes; LOW = half the particles. The glints have their own key (voxel_glint).
 bool DeckParticles_Enabled(void)
 {
-    return sReady && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0 && VitaExtras_GetFast(FAST_EXTRA_VOXEL_PARTICLES) != 0;
+    return sReady && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0 && DeckLevel(FAST_EXTRA_VOXEL_PARTICLES) >= 0;
 }
 
 static void DrawKind(int kind, int first, int count, const float rgba[4], bool additive)
@@ -185,6 +187,7 @@ bool DeckParticles_Draw(const DeckPartFrame *f)
     int pollen = 0, fire = 0, leaf = 0;
     const u8 mapType = gMapHeader.mapType;
     const bool fireMap = mapType == MAP_TYPE_ROUTE || mapType == MAP_TYPE_TOWN;
+    const float lvl = DeckLevelPick(FAST_EXTRA_VOXEL_PARTICLES, 0.5f, 1.0f, 1.0f);
 
     if (!DeckParticles_Enabled() || sPart.program == 0 || sVbo == 0)
         return false;
@@ -202,6 +205,9 @@ bool DeckParticles_Draw(const DeckPartFrame *f)
         DeckGl_Log("[PART] t=%.0f s drawn: pollen %d fireflies %d leaves %d (total %d) motes %.2f glow %.2f treeVerts %d mapType %d\n",
                    f->seconds, pollen, fire, leaf, pollen + fire + leaf, f->motes, f->glow, f->treeVerts, (int)mapType);
     }
+    pollen = (int)((float)pollen * lvl);
+    fire = (int)((float)fire * lvl);
+    leaf = (int)((float)leaf * lvl);
     if (pollen + fire + leaf == 0)
         return false;
 
@@ -297,11 +303,14 @@ bool DeckParticles_GlintBegin(float sun, float glow, bool rain)
 {
     const float strength = Clamp01(sun * 0.95f + glow * 0.30f);
 
-    if (!DeckParticles_Enabled() || sGlint.program == 0 || Off("glint") || rain || strength <= 0.02f)
+    const float lvl = DeckLevelPick(FAST_EXTRA_VOXEL_GLINT, 0.5f, 1.0f, 1.0f);
+
+    if (!sReady || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || lvl <= 0.0f || sGlint.program == 0
+        || Off("glint") || rain || strength <= 0.02f)
         return false;
     DeckGl_UseProgram(&sGlint);
     DeckGl_Set1i(sGTex, 0);
-    DeckGl_Set1f(sGStrength, strength);
+    DeckGl_Set1f(sGStrength, strength * lvl);
     return true;
 }
 

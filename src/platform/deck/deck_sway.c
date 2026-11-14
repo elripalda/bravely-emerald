@@ -3,8 +3,10 @@
 #include <time.h>
 #include "deck_gl_shader.h"
 #include "platform/vita_extras.h"
+#include "deck_levels.h"
 
 static DeckGlProgram sProg;
+static GLint sAmp = -1;
 static GLint sTex = -1, sChunk = -1, sFrame = -1, sBend[DECK_SWAY_WALKERS] = { -1, -1, -1, -1 };
 static float sWalk[DECK_SWAY_WALKERS][2];
 static int sWalkN;
@@ -17,6 +19,7 @@ static const char *kVs =
     "#version 120\n"
     "uniform float uTime;\n"
     "uniform vec3 uWind;\n"          // dirX, dirZ, strength (DeckGl_SetFrameUniforms)
+    "uniform float uAmp;\n"           // voxel_sway level: 0.5 low, 1 medium and high
     "uniform vec2 uChunkOffset;\n"
     "uniform vec2 uFrameOffset;\n"   // chunk draw offset: vertex + it = the frame the walkers are in
     "uniform vec3 uBend0;\n"         // walker x, z (current frame), 1 = present, 0 = unused
@@ -35,7 +38,7 @@ static const char *kVs =
     "    float s = (sin(uTime * 1.7 + ph) + 0.5 * sin(uTime * 0.9 + ph * 0.5 + 1.3)) / 1.5;\n"
     "    float gust = 0.7 + 0.3 * sin(uTime * 0.35 + dot(world, vec2(0.08, 0.05)));\n"
     "    float str = 0.25 + (uWind.z - 0.25) * 0.5;\n"
-    "    float d = w * 0.8 * str * gust * (0.35 + 0.65 * s);\n"
+    "    float d = w * 0.8 * uAmp * str * gust * (0.35 + 0.65 * s);\n"
     "    p.xz += vec2(uWind.x, uWind.y) * d;\n"
     "    if (bendFlag > 0.5) {\n"
     "        vec2 f = p.xz + uFrameOffset;\n"
@@ -74,6 +77,7 @@ void DeckSway_Init(void)
         return;
     }
     sTex = DeckGl_Uniform(&sProg, "uTex");
+    sAmp = DeckGl_Uniform(&sProg, "uAmp");
     sChunk = DeckGl_Uniform(&sProg, "uChunkOffset");
     sFrame = DeckGl_Uniform(&sProg, "uFrameOffset");
     sBend[0] = DeckGl_Uniform(&sProg, "uBend0");
@@ -93,9 +97,11 @@ void DeckSway_Shutdown(void)
 
 bool DeckSway_Begin(void)
 {
-    if (!sReady || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SWAY) == 0)
+    // OFF = the tree pass keeps its fixed-function look (no sway, and no grass bend either)
+    if (!sReady || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0 || DeckLevel(FAST_EXTRA_VOXEL_SWAY) < 0)
         return false;
     DeckGl_UseProgram(&sProg);
+    DeckGl_Set1f(sAmp, DeckLevelPick(FAST_EXTRA_VOXEL_SWAY, 0.5f, 1.0f, 1.0f));
     DeckGl_Set1i(sTex, 0);
     for (int i = 0; i < DECK_SWAY_WALKERS; ++i)
     {
@@ -139,9 +145,17 @@ void DeckSway_SetWalkers(const float (*xz)[2], int n)
     }
 }
 
+// Share of the tall grass cells (and flowers) that get a tuft, in percent: 0 off, LOW 50, MEDIUM and HIGH 100.
+int DeckGrass_Density(void)
+{
+    if (!sReady || VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) == 0)
+        return 0;
+    return (int)DeckLevelPick(FAST_EXTRA_VOXEL_GRASS, 50.0f, 100.0f, 100.0f);
+}
+
 bool DeckGrass_Enabled(void)
 {
-    return sReady && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0 && VitaExtras_GetFast(FAST_EXTRA_VOXEL_GRASS) != 0;
+    return DeckGrass_Density() > 0;
 }
 
 void DeckSway_End(void)

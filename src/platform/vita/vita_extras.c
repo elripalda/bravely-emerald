@@ -20,7 +20,7 @@
 #include "sound.h"
 #include "constants/songs.h"
 
-#define MAX_SETTINGS_ENTRIES 112
+#define MAX_SETTINGS_ENTRIES 128
 #define SETTINGS_FILENAME "settings.txt"
 
 typedef struct
@@ -110,6 +110,11 @@ static inline int32_t LookupFastId(const char *key)
         if (strcmp(key, "voxel_particles") == 0) return FAST_EXTRA_VOXEL_PARTICLES;
         if (strcmp(key, "voxel_outline") == 0) return FAST_EXTRA_VOXEL_OUTLINE;
         if (strcmp(key, "voxel_shadow") == 0) return FAST_EXTRA_VOXEL_SHADOW;
+        if (strcmp(key, "voxel_wet") == 0) return FAST_EXTRA_VOXEL_WET;
+        if (strcmp(key, "voxel_mist") == 0) return FAST_EXTRA_VOXEL_MIST;
+        if (strcmp(key, "voxel_splash") == 0) return FAST_EXTRA_VOXEL_SPLASH;
+        if (strcmp(key, "voxel_glint") == 0) return FAST_EXTRA_VOXEL_GLINT;
+        if (strcmp(key, "voxel_pitch") == 0) return FAST_EXTRA_VOXEL_PITCH;
 #endif
         break;
     default:
@@ -149,7 +154,9 @@ static const char *const sUiThemeValues[] = { "RED", "EMERALD", "CRYSTAL", "TROP
 static const char *const sVoxelFpsValues[] = { "30", "60", NULL };
 #ifdef PLATFORM_DECK
 static const char *const sVoxelQualityValues[] = { "LOW", "MEDIUM", "HIGH", NULL };
-static const char *const sVoxelFxValues[] = { "OFF", "ON", "AUTO", NULL };
+// Level rows (deck_levels.h): index = stored value. 1 = AUTO is what old files stored as ON, so 0/1 keys keep their meaning.
+static const char *const sVoxelLevelValues[] = { "OFF", "AUTO", "LOW", "MEDIUM", "HIGH", NULL };
+static const char *const sVoxelPitchValues[] = { "CLASSIC", "36", "32", "28", "24", NULL };
 static const char *const sAmbientValues[] = { "OFF", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", NULL };
 #endif
 static const char *const sSaveSlotValues[] = { "SLOT 1", "SLOT 2", "SLOT 3", NULL };
@@ -295,19 +302,28 @@ const VitaExtra gVitaExtras[] = {
 
     // ---- [WORLD] ----
     { VITA_TAB_WORLD,   "RENDERER",   "3D VOXEL DIORAMA",  "voxel_3d",         2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },
+#ifdef PLATFORM_DECK
+    { VITA_TAB_WORLD,   "RENDERER",   "DIORAMA BLUR (DOF)","voxel_blur",       5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
+#else
     { VITA_TAB_WORLD,   "RENDERER",   "DIORAMA BLUR (DOF)","voxel_blur",       2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },
+#endif
     { VITA_TAB_WORLD,   "RENDERER",   "TARGET FRAMERATE",  "voxel_fps",        2, 0, sVoxelFpsValues,    NULL, NULL, NULL },
 #ifdef PLATFORM_DECK
     { VITA_TAB_WORLD,   "EFFECTS",    "EFFECTS PRESET",    "voxel_quality",    3, 1, sVoxelQualityValues, NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "EFFECTS",    "SHADERS",           "voxel_shaders",    2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "COLOR GRADE",       "voxel_grade",      3, 2, sVoxelFxValues,      NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "BLOOM",             "voxel_bloom",      3, 2, sVoxelFxValues,      NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "WIND SWAY",         "voxel_sway",       2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "GRASS & FLOWERS",    "voxel_grass",      2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "RAIN EFFECTS",      "voxel_rain",       2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "PARTICLES",         "voxel_particles",  2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "CHARACTER OUTLINE", "voxel_outline",    2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
-    { VITA_TAB_WORLD,   "EFFECTS",    "SOFT SHADOWS",      "voxel_shadow",     2, 1, gVitaExtrasOffOn,    NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "COLOR GRADE",      "voxel_grade", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "BLOOM",            "voxel_bloom", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "WIND SWAY",        "voxel_sway", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "GRASS & FLOWERS",  "voxel_grass", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "RAIN STREAKS",     "voxel_rain", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "WET GROUND",       "voxel_wet", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "RAIN MIST",        "voxel_mist", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "RAIN SPLASHES",    "voxel_splash", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "PARTICLES",        "voxel_particles", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "WATER GLINTS",     "voxel_glint", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "CHARACTER OUTLINE","voxel_outline", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS", "SOFT SHADOWS",     "voxel_shadow", 5, 1, sVoxelLevelValues, NULL, NULL, NULL },
+    { VITA_TAB_WORLD,   "EFFECTS",    "CAMERA TILT",       "voxel_pitch",      5, 2, sVoxelPitchValues,   NULL, NULL, NULL },
 #endif
     { VITA_TAB_WORLD,   "TIME & SKY", "DAY / NIGHT CYCLE", "day_night",        2, 1, sDayNightValues,    NULL, NULL, NULL },
     { VITA_TAB_WORLD,   "TIME & SKY", "TIMED ENCOUNTERS",  "timed_encounters", 2, 1, gVitaExtrasOffOn,   NULL, NULL, NULL },
@@ -386,6 +402,44 @@ static void SyncPlatformSetting(const char *key, const int32_t value)
     else if (strcmp(key, "save_slot") == 0) Platform_SetSetting(PLATFORM_SETTING_SAVE_FILE, (u8)(value + 1));
 }
 
+#ifdef PLATFORM_DECK
+static int32_t SettingValue(const char *key, const int32_t def)
+{
+    const int32_t i = FindSettingIndex(key, false);
+    return i >= 0 ? sSettings[i].value : def;
+}
+
+static void SettingForce(const char *key, const int32_t value)
+{
+    const int32_t i = FindSettingIndex(key, true);
+    if (i >= 0)
+        sSettings[i].value = value;
+}
+
+// Files from before the level rows (no "fx_levels" key): bloom and grade stored 0 off, 1 on, 2 auto, which are 0 and 1
+// in the level encoding (0 OFF, 1 AUTO, 2 LOW, 3 MEDIUM, 4 HIGH); every other 0/1 key already fits. The rain row used
+// to switch four effects and the particles row the glints: an old OFF stays OFF for the keys split from them.
+static void MigrateLevelSettings(const bool fileExisted)
+{
+    if (SettingValue("fx_levels", 0) == 0 && fileExisted)
+    {
+        static const char *const sOldTri[] = { "voxel_bloom", "voxel_grade" };
+        for (int i = 0; i < 2; i++)
+            if (SettingValue(sOldTri[i], 1) == 2)
+                SettingForce(sOldTri[i], 1);
+        if (SettingValue("voxel_rain", 1) == 0)
+        {
+            SettingForce("voxel_wet", 0);
+            SettingForce("voxel_mist", 0);
+            SettingForce("voxel_splash", 0);
+        }
+        if (SettingValue("voxel_particles", 1) == 0)
+            SettingForce("voxel_glint", 0);
+    }
+    SettingForce("fx_levels", 1);
+}
+#endif
+
 void VitaExtras_Init(void)
 {
     if (sInitialized)
@@ -405,6 +459,9 @@ void VitaExtras_Init(void)
     FILE *const f = fopen(path, "r");
     if (f == NULL)
     {
+#ifdef PLATFORM_DECK
+        MigrateLevelSettings(false);
+#endif
         VitaExtras_Save();
         SyncFastExtras();
         for (uint32_t i = 0; i < sSettingCount; i++)
@@ -425,6 +482,9 @@ void VitaExtras_Init(void)
         }
     }
     fclose(f);
+#ifdef PLATFORM_DECK
+    MigrateLevelSettings(true);
+#endif
 
     SyncFastExtras();
     for (uint32_t i = 0; i < sSettingCount; i++)

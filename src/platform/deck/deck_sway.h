@@ -21,6 +21,8 @@ void DeckSway_SetChunkOffset(float x, float z, float frameX, float frameZ);
 void DeckSway_SetWalkers(const float (*xz)[2], int n);
 // Standing tall grass (E1, voxel_grass): setting on, shaders on and the sway program built. Chunk worker safe.
 bool DeckGrass_Enabled(void);
+// Percent of cells that get a tuft (voxel_grass level), 0 when off. A change must rebuild the chunks (hash).
+int DeckGrass_Density(void);
 void DeckSway_End(void);
 
 #endif

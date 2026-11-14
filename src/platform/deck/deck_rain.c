@@ -1,4 +1,5 @@
 #include "deck_rain.h"
+#include "deck_levels.h"
 #include "deck_gl_shader.h"
 #include "platform/vita_extras.h"
 #include <math.h>
@@ -157,7 +158,8 @@ static void StreakInit(void)
 
 bool DeckRain_DrawStreaks(const DeckRainFrame *f)
 {
-    if (!DeckRain_Enabled() || sStreak.program == 0 || sStreakVbo == 0 || Off("streaks") || f->amount <= 0.005f)
+    if (!DeckRain_Enabled() || sStreak.program == 0 || sStreakVbo == 0 || Off("streaks") || f->amount <= 0.005f
+        || DeckLevel(FAST_EXTRA_VOXEL_RAIN) < 0)
         return false;
 
     const float amount = Clamp01(f->amount);
@@ -166,6 +168,7 @@ bool DeckRain_DrawStreaks(const DeckRainFrame *f)
 
     if (count < STREAK_COUNT / 4)
         count = STREAK_COUNT / 4;
+    count = (int)((float)count * DeckLevelPick(FAST_EXTRA_VOXEL_RAIN, 0.5f, 1.0f, 1.0f));
     if (alpha > 1.0f)
         alpha = 1.0f;
 
@@ -255,13 +258,15 @@ static void SplashInit(void)
 
 bool DeckRain_DrawSplashes(const DeckRainFrame *f)
 {
-    if (!DeckRain_Enabled() || sSplash.program == 0 || sSplashVbo == 0 || Off("splash") || f->amount <= 0.05f)
+    if (!DeckRain_Enabled() || sSplash.program == 0 || sSplashVbo == 0 || Off("splash") || f->amount <= 0.05f
+        || DeckLevel(FAST_EXTRA_VOXEL_SPLASH) < 0)
         return false;
 
     int count = (int)(Clamp01(f->amount) * (float)SPLASH_COUNT + 0.5f);
 
     if (count < SPLASH_COUNT / 4)
         count = SPLASH_COUNT / 4;
+    count = (int)((float)count * DeckLevelPick(FAST_EXTRA_VOXEL_SPLASH, 0.5f, 1.0f, 1.0f));
     DeckGl_UseProgram(&sSplash);
     DeckGl_Set3f(sSpTarget, f->target[0], f->target[1], f->target[2]);
     DeckGl_Set3f(sSpParams, 0.35f, 0.38f, 0.03f);
@@ -352,11 +357,11 @@ float DeckRain_Wetness(void) { return sWet; }
 
 bool DeckRain_WetBegin(const float light[3])
 {
-    if (!DeckRain_Enabled() || sWetProg.program == 0 || Off("wet") || sWet <= 0.01f)
+    if (!DeckRain_Enabled() || sWetProg.program == 0 || Off("wet") || DeckLevel(FAST_EXTRA_VOXEL_WET) < 0 || sWet <= 0.01f)
         return false;
     DeckGl_UseProgram(&sWetProg);
     DeckGl_Set1i(sWetTex, 0);
-    DeckGl_Set1f(sWetWet, sWet);
+    DeckGl_Set1f(sWetWet, sWet * DeckLevelPick(FAST_EXTRA_VOXEL_WET, 0.5f, 1.0f, 1.0f));
     // pale overcast sky x the light of the hour
     DeckGl_Set3f(sWetSky, 0.62f * light[0], 0.70f * light[1], 0.80f * light[2]);
     return true;
@@ -413,14 +418,18 @@ float DeckRain_Mist(float weatherAmount)
 {
     float t = (Clamp01(weatherAmount) - 0.35f) / 0.65f;
 
-    if (!DeckRain_Enabled() || Off("mist") || t <= 0.0f)
+    const float lvl = DeckLevelPick(FAST_EXTRA_VOXEL_MIST, 0.5f, 1.0f, 1.0f);
+
+    if (!DeckRain_Enabled() || Off("mist") || lvl <= 0.0f || t <= 0.0f)
         return 0.0f;
-    return t * t * (3.0f - 2.0f * t) * 0.5f * sWet;
+    return t * t * (3.0f - 2.0f * t) * 0.5f * sWet * lvl;
 }
 
+// Master gate only (programs built, shaders on); streaks, wet ground, mist and splashes each have a level key
+// (voxel_rain, voxel_wet, voxel_mist, voxel_splash: OFF / AUTO / LOW / MEDIUM / HIGH, LOW = half).
 bool DeckRain_Enabled(void)
 {
-    return sReady && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0 && VitaExtras_GetFast(FAST_EXTRA_VOXEL_RAIN) != 0;
+    return sReady && VitaExtras_GetFast(FAST_EXTRA_VOXEL_SHADERS) != 0;
 }
 
 void DeckRain_Update(bool rain, float amount, bool indoor, float seconds)
@@ -433,7 +442,7 @@ void DeckRain_Update(bool rain, float amount, bool indoor, float seconds)
     if (dt > 0.5f)
         dt = 0.5f; // a stall or fade does not jump the clock, but slow frames still make progress
     // Wetness always runs: indoors, with the setting off or after a toggle it dries at the 90 s rate, never freezes.
-    if (rain && !indoor && DeckRain_Enabled())
+    if (rain && !indoor && DeckRain_Enabled() && (DeckLevel(FAST_EXTRA_VOXEL_WET) >= 0 || DeckLevel(FAST_EXTRA_VOXEL_MIST) >= 0))
         sWet += dt / 20.0f * Clamp01(amount);
     else
         sWet -= dt / 90.0f;

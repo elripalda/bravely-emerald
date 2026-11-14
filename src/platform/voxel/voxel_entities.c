@@ -25,6 +25,9 @@
 #include "3ds_video.h"
 #include "voxel_building.h"
 #include "voxel_entities.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_chars.h"
+#endif
 #include "voxel_grade.h"
 #include "voxel_relief.h"
 #include "voxel_sprite_slots.h"
@@ -100,6 +103,12 @@ static bool sDoorStale = true;
 
 int32_t VoxelEntities_PlayerVertexFirst(void) { return sPlayerVertexFirst; }
 #ifdef PLATFORM_DECK
+void VoxelEntities_ClearBlobs(void)
+{
+    sBlobCount = 0;
+    sCharFirst = sCharEnd = 0;
+}
+
 int VoxelEntities_GetBlobs(float (*out)[4], int max)
 {
     int n = sBlobCount < max ? sBlobCount : max;
@@ -1939,20 +1948,38 @@ uint32_t VoxelEntities_Emit(VoxelBuilder *builder, uint16_t *atlas, const VoxelC
         /* Riding, it is off the ground: its shadow falls from its feet,
          * moved along the sun by how high they are, onto the water past
          * the mon's back. */
-        if (shadows != NULL && card->outdoor)
-            EmitCastShadow(shadows, &sSlots[i], i, card->worldX, card->worldZ, rightX, rightZ,
-                           stretch, card->shade, card->rise > 0.0f ? rise : 0.0f, card->deck);
 #ifdef PLATFORM_DECK
+        /* A blob goes under a grounded outdoor card (not riding, room left, alpha > 0 so it is really drawn). Only
+         * the silhouette shadow of a card that got one is weakened (DeckChars_SilhouetteScale); the rest keep theirs. */
+        bool hasBlob = false;
+        const uint32_t shadowFirst = shadows != NULL ? shadows->count : 0;
         if (shadows != NULL && card->outdoor && !(card->rise > 0.0f) && sBlobCount < 64)
         {
             const float bx = card->worldX + 0.5f, bz = card->worldZ + 0.5f;
             const float shade = card->shade < 0.0f ? 0.0f : (card->shade > 1.0f ? 1.0f : card->shade);
+            const float alpha = 0.20f * (0.35f + 0.65f * shade) * (dusk < 1.0f ? dusk : 1.0f);
 
-            sBlobs[sBlobCount][0] = bx;
-            sBlobs[sBlobCount][1] = VoxelRelief_LiftAt(bx, bz) + 0.028f + card->deck;
-            sBlobs[sBlobCount][2] = bz + VoxelRelief_ShiftAt(bx, bz) + card->deck;
-            sBlobs[sBlobCount][3] = 0.20f * (0.35f + 0.65f * shade) * (dusk < 1.0f ? dusk : 1.0f);
-            ++sBlobCount;
+            if (alpha * 255.0f + 0.5f >= 1.0f)
+            {
+                sBlobs[sBlobCount][0] = bx;
+                sBlobs[sBlobCount][1] = VoxelRelief_LiftAt(bx, bz) + 0.028f + card->deck;
+                sBlobs[sBlobCount][2] = bz + VoxelRelief_ShiftAt(bx, bz) + card->deck;
+                sBlobs[sBlobCount][3] = alpha;
+                ++sBlobCount;
+                hasBlob = true;
+            }
+        }
+#endif
+        if (shadows != NULL && card->outdoor)
+            EmitCastShadow(shadows, &sSlots[i], i, card->worldX, card->worldZ, rightX, rightZ,
+                           stretch, card->shade, card->rise > 0.0f ? rise : 0.0f, card->deck);
+#ifdef PLATFORM_DECK
+        if (hasBlob)
+        {
+            const float scale = DeckChars_SilhouetteScale();
+
+            for (uint32_t v = shadowFirst; v < shadows->count; ++v)
+                shadows->vertices[v].shade *= scale;
         }
 #endif
         if (reflections != NULL && snap->objectEvents[i].hasReflection)

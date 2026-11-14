@@ -20,9 +20,10 @@ typedef struct
 {
     int quality;   // voxel_quality: 0 low, 1 medium, 2 high
     bool shaders;  // voxel_shaders
-    bool grade;    // voxel_grade, resolved against the preset (grade + vignette)
-    bool bloom;    // voxel_bloom, resolved against the preset
-    bool blur;     // voxel_blur
+    bool grade;    // voxel_grade on (grade + vignette)
+    bool bloom;    // voxel_bloom on
+    bool blur;     // voxel_blur on
+    int gradeLvl, bloomLvl, blurLvl; // resolved levels 0 low .. 2 high (AUTO = quality); -1 when off
 } DeckPostConfig;
 
 void DeckPost_Init(int sceneW, int sceneH);
