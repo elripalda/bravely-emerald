@@ -31,6 +31,7 @@
 #include "../deck/deck_post.h"
 #include "../deck/deck_sway.h"
 #include "../deck/deck_flowers.h"
+#include "../deck/deck_rain.h"
 #endif
 
 static int32_t sFrameDrawCalls = 0;
@@ -3719,6 +3720,7 @@ bool VoxelRenderer_Init(void)
     // RGBA8 scene target and post chain (deck_post.c); the legacy FBOs above stay the fallback.
     DeckPost_Init(VOXEL_DIORAMA_FBO_W, VOXEL_DIORAMA_FBO_H);
     DeckSway_Init();
+    DeckRain_Init();
 #endif
 
     MakeFog();
@@ -3791,6 +3793,7 @@ void VoxelRenderer_Shutdown(void)
 #ifdef PLATFORM_DECK
     DeckPost_Shutdown();
     DeckSway_Shutdown();
+    DeckRain_Shutdown();
 #endif
 
     if (sChunkStaging)
@@ -4342,6 +4345,66 @@ static void Frame_TrackWorldChanges(VoxelFrame *const f)
     f->indoor = indoor;
 }
 
+#ifdef PLATFORM_DECK
+// Debug aid (Deck only): env DECK_FORCE_WEATHER=rain|storm|sun|fog|sand overrides the field weather of the frame, read once.
+// storm = rain at full amount plus a synthetic bolt every 8 s. Audio reads VoxelWorld_* itself and is not forced.
+static void Deck_ForceWeather(VoxelFrame *const f)
+{
+    static int sMode = -1;
+
+    if (sMode < 0)
+    {
+        const char *e = getenv("DECK_FORCE_WEATHER");
+
+        sMode = 0;
+        if (e != NULL)
+        {
+            if (strcmp(e, "rain") == 0) sMode = 1;
+            else if (strcmp(e, "storm") == 0) sMode = 2;
+            else if (strcmp(e, "sun") == 0) sMode = 3;
+            else if (strcmp(e, "fog") == 0) sMode = 4;
+            else if (strcmp(e, "sand") == 0) sMode = 5;
+            if (sMode != 0)
+                DeckGl_Log("[WEATHER] forced by DECK_FORCE_WEATHER=%s
+", e);
+        }
+    }
+    if (sMode == 0)
+        return;
+    f->bolt = 0.0f;
+    f->fogDensity = 0.0f;
+    switch (sMode)
+    {
+    case 1:
+    case 2:
+        f->weather = VOXEL_WEATHER_RAIN;
+        f->weatherAmount = sMode == 2 ? 1.0f : 0.8f;
+        if (sMode == 2)
+        {
+            static uint64_t sStart = 0;
+            if (sStart == 0)
+                sStart = SDL_GetPerformanceCounter();
+            const float t = fmodf((float)((double)(SDL_GetPerformanceCounter() - sStart) / (double)SDL_GetPerformanceFrequency()), 8.0f);
+            f->bolt = t < 0.35f ? 1.0f - t / 0.35f : 0.0f;
+        }
+        break;
+    case 3:
+        f->weather = VOXEL_WEATHER_SUN;
+        f->weatherAmount = 1.0f;
+        break;
+    case 4:
+        f->weather = VOXEL_WEATHER_FOG;
+        f->weatherAmount = 0.8f;
+        f->fogDensity = 0.7f;
+        break;
+    default:
+        f->weather = VOXEL_WEATHER_SAND;
+        f->weatherAmount = 0.8f;
+        break;
+    }
+}
+#endif
+
 // Stage 5: screen fade, weather and the light of the frame.
 static void Frame_ReadAtmosphere(VoxelFrame *const f)
 {
@@ -4356,11 +4419,17 @@ static void Frame_ReadAtmosphere(VoxelFrame *const f)
     f->fogDensity = VoxelWorld_FogDensity();
     f->bolt = VoxelWorld_Lightning();
     f->underground = VoxelWorld_Underground();
+#ifdef PLATFORM_DECK
+    Deck_ForceWeather(f);
+#endif
     f->light = LightFor(f->indoor, f->weather, f->weatherAmount, f->bolt);
     static uint64_t sVoxelAtmosphereStart = 0;
     if (sVoxelAtmosphereStart == 0)
         sVoxelAtmosphereStart = SDL_GetPerformanceCounter();
     f->seconds = (float)((double)(SDL_GetPerformanceCounter() - sVoxelAtmosphereStart) / (double)SDL_GetPerformanceFrequency());
+#ifdef PLATFORM_DECK
+    DeckRain_Update(f->weather == VOXEL_WEATHER_RAIN, f->weatherAmount, f->indoor, f->seconds);
+#endif
 }
 
 // Whether a visible chunk must be rebuilt. `urgent`: drawn as it is, the chunk would be wrong,
@@ -5330,6 +5399,24 @@ static void Pass_Atmosphere3D(const VoxelFrame *const f)
             else if (weather == VOXEL_WEATHER_ASH)       wKind = &sAshKind;
             else if (weather == VOXEL_WEATHER_PARTICLES) wKind = &sSnowKind;
 
+#ifdef PLATFORM_DECK
+            if (wKind == &sRainKind)
+            {
+                const VitaDayNightLight *cycle = VitaDayNight_Get();
+                const VitaDayNightBlend moon = VitaDayNight_Moonlight(cycle, 0.0f, cycle->rgb);
+                DeckRainFrame rf;
+
+                rf.seconds = seconds;
+                rf.amount = weatherAmount;
+                rf.bolt = bolt;
+                rf.cam[0] = sCamera.x; rf.cam[1] = sCamera.y; rf.cam[2] = sCamera.z;
+                rf.target[0] = sCamera.targetX; rf.target[1] = sCamera.ground; rf.target[2] = sCamera.targetZ;
+                for (int c = 0; c < 3; ++c)
+                    rf.light[c] = cycle->rgb[c] * (1.0f - moon.amount) + moon.rgb[c] * moon.amount;
+                if (DeckRain_DrawStreaks(&rf))
+                    wKind = NULL;
+            }
+#endif
             if (wKind != NULL)
             {
                 DrawWeather(wKind, weatherAmount, bolt, seconds);
