@@ -20,13 +20,25 @@ from PySide6.QtCore import QRect, Qt                # noqa: E402
 from PySide6.QtWidgets import QApplication          # noqa: E402
 from core.tasks import Step                          # noqa: E402
 from tests.test_core import make_rom                 # noqa: E402
+from core import report                          # noqa: E402
 from ui import win95                                 # noqa: E402
 from ui.dialogs import HelpDialog, SettingsDialog    # noqa: E402
 from ui.main_window import MainWindow                # noqa: E402
 
 CODE = ("import time\nfor i in range(1,101,5):\n print('[%3d%%] Building C object x%d.o' % (i,i),flush=True); time.sleep(0.02)\n"
         "SLEEP\nprint('png.h: No such file or directory' if FAIL else 'done',flush=True)\nimport sys\nsys.exit(1 if FAIL else 0)\n")
+NEUTRAL_ROM = r"C:\Users\Player\Roms\Pokemon Emerald.gba"
+NEUTRAL_OUT = r"C:\Users\Player\Documents\Bravely Emerald"
+NEUTRAL_WORK = r"C:\Users\Player\AppData\Local\BravelyEmerald\source"
 STAGES = ["prereq", "install", "files", "tools", "assets", "deps", "compile", "link", "package"]
+
+
+def neutral_header(builder, manifest=None, include_pacman=True):
+    """The real log header lists the user's paths, the CPU and a slow package query; the screenshots get a short neutral one."""
+    return ["Bravely Emerald Builder", "System: Windows 10, x64", "Source folder: " + NEUTRAL_WORK]
+
+
+report.header = neutral_header
 
 
 def pump(app, secs):
@@ -59,6 +71,8 @@ def main():
     pump(app, 0.5)
     print("source+checks ready after %.1fs, repo=%s, font=%s, scale=%s" % (time.time() - t0, w.builder.repo, win95.load_font(),
                                                                          os.environ.get("QT_SCALE_FACTOR", "1")))
+    w.dir_edit.setText(NEUTRAL_OUT)                           # the screenshots must not show the real user name
+    w.source.work = NEUTRAL_WORK
     w.rom_edit.setText("")
     w.consent.setChecked(False)
     w.check_rom()
@@ -68,6 +82,7 @@ def main():
     make_rom(rom)
     w.rom_edit.setText(rom)
     w.check_rom()
+    w.rom_edit.setText(NEUTRAL_ROM)                           # display only: the check above used the synthetic file
     w.consent.setChecked(True)
     pump(app, 0.3)
     w.grab().save(os.path.join(out, "02_ready_to_build.png"))
@@ -88,6 +103,7 @@ def main():
     w.grab().save(os.path.join(out, "02b_bad_rom.png"))
     w.rom_edit.setText(rom)
     w.check_rom()
+    w.rom_edit.setText(NEUTRAL_ROM)
 
     box = w.make_footnote_box()
     box.show()
@@ -116,11 +132,12 @@ def main():
         pump(app, 0.4)
         w.last_box.grab().save(os.path.join(out, "05b_failed_dialog.png"))
         w.last_box.close()
-    w.show_ready({"ok": True, "target": "windows", "folder": r"C:\Users\You\Documents\Bravely Emerald", "launch": True})
+    w.show_ready({"ok": True, "target": "windows", "folder": NEUTRAL_OUT, "launch": True})
     pump(app, 0.4)
     w.grab().save(os.path.join(out, "06_done.png"))
 
     dlg = SettingsDialog(w)
+    dlg.work_edit.setText(NEUTRAL_WORK)
     dlg.show()
     pump(app, 0.5)
     dlg.grab().save(os.path.join(out, "07_settings.png"))

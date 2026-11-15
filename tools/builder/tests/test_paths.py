@@ -15,7 +15,7 @@ from core import source                           # noqa: E402
 
 class PathProblemTests(unittest.TestCase):
     def test_accepted(self):
-        for p in ("C:\\Users\\Adame\\AppData\\Local\\BravelyEmerald\\source", "F:\\fresh-test\\home\\source", "C:\\BravelyEmerald\\source",
+        for p in ("C:\\Users\\Player\\AppData\\Local\\BravelyEmerald\\source", "F:\\fresh-test\\home\\source", "C:\\BravelyEmerald\\source",
                   "/home/deck/emerald-deck"):
             self.assertIsNone(source_path_problem(p), p)
 

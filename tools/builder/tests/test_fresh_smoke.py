@@ -204,7 +204,7 @@ WORK_NAMES = {
     "plain": "work",
     "with space": "my work folder",
     "accent": "caf\u00e9-\u00f1",
-    "windows user path": os.path.join("Users", "Adame", "AppData", "Local", "BravelyEmerald", "source"),
+    "windows user path": os.path.join("Users", "Player", "AppData", "Local", "BravelyEmerald", "source"),
 }
 
 

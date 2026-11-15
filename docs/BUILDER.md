@@ -270,7 +270,7 @@ One command runs the smoke tests (no network, no installs, about two minutes):
 
 It runs the real core code against a stub `pacman` (first sync that asks for a restart, mirror timeouts and retries, lock file,
 keyring error, resume), runs the real `build.sh`, `build_deps.sh` and `package.sh` with stand-in tools (`BRAVELY_STUBS`) from an empty
-folder, a folder with spaces, one with an accent and a `Users\Adame\AppData\Local\BravelyEmerald\source` style path, and runs `plan`
+folder, a folder with spaces, one with an accent and a `Users\Player\AppData\Local\BravelyEmerald\source` style path, and runs `plan`
 and `build --dry-run` against this PC and against an empty MSYS2 folder, on the source and on the packaged exe when
 `tools/builder/dist-builder/` holds one (or `BRAVELY_PACKAGED_EXE` names it). A failed check prints which step and which line.
 It does not prove that a real MSYS2 install, the real mirrors or the real compile work on a clean PC: only a real run on one does.
