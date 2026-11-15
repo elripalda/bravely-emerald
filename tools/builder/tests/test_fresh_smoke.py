@@ -546,6 +546,7 @@ class PackagedAppTests(unittest.TestCase):
         home = tempfile.mkdtemp(prefix="bb-launch-home-")
         self.addCleanup(shutil.rmtree, home, True)
         env = dict(os.environ, BRAVELY_BUILDER_HOME=home)
+        env.pop("QT_QPA_PLATFORM", None)                    # a real window, not the offscreen test platform
         proc = subprocess.Popen([packaged_exe()], env=env, cwd=tempfile.gettempdir())
         try:
             time.sleep(6)

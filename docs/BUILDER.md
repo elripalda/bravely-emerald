@@ -237,6 +237,8 @@ builds compile the decompiled game with Nintendo's graphics and data linked into
 executable would distribute game data, and a 32-bit native compiler cannot run in a browser. A browser-only builder is therefore not
 possible here and its code is not reused (it is also under CC BY-NC-SA 4.0). This app runs on your computer and nothing leaves it.
 
+Packaging collects `core/` and `ui/` with `--collect-submodules` (never a hand-written list), writes the module list to `bundle/modules.txt`, and runs the frozen app with `--imports` (imports every module and prints OK or FAIL for each); a package with a missing module is not produced. The test `test_fresh_smoke.py` also starts the exe with no arguments, like a double-click, and looks for its window.
+
 ## How to check a fresh install without installing anything
 
 The builder looks at what is already on the PC before it does anything (`core/probe.py`), so it installs, downloads or builds only
