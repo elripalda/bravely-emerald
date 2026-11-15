@@ -49,6 +49,11 @@ def main(argv=None):
         def finish():
             msg = "SMOKE OK: window %dx%d visible=%s host=%s source=%s" % (win.width(), win.height(), win.isVisible(),
                                                                          win.builder.host["kind"], win.source.mode)
+            from core.source import help_file
+            msg += " style=%s help=%s" % (app.style().objectName(), bool(help_file()))
+            png = os.environ.get("BRAVELY_SMOKE_PNG")
+            if png:
+                win.grab().save(png)
             if sys.stdout is not None:
                 print(msg, flush=True)
             else:                       # a windowed (no console) exe has no stdout: write next to the settings file
