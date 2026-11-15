@@ -42,13 +42,13 @@ columns). Format only the lines you change; don't mix formatting with logic in o
 1. Work on a branch from `main`; one topic per branch.
 2. Build for the Deck or Windows (see [docs/BUILD.md](docs/BUILD.md)). The build must finish with no
    new warnings.
-3. Test on hardware with the smoke list below; for performance work, compare
+3. Test on the Deck or Windows with the smoke list below; for performance work, compare
    `perf_frames.csv` before and after ([docs/DEBUGGING.md](docs/DEBUGGING.md)).
 4. Commit in small steps. Message: `type(scope): summary` (`feat`, `fix`, `perf`, `refactor`,
    `docs`, `build`, `chore`), with a body explaining why.
 5. Update the documentation in `docs/` that your change makes wrong, in the same branch.
 
-## Smoke test (hardware or Vita3K)
+## Smoke test (Deck or Windows)
 
 1. Intro (all scenes) → title → main menu → load a save.
 2. Walk, run and cycle Route 101 → Oldale: no flicker or camera jumps at the border.
@@ -58,4 +58,4 @@ columns). Format only the lines you change; don't mix formatting with logic in o
 6. START: every dock screen; save from the dock.
 7. Buy and sell in a shop.
 8. A field move (Cut or Surf) and Fly.
-9. Quit to LiveArea.
+9. Quit the game and check that it exits cleanly.

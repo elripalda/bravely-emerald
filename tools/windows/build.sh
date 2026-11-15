@@ -4,7 +4,7 @@
 #
 #   tools/windows/build.sh [--clean]
 #
-# Needs: the game files (fetch_assets.sh, once), MSYS2 packages listed in docs/WINDOWS_BUILD.md.
+# Needs: the game files (tools/fetch_assets.sh, once), MSYS2 packages listed in docs/WINDOWS_BUILD.md.
 # Result: build-win/out/dist (game folder), then tools/windows/package.sh makes dist-win and the zip.
 # Every part that is already done is skipped with a line saying so; a stop always prints the line it stopped at.
 set -eEo pipefail
@@ -28,7 +28,7 @@ command -v cmake >/dev/null || die "pacman -S cmake (MSYS package)"
 [ "$(i686-w64-mingw32-gcc -dumpmachine)" = "i686-w64-mingw32" ] || die "wrong compiler"
 
 if [ ! -f .assets_ok ] || [ ! -f graphics/pokemon/bulbasaur/front.png ] || [ ! -f assets/ui2/ui_atlas.bin ]; then
-    die "the game files are missing: run ./fetch_assets.sh <your Pokemon Emerald .gba> first (docs/BUILD_YOUR_OWN.md)"
+    die "the game files are missing: run ./tools/fetch_assets.sh <your Pokemon Emerald .gba> first (docs/BUILD.md)"
 fi
 have "game files (.assets_ok)"
 

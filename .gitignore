@@ -49,8 +49,6 @@ prefabs.json
 
 # PS Vita build output
 cmake-build-*/
-build-vita/
-*.vpk
 *.velf
 *.self
 eboot.bin
@@ -77,7 +75,7 @@ __pycache__/
 /.claude/
 /handoff.yaml
 /memory.yaml
-# Game files: not in this repository. fetch_assets.sh downloads them (tools/assets/manifest.txt)
+# Game files: not in this repository. tools/fetch_assets.sh downloads them (tools/assets/manifest.txt)
 # after checking the user's Pokémon Emerald dump, and generates the port files made from them.
 /graphics/**/*.png
 /graphics/**/*.pal
@@ -94,7 +92,6 @@ __pycache__/
 /assets/ui/intro_margins.bin
 /.assets_src/
 /.assets_ok
-/vita/sce_sys_custom/
 .superpowers/
 /build-win/
 /dist-win/

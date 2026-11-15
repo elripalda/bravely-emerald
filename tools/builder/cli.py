@@ -86,7 +86,7 @@ def selftest():
     if src.mode != "bundled":
         print("SELFTEST FAILED: the source is not the bundled snapshot (mode %s)" % src.mode)
         return 1
-    for rel in ("fetch_assets.sh", "CMakeLists.txt", "assets/voxel/buildings.bin", "tools/windows/build.sh", "tools/deck/build_deck.sh",
+    for rel in ("tools/fetch_assets.sh", "CMakeLists.txt", "assets/voxel/buildings.bin", "tools/windows/build.sh", "tools/deck/build_deck.sh",
                 "design/stitch/_tools/export_assets.py", "vita/assets.mk"):
         ok = os.path.isfile(os.path.join(b.repo, *rel.split("/")))
         print("  %-40s %s" % (rel, "present" if ok else "MISSING"))

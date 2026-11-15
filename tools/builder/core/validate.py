@@ -1,4 +1,4 @@
-"""Input validation: paths, the ROM check (mirror of fetch_assets.sh), disk, network."""
+"""Input validation: paths, the ROM check (mirror of tools/fetch_assets.sh), disk, network."""
 import hashlib
 import os
 import re
@@ -49,7 +49,7 @@ def source_path_problem(path, windows=True):
 
 
 def validate_rom(path):
-    """Mirror of the check in fetch_assets.sh (size, title, game code, header checksum, SHA-1).
+    """Mirror of the check in tools/fetch_assets.sh (size, title, game code, header checksum, SHA-1).
     Returns dict(ok, code, message, level). Reads the file only; never copies it."""
     try:
         path = clean_path(path, "ROM path", no_space=False)

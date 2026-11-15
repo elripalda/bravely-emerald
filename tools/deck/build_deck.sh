@@ -7,10 +7,10 @@
 #   1. checks the Deck (distrobox, podman, free disk space) and your ROM file;
 #   2. creates an Arch Linux distrobox container (default name emerald-build) with the 32-bit toolchain;
 #   3. builds static 32-bit SDL2 2.32.10 and SDL2_image 2.8.12 into <dir>/deps32;
-#   4. runs fetch_assets.sh (checks your ROM, downloads the game files, converts them);
+#   4. runs tools/fetch_assets.sh (checks your ROM, downloads the game files, converts them);
 #   5. builds the game with CMake (-DDECK=ON) into <dir>/build/dist;
 #   6. writes a launcher script and a .desktop entry, and starts the game for a short smoke test.
-# The ROM is only read by fetch_assets.sh to check that it is Pokemon Emerald. It is not copied or
+# The ROM is only read by tools/fetch_assets.sh to check that it is Pokemon Emerald. It is not copied or
 # stored, and nothing is uploaded. Needs no root: the commands that need root run inside the container.
 # See docs/BUILD_DECK.md.
 set -eu
@@ -45,7 +45,7 @@ usage: $0 --rom <emerald.gba> [--dir <install dir>] [--jobs N] [--container NAME
   --jobs       parallel compile jobs (default: CPU count, at most 4)
   --container  distrobox container name (default: emerald-build)
   --no-run     skip the 12 second start-up test at the end
-  --force-assets  run fetch_assets.sh again even if the game files exist
+  --force-assets  run tools/fetch_assets.sh again even if the game files exist
 USAGE
 }
 
@@ -180,12 +180,12 @@ cmake --build build -j$JOBS && cmake --install build
 fi
 
 # ------------------------------------------------------------------ 4. game files
-say "4/6 Game files (fetch_assets.sh)"
+say "4/6 Game files (tools/fetch_assets.sh)"
 if [ "$HAVE_ASSETS" -eq 1 ]; then
     note "already done (.assets_ok present); use --force-assets to redo it"
 else
-    heavy "cd '$REPO' && FETCH_JOBS=$JOBS bash ./fetch_assets.sh '$ROM'" \
-        || die "fetch_assets.sh failed (output above). Not a valid Emerald dump, no network, or a build error."
+    heavy "cd '$REPO' && FETCH_JOBS=$JOBS bash ./tools/fetch_assets.sh '$ROM'" \
+        || die "tools/fetch_assets.sh failed (output above). Not a valid Emerald dump, no network, or a build error."
 fi
 if [ ! -f "$REPO/assets/ui/intro_margins.bin" ]; then
     note "making the intro margins"

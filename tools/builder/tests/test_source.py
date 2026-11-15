@@ -15,7 +15,7 @@ os.environ.setdefault("BRAVELY_BUILDER_HOME", tempfile.mkdtemp(prefix="bb-src-")
 from core import source as S                      # noqa: E402
 from core.repo import is_repo                      # noqa: E402
 
-BASE = {"fetch_assets.sh": b"#!/bin/bash\n", "tools/deck/build_deck.sh": b"x", "tools/windows/build.sh": b"y",
+BASE = {"tools/fetch_assets.sh": b"#!/bin/bash\n", "tools/deck/build_deck.sh": b"x", "tools/windows/build.sh": b"y",
         "src/a.c": b"int a;\n", "assets/voxel/buildings.bin": b"\0" * 100}
 
 
@@ -143,7 +143,7 @@ class ExcludeListTests(unittest.TestCase):
     def test_lists(self):
         for gone in ("docs/screens/x.png", "docs/BUILD.md", "design/stitch/hub/index.html", "tools/builder/app.py", "README.md", ".github/x.md"):
             self.assertTrue(S.excluded(gone), gone)
-        for kept in ("assets/voxel/buildings.bin", "src/main.c", "CMakeLists.txt", "fetch_assets.sh", "tools/windows/build.sh",
+        for kept in ("assets/voxel/buildings.bin", "src/main.c", "CMakeLists.txt", "tools/fetch_assets.sh", "tools/windows/build.sh",
                      "tools/deck/build_deck.sh", "design/stitch/_tools/export_assets.py", "docs/licenses/Cinzel-OFL.txt", "vita/assets.mk",
                      "LICENSE", "data/x.json"):
             self.assertFalse(S.excluded(kept), kept)

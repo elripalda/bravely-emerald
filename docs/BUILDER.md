@@ -3,14 +3,14 @@
 A small desktop program (Python 3 and Qt through PySide6, in the look of Windows 95) that builds the game from
 **your own Pokemon Emerald dump**, for Windows or for Linux and the Steam Deck. You choose the ROM and press one button.
 The program carries the project source inside it, checks the computer, installs what is missing, gets the game files,
-compiles and packs the game. It runs the existing build scripts (`tools/deck/build_deck.sh`, `fetch_assets.sh` and
+compiles and packs the game. It runs the existing build scripts (`tools/deck/build_deck.sh`, `tools/fetch_assets.sh` and
 `tools/windows/*`) as subprocesses; it does not replace them.
 
 ![The main screen](screens/builder_idle.png)
 
 Legal note first: the repository holds no ROM and no game data, and neither does the app. The result of a build
 contains Nintendo's data. Use it yourself and **do not share it**. The ROM is only read to check it (by
-`fetch_assets.sh`); it is never copied, stored or uploaded.
+`tools/fetch_assets.sh`); it is never copied, stored or uploaded.
 
 ## Standalone for the repository, not for the toolchain
 
@@ -92,7 +92,7 @@ writable): paths and option values only, never ROM contents.
 
 `package.py` runs `git archive` on the current commit (tracked files only: no `.git`, no virtualenv, no builds, no game
 data) and drops what no build needs: `docs/` except `docs/licenses/`, `design/` except `design/stitch/_tools/` (the
-design exporter that `fetch_assets.sh` runs), `tools/builder/`, `.github/`, the Vita and `build_all` scripts, README and
+design exporter that `tools/fetch_assets.sh` runs), `tools/builder/`, `.github/`, README and
 CONTRIBUTING. The result is `bundle/source.tar.xz` plus `source-manifest.json` (commit, date, file count, sha256 of the
 archive, the exclude list), stored inside the app. The list was proven by a real build from the package.
 
@@ -108,7 +108,7 @@ interrupted one is repeated. A folder that the app did not create is never overw
 
 | Host | Commands |
 |---|---|
-| Windows | If missing: the MSYS2 installer (silent, `--confirm-command --accept-messages --root`) and `pacman -Syu`, `pacman -S --needed` of the packages in `docs/WINDOWS_BUILD.md`. Then, in MSYS2 (`C:\msys64`): `fetch_assets.sh` (`FETCH_NO_CONVERT=1`, accepted to stop at "Generating the port's files"), `make -f make_tools.mk`, `make -f vita/assets.mk`, `fetch_assets.sh` again, `tools/windows/build.sh`, `tools/windows/package.sh`, and a copy of `dist-win` to the install folder that never overwrites saves or settings. |
+| Windows | If missing: the MSYS2 installer (silent, `--confirm-command --accept-messages --root`) and `pacman -Syu`, `pacman -S --needed` of the packages in `docs/WINDOWS_BUILD.md`. Then, in MSYS2 (`C:\msys64`): `tools/fetch_assets.sh` (`FETCH_NO_CONVERT=1`, accepted to stop at "Generating the port's files"), `make -f make_tools.mk`, `make -f vita/assets.mk`, `tools/fetch_assets.sh` again, `tools/windows/build.sh`, `tools/windows/package.sh`, and a copy of `dist-win` to the install folder that never overwrites saves or settings. |
 | Linux, SteamOS | `bash tools/deck/build_deck.sh --dir D --jobs N --container C [--rom R] [--no-run]`: the script makes the container, the toolchain, SDL2 and the game. A missing `distrobox` or `podman` stops the build with the exact command to run in a terminal. |
 
 The job count of the Windows build reaches `build.sh` through `OMP_NUM_THREADS` (GNU `nproc` honours it). Low priority is the

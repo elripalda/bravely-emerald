@@ -1,21 +1,18 @@
-# PS Vita build of pokeemerald (PLATFORM_VITA on top of the SDL2 backend).
+# Steam Deck and Windows builds of pokeemerald (the PLATFORM_VITA code lineage on the SDL2 backend).
 #
-# Prerequisites (from the repository root, see README.md):
+# Prerequisites (from the repository root, see docs/BUILD.md):
 #   make -f make_tools.mk
 #   make -f vita/assets.mk -j8
-# Configure and build:
-#   cmake -S . -B build-vita -DCMAKE_BUILD_TYPE=Release
-#   cmake --build build-vita -j8
+# tools/deck/build_deck.sh and tools/windows/build.sh configure and build this file.
 
 cmake_minimum_required(VERSION 3.16)
 
-option(DECK "Build for the Steam Deck (32-bit x86 Linux) instead of the PS Vita" OFF)
+# The Steam Deck build (32-bit x86 Linux) is the base; WINDOWS switches it to Windows. The PS Vita
+# build (VitaSDK, VPK) is gone from this fork; the Vita code lineage stays, see docs/VITA.md.
+set(DECK ON)
 option(WINDOWS "Build for Windows (32-bit MinGW, see docs/WINDOWS_BUILD.md): the Deck build on desktop OpenGL" OFF)
-if(WINDOWS)
-    # Every PLATFORM_DECK code path (post chain, shaders, UI polish) is kept; the pieces that
-    # differ on Windows are marked PLATFORM_WINDOWS / _WIN32 in the sources.
-    set(DECK ON)
-endif()
+# With WINDOWS every PLATFORM_DECK code path (post chain, shaders, UI polish) is kept; the pieces
+# that differ on Windows are marked PLATFORM_WINDOWS / _WIN32 in the sources.
 
 if(DECK)
     # 32-bit x86: the game data is assembled with 4-byte pointers (.4byte).
@@ -27,20 +24,7 @@ if(DECK)
         set(CMAKE_EXE_LINKER_FLAGS_INIT "-m32")
         project(pokeemerald_deck C)
     endif()
-else()
-    if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-        if(NOT DEFINED ENV{VITASDK})
-            message(FATAL_ERROR "VITASDK is not set; see README.md")
-        endif()
-        set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
-    endif()
-    project(pokeemerald_vita C)
-    include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 endif()
-
-set(VITA_APP_NAME "Emerald Vita")   # neutral name; change it for your own builds
-set(VITA_TITLEID  "PKEM00001")
-set(VITA_VERSION  "01.00")
 
 set(ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 if(CMAKE_HOST_WIN32)
@@ -70,11 +54,6 @@ if(DECK)
         find_program(VITA_LD      ld      REQUIRED)
         find_program(VITA_OBJCOPY objcopy REQUIRED)
     endif()
-else()
-    find_program(VITA_CPP     arm-vita-eabi-cpp     HINTS "$ENV{VITASDK}/bin" REQUIRED)
-    find_program(VITA_AS      arm-vita-eabi-as      HINTS "$ENV{VITASDK}/bin" REQUIRED)
-    find_program(VITA_LD      arm-vita-eabi-ld      HINTS "$ENV{VITASDK}/bin" REQUIRED)
-    find_program(VITA_OBJCOPY arm-vita-eabi-objcopy HINTS "$ENV{VITASDK}/bin" REQUIRED)
 endif()
 # Aliases so shared pipeline code reads the same on both targets.
 set(DECK_CPP "${VITA_CPP}")
@@ -114,21 +93,15 @@ if(DECK)
     else()
         set(LD_EMULATION -m elf_i386)
     endif()
-else()
-    set(ASM_ARCH -march=armv7-a)
-    set(ASM_WORD ".word")
-    set(LD_EMULATION "")
 endif()
 string(REPLACE ";" " " GAME_DEFINES_STR "${GAME_DEFINES}")
 
 # --- C sources: cpp -> preproc (charmap strings, INCBIN) -> compiled below ---
 file(GLOB_RECURSE GAME_C CONFIGURE_DEPENDS "${ROOT}/src/*.c" "${ROOT}/gflib/*.c")
 list(FILTER GAME_C EXCLUDE REGEX "\\.inc\\.c$")
-if(DECK)
-    list(FILTER GAME_C EXCLUDE REGEX "/src/platform/vita/(vita_platform|vita_input)\\.c$")
-else()
-    list(FILTER GAME_C EXCLUDE REGEX "/src/platform/deck/")
-endif()
+# the Deck versions of these two replace the Vita SDK files
+list(FILTER GAME_C EXCLUDE REGEX "/src/platform/vita/(vita_platform|vita_input)\\.c$")
+
 
 # Lets IMPLICIT_DEPENDS follow #include into these folders, so header edits
 # regenerate the preprocessed sources that use them.
@@ -254,9 +227,6 @@ elseif(DECK)
     # Deck CPU is Zen 2. SSE2 is the baseline for the PPU conversion (Task 6).
     set(VITA_CPU_TUNING_OPTIONS -march=znver2 -mtune=znver2 -msse2)
     set(OPT_LEVEL -O3)
-else()
-    set(VITA_CPU_TUNING_OPTIONS -mcpu=cortex-a9 -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard)
-    set(OPT_LEVEL -O2)
 endif()
 
 # Options shared by both sides.
@@ -337,112 +307,7 @@ elseif(DECK)
     target_link_libraries(pokeemerald PRIVATE ${DECK_LIBS_STATIC_LDFLAGS} -lm -ldl -pthread)
     # Map Vita asset path prefixes (app0:, ux0:data/POKEVITA/) onto the dist layout; see __wrap_fopen in deck_platform.c.
     target_link_options(pokeemerald PRIVATE -Wl,--wrap=fopen)
-else()
-    # SDL2's own config carries its stub libraries, which differ between VitaSDK builds
-    # (e.g. SDL2 built with the vitaGL backend also needs vitaGL and its dependencies).
-    # SDL2 renders through GXM directly (VitaSDK 2026.08); no vitaGL. SDL2_image loads the border art.
-    find_package(SDL2 REQUIRED CONFIG)
-    find_package(SDL2_image REQUIRED CONFIG)
-    target_link_libraries(pokeemerald PRIVATE
-        SDL2_image::SDL2_image-static
-        SDL2::SDL2-static
-        vitaGL
-        vitashark
-        mathneon
-        SceShaccCgExt
-        SceShaccCg_stub
-        SceKernelDmacMgr_stub
-        taihen_stub
-        SceGxm_stub
-        SceDisplay_stub
-        ScePower_stub
-        SceAudio_stub
-        SceCtrl_stub
-        SceTouch_stub
-        SceRtc_stub
-        stdc++
-        m)
 endif()
-
-if(NOT DECK)
-target_link_options(pokeemerald PRIVATE -Wl,-z,max-page-size=0x10000 -Wl,-z,common-page-size=0x10000)
-# libwebp (pulled in by SDL2_image) needs pthread. CMake appends transitive dependencies after
-# the target's own libraries, so it has to go at the very end of the link line.
-set(CMAKE_C_STANDARD_LIBRARIES "-lpthread -lm")
-
-# Leaves room after the code segment for the module info vita-elf-create appends.
-set_property(TARGET pokeemerald PROPERTY RULE_LAUNCH_LINK "bash '${ROOT}/vita/vita_link.sh'")
-
-# UNSAFE: the game reads and writes ux0:data/POKEVITA/.
-vita_create_self(eboot.bin pokeemerald UNSAFE)
-# Equivalent of vita_create_vpk, which joins its -a arguments into one string and splits it
-# on spaces, so it breaks when the checkout path has one (e.g. "Pokemon Esmeralda").
-# LiveArea images are 8-bit indexed PNGs made by vita/make_livearea.sh.
-set(SCE_SYS "${ROOT}/vita/sce_sys")
-set(SCE_SYS_FILES
-    icon0.png
-    pic0.png
-    livearea/contents/bg.png
-    livearea/contents/startup.png
-    livearea/contents/template.xml)
-set(VPK_FILE_ARGS)
-set(VPK_FILE_DEPS)
-# vita/sce_sys holds neutral images; your own LiveArea art can go in vita/sce_sys_custom (same
-# names, not committed) and is used instead.
-foreach(FILE_NAME IN LISTS SCE_SYS_FILES)
-    set(SCE_FILE "${SCE_SYS}/${FILE_NAME}")
-    if(EXISTS "${ROOT}/vita/sce_sys_custom/${FILE_NAME}")
-        set(SCE_FILE "${ROOT}/vita/sce_sys_custom/${FILE_NAME}")
-    endif()
-    list(APPEND VPK_FILE_ARGS -a "${SCE_FILE}=sce_sys/${FILE_NAME}")
-    list(APPEND VPK_FILE_DEPS "${SCE_FILE}")
-endforeach()
-# Voxel 3D diorama assets read from app0:voxel/
-file(GLOB VOXEL_ASSETS CONFIGURE_DEPENDS "${ROOT}/assets/voxel/*.*")
-foreach(VA IN LISTS VOXEL_ASSETS)
-    get_filename_component(VA_NAME "${VA}" NAME)
-    list(APPEND VPK_FILE_ARGS -a "${VA}=voxel/${VA_NAME}")
-    list(APPEND VPK_FILE_DEPS "${VA}")
-endforeach()
-
-# Follower Pokemon HGSS assets read from app0:followers/
-if(EXISTS "${ROOT}/assets/followers")
-    list(APPEND VPK_FILE_ARGS -a "${ROOT}/assets/followers=followers")
-    list(APPEND VPK_FILE_DEPS "${ROOT}/assets/followers/sources.txt")
-endif()
-
-# Procedural Emerald 3DS UI & HUD binary assets read from app0:ui/
-file(GLOB UI_ASSETS CONFIGURE_DEPENDS "${ROOT}/assets/ui/*.bin")
-foreach(UA IN LISTS UI_ASSETS)
-    get_filename_component(UA_NAME "${UA}" NAME)
-    list(APPEND VPK_FILE_ARGS -a "${UA}=ui/${UA_NAME}")
-    list(APPEND VPK_FILE_DEPS "${UA}")
-endforeach()
-
-# New UI atlas read from app0:ui2/ (built by tools/ui2/build_atlas.py)
-file(GLOB UI2_ASSETS CONFIGURE_DEPENDS "${ROOT}/assets/ui2/*.bin")
-foreach(UA IN LISTS UI2_ASSETS)
-    get_filename_component(UA_NAME "${UA}" NAME)
-    list(APPEND VPK_FILE_ARGS -a "${UA}=ui2/${UA_NAME}")
-    list(APPEND VPK_FILE_DEPS "${UA}")
-endforeach()
-
-set(PARAM_SFO "${CMAKE_BINARY_DIR}/param.sfo")
-add_custom_command(
-    OUTPUT "${PARAM_SFO}"
-    COMMAND "${VITA_MKSFOEX}" -d ATTRIBUTE2=12 -s APP_VER=${VITA_VERSION} -s TITLE_ID=${VITA_TITLEID} "${VITA_APP_NAME}" "${PARAM_SFO}"
-    DEPENDS "${CMAKE_BINARY_DIR}/eboot.bin"
-    COMMENT "Generating param.sfo"
-    VERBATIM)
-add_custom_command(
-    OUTPUT "${CMAKE_BINARY_DIR}/pokeemerald.vpk"
-    COMMAND "${VITA_PACK_VPK}" ${VPK_FILE_ARGS} -s "${PARAM_SFO}" -b "${CMAKE_BINARY_DIR}/eboot.bin" "${CMAKE_BINARY_DIR}/pokeemerald.vpk"
-    DEPENDS "${PARAM_SFO}" "${CMAKE_BINARY_DIR}/eboot.bin" ${VPK_FILE_DEPS}
-    COMMENT "Building pokeemerald.vpk"
-    VERBATIM)
-add_custom_target(pokeemerald-vpk ALL DEPENDS "${CMAKE_BINARY_DIR}/pokeemerald.vpk")
-add_dependencies(pokeemerald-vpk eboot.bin-self)
-endif()  # NOT DECK
 
 if(DECK)
     # Platform-side sources: Vita-SDK files are swapped for the Deck versions by the source filter above.
@@ -468,7 +333,7 @@ if(DECK)
             COMMAND "${CMAKE_COMMAND}" -E copy "${ROOT}/tools/deck/run.sh" "${DECK_DIST}/run.sh"
             COMMAND chmod +x "${DECK_DIST}/run.sh")
     endif()
-    # The VPK also packs followers/ and ui2/ (each only when present).
+    # followers/ and ui2/ are copied only when present.
     if(EXISTS "${ROOT}/assets/followers")
         add_custom_command(TARGET pokeemerald POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ROOT}/assets/followers" "${DECK_DIST}/app0/followers")

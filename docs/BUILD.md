@@ -12,7 +12,7 @@ Emerald cartridge; see the legal note at the top of [BUILD_DECK.md](BUILD_DECK.m
 
 ## Steps both flows share
 
-0. **Game files** (once): `./fetch_assets.sh <your Emerald dump>` (MINGW64 or Linux shell) checks the
+0. **Game files** (once): `./tools/fetch_assets.sh <your Emerald dump>` (MINGW64 or Linux shell) checks the
    dump, downloads the decompilation's graphics, sounds and data, and generates the files made from
    them. Its last step needs the graphics that `assets.mk` converts, so on a clean tree it has to
    run twice, with steps 1 and 2 between the runs (`FETCH_NO_CONVERT=1` makes the first run stop
@@ -33,7 +33,7 @@ rebuild delete the build folder (or run `tools/windows/build.sh --clean`).
 
 | Option | Default | Effect |
 |---|---|---|
-| `DECK` | OFF | Steam Deck build (32-bit x86 Linux) |
+| `DECK` | always ON | Steam Deck build (32-bit x86 Linux); the PS Vita build was removed, so this is the base and `-DDECK=ON` is only kept for old command lines |
 | `WINDOWS` | OFF | Windows build; implies `DECK` |
 | `VITA_PARALLEL_DRAW` | ON | Draw GBA frames on the worker threads. Also enables the 288-px widescreen lines |
 | `VITA_LOGGING` | OFF | `VITA_LOG` writes a debug log |

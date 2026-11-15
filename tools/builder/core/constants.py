@@ -4,9 +4,9 @@ import re
 import sys
 
 # --- facts taken from the repository's own docs and scripts ---------------------------------
-ROM_SIZE = 16 * 1024 * 1024            # fetch_assets.sh: size 16777216
+ROM_SIZE = 16 * 1024 * 1024            # tools/fetch_assets.sh: size 16777216
 ROM_TITLE = b"POKEMON EMER"            # offset 0xA0, 12 bytes
-EMERALD_US_SHA1 = "f3ae088181bf583e55daf962a92bb46f4f1d07b7"   # fetch_assets.sh EMERALD_US_SHA1
+EMERALD_US_SHA1 = "f3ae088181bf583e55daf962a92bb46f4f1d07b7"   # tools/fetch_assets.sh EMERALD_US_SHA1
 MSYS_PACKAGES = [                       # docs/WINDOWS_BUILD.md, Rebuild step 1
     "make", "git", "cmake", "tar", "patch", "diffutils", "python", "zip", "unzip",
     "mingw-w64-i686-toolchain", "mingw-w64-i686-cmake", "mingw-w64-i686-ninja",

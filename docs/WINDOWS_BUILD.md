@@ -25,10 +25,10 @@ besides the ones Windows has.
 2. Game files (once, needs your own Emerald dump; this repository carries none):
    ```sh
    # MINGW64 shell
-   FETCH_NO_CONVERT=1 ./fetch_assets.sh /path/to/emerald.gba     # stops at "Generating the port's files": run step 3 first
+   FETCH_NO_CONVERT=1 ./tools/fetch_assets.sh /path/to/emerald.gba     # stops at "Generating the port's files": run step 3 first
    make -f make_tools.mk -j8 CC="gcc -static" CXX="g++ -static"
    make -f vita/assets.mk -j8
-   ./fetch_assets.sh /path/to/emerald.gba     # again: now it makes the UI atlas and .assets_ok
+   ./tools/fetch_assets.sh /path/to/emerald.gba     # again: now it makes the UI atlas and .assets_ok
    ```
    (The fetch script's last step needs the graphics that `assets.mk` converts, so on a clean
    tree it has to run twice. The Deck flow hit the same ordering.)

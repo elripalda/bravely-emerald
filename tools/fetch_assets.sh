@@ -2,7 +2,7 @@
 # Gets the game's graphics, sounds and binary data, which this repository does not carry, and
 # generates the port's files made from them. Run it once before the first build:
 #
-#     ./fetch_assets.sh /path/to/your/pokemon_emerald.gba
+#     ./tools/fetch_assets.sh /path/to/your/pokemon_emerald.gba
 #
 # 1. Checks that the file is a Pokémon Emerald cartridge dump (any language): size, title, game
 #    code and header checksum. The ROM is only read for this check; nothing is copied from it,
@@ -12,13 +12,13 @@
 #    from), at a fixed commit, and checks each one against the hash in the manifest.
 # 3. Generates the port's files built from them: the new UI atlas and the design mocks' images
 #    (Python 3 with Pillow). The intro margins need the converted graphics and are made by
-#    build_vita.sh.
+#    tools/deck/build_deck.sh and tools/windows/build.sh.
 #
 # Needs: git, make, a C compiler, libpng headers, and Python 3 with Pillow (pip install pillow).
 # Env: FETCH_JOBS (make jobs), FETCH_MAKE_ARGS (extra make_tools.mk arguments).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 SRC_URL="https://github.com/gradenGnostic/pokeemerald-multiplatform.git"
@@ -30,7 +30,7 @@ EMERALD_US_SHA1="f3ae088181bf583e55daf962a92bb46f4f1d07b7"
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 ROM="${1:-}"
-[ -n "$ROM" ] || die "usage: ./fetch_assets.sh <path to your Pokémon Emerald .gba dump>"
+[ -n "$ROM" ] || die "usage: ./tools/fetch_assets.sh <path to your Pokémon Emerald .gba dump>"
 [ -f "$ROM" ] || die "'$ROM' does not exist"
 
 # ---------------------------------------------------------------- 1. the ROM
@@ -97,4 +97,4 @@ done
 "$PY" tools/ui2/build_atlas.py
 
 echo "$code" > .assets_ok
-echo "=== Done: you can build now (build_vita.ps1 or build_vita.sh) ==="
+echo "=== Done: you can build now (tools/deck/build_deck.sh or tools/windows/build.sh) ==="
