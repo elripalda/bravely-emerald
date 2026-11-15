@@ -160,8 +160,6 @@ compiler cannot run in a browser. A browser-only builder is therefore not possib
 reused (it is also under CC BY-NC-SA 4.0). This app is the closest equivalent: it runs on your computer, uses the
 tools of the scripts, and nothing leaves it.
 
-## Not verified
+## Tested and not verified
 
-See the test report in the pull request or hand-off: the Linux target was exercised in dry-run only unless a
-Deck run is noted there, the MSYS2 install and the packages and SDL2 install buttons were not run on a clean
-Windows, and Game Mode start-up is as unverified as in `BUILD_DECK.md`.
+Tested on Windows 10 (2026-11-15): the core tests; the window offscreen (every page rendered and read); a full Windows build driven through the core in a fresh clone (26 min 42 s, from the ROM to `pokeemerald.exe` and the zip; the exe reached the title screen with no GL error logged); the PyInstaller exe starts, opens its window and quits with exit code 0. Not verified: the Linux and Steam Deck target beyond command construction (dry run), the Linux package and `build_linux_in_container.sh`, the install buttons on a computer without MSYS2, the effect of the jobs setting through `OMP_NUM_THREADS`, the low-priority class, and Game Mode start-up (as in `BUILD_DECK.md`).
