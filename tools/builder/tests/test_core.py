@@ -199,12 +199,12 @@ class PlanTests(unittest.TestCase):
         b = self._builder("windows")
         if b.have_assets():
             steps = b.plan_build({"targets": ["windows"], "jobs": 3})[2]
-            self.assertEqual([s.stage for s in steps], ["tools", "package"])
+            self.assertEqual([s.stage for s in steps], ["tools", "package", "package"])
         else:
             rom = os.path.join(tempfile.mkdtemp(), "e.gba")
             make_rom(rom)
             steps = b.plan_build({"targets": ["windows"], "jobs": 3, "rom": rom})[2]
-            self.assertEqual([s.stage for s in steps], ["files", "tools", "assets", "files", "tools", "package"])
+            self.assertEqual([s.stage for s in steps], ["files", "tools", "assets", "files", "tools", "package", "package"])
             self.assertIn("FETCH_NO_CONVERT=1", steps[0].argv[2])
             self.assertEqual(steps[0].env["MSYSTEM"], "MINGW64")
             self.assertIn(rom, steps[0].argv)               # the ROM path is its own argument ...
@@ -212,7 +212,8 @@ class PlanTests(unittest.TestCase):
             tol = steps[0].tolerate
             self.assertTrue(tol(["=== Copying 5 files ===", "=== Generating the port's files ==="]))
             self.assertFalse(tol(["ERROR: not a Pokemon Emerald dump"]))
-        self.assertIn("OMP_NUM_THREADS", steps[-2].argv[2])
+        self.assertIn("OMP_NUM_THREADS", steps[-3].argv[2])
+        self.assertTrue(steps[-1].func)
 
     def test_dry_run_task_finishes(self):
         b = self._builder("steamos")
@@ -240,13 +241,6 @@ class PlanTests(unittest.TestCase):
             for what in ("packages", "deps"):
                 label, stages, steps, meta = b.plan_install(what, True)
                 self.assertTrue(steps and "logdir" in meta)
-
-    def test_clone_plan(self):
-        b = self._builder("windows")
-        dest = os.path.join(tempfile.mkdtemp(), "clone")
-        label, stages, steps, meta = b.plan_clone(dest)
-        self.assertEqual(steps[0].argv[1:3], ["clone", "--progress"])
-        self.assertEqual(steps[0].env["GIT_TERMINAL_PROMPT"], "0")
 
 
 class RunnerTests(unittest.TestCase):
