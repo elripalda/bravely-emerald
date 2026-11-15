@@ -46,7 +46,11 @@ fi
 
 step "Configuring CMake in $BUILD_DIR"
 CACHE="$BUILD_DIR/CMakeCache.txt"
-if [ -f "$CACHE" ] && ! grep -q "CMAKE_HOME_DIRECTORY:INTERNAL=$ROOT\$" "$CACHE"; then
+# CMake stores the source folder as a Windows path (F:/x/y) while $ROOT is an MSYS path (/f/x/y): compare the mixed form, ignoring
+# case, or every run would throw the build folder away and compile everything again
+ROOT_MIXED="$(cygpath -m "$ROOT" 2>/dev/null || echo "$ROOT")"
+CACHED_HOME="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$CACHE" 2>/dev/null | tr 'A-Z' 'a-z')"
+if [ -f "$CACHE" ] && [ "$CACHED_HOME" != "$(echo "$ROOT_MIXED" | tr 'A-Z' 'a-z')" ] && [ "$CACHED_HOME" != "$(echo "$ROOT" | tr 'A-Z' 'a-z')" ]; then
     rm -rf "$BUILD_DIR"
 fi
 cmake -S . -B "$BUILD_DIR" -G "Unix Makefiles" -DWINDOWS=ON -DCMAKE_BUILD_TYPE=Release \
