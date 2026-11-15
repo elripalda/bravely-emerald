@@ -7,7 +7,8 @@ import threading
 import time
 
 class Step:
-    def __init__(self, name, stage, argv, env=None, cwd=None, tolerate=None, stage_rules=None, note=None, func=None):
+    def __init__(self, name, stage, argv, env=None, cwd=None, tolerate=None, stage_rules=None, note=None, func=None, retries=0):
+        self.retries = retries                     # extra tries when the output shows a network or mirror problem
         self.name, self.stage, self.argv = name, stage, argv
         self.func = func                           # in-process step: callable(task); raises on failure (argv is then unused)
         self.env, self.cwd, self.tolerate = env or {}, cwd, tolerate

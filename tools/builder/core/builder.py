@@ -10,10 +10,11 @@ import threading
 import time
 import urllib.request
 
-from .constants import (MSYS_PACKAGES, MSYS_INSTALLER_URL, MSYS_INSTALLER_FILE, MIN_FREE_GB, HARD_MIN_FREE_GB,
+from .constants import (DOWNLOAD_MB, SDL2_VERSION, SDL2_IMAGE_VERSION, MSYS_PACKAGES, MSYS_INSTALLER_URL, MSYS_INSTALLER_FILE, MIN_FREE_GB, HARD_MIN_FREE_GB,
                         CONTAINER_RE)
 from .errors import explain
 from .host import detect_host
+from .probe import Probe, find_msys_root
 from .repo import is_repo
 from .settings import load_settings
 from .tasks import Step, Task, kill_tree
@@ -34,14 +35,20 @@ class Builder:
         self.last_checks = None        # result of the last checks(), reused when planning a build
         self.pkg_missing = None        # missing MSYS2 packages from the last check (None: unknown)
         self.msys_root = None
+        self.probe = Probe(self)       # tests replace it with a fake host
 
     # ----- environment helpers
     def settings(self):
         return load_settings()
 
     def msys(self):
-        root = self.msys_root or load_settings().get("msys_root") or r"C:\msys64"
-        return root
+        return self.msys_root_found()[0]
+
+    def msys_root_found(self):
+        """(root, how): how names the way an existing MSYS2 was found, None when it is not installed (root = where it will go)."""
+        if self.msys_root:
+            return self.msys_root, ("set by the caller" if os.path.isfile(os.path.join(self.msys_root, "usr", "bin", "bash.exe")) else None)
+        return find_msys_root(load_settings().get("msys_root"))
 
     def msys_bash(self):
         return os.path.join(self.msys(), "usr", "bin", "bash.exe")
@@ -83,6 +90,76 @@ class Builder:
              "why": "Native build in a distrobox container (tools/deck/build_deck.sh)." if lin_ok else
              "Not available here: the Linux build needs a Linux x86_64 host with distrobox. Building it from Windows (WSL) has not been verified."},
         ]
+
+    # ----- plan: what is present, missing or outdated, and what a build would do about it
+    def plan(self, target=None, rom_needed=None):
+        """One row per component: id, label, state (present|missing|outdated|unknown), mb (download), detail, todo."""
+        k = self.host["kind"]
+        target = target or ("windows" if k == "windows" else "linux32")
+        pr = self.probe
+        rows = []
+
+        def row(id_, label, state, detail, todo, mb=0):
+            rows.append({"id": id_, "label": label, "state": state, "detail": detail,
+                         "todo": todo if state != "present" else "nothing: already installed, skipped", "mb": mb if state != "present" else 0})
+
+        if target == "windows":
+            root, how = pr.msys()
+            if how:
+                row("msys2", "MSYS2", "present", "%s (found: %s)" % (root, how), "")
+            else:
+                row("msys2", "MSYS2", "missing", "not found; it will go to %s" % root,
+                    "download the official installer and install it silently", DOWNLOAD_MB["msys2"])
+            if not how:
+                row("packages", "MSYS2 packages", "missing", "all %d" % len(MSYS_PACKAGES), "update MSYS2, then install the packages", DOWNLOAD_MB["packages"])
+            else:
+                missing, err = pr.packages_missing()
+                if err:
+                    row("packages", "MSYS2 packages", "unknown", "pacman could not be queried: %s" % err, "run the install (pacman skips what is installed)", DOWNLOAD_MB["packages"])
+                elif missing:
+                    row("packages", "MSYS2 packages", "missing", "missing: %s" % ", ".join(missing), "update MSYS2, install only the missing packages", DOWNLOAD_MB["packages"] * len(missing) // len(MSYS_PACKAGES))
+                else:
+                    row("packages", "MSYS2 packages", "present", "all %d installed" % len(MSYS_PACKAGES), "")
+            d = pr.deps()
+            row("deps", "SDL2 %s + SDL2_image %s (static)" % (SDL2_VERSION, SDL2_IMAGE_VERSION), d,
+                {"present": "build-win/deps, versions match", "missing": "not built", "outdated": "half built or another version"}[d],
+                "build them (a few minutes)" if d == "missing" else "remove the old build-win/deps and build them again", DOWNLOAD_MB["deps"])
+            row("tools", "Host tools (preproc, gbagfx)", "present" if pr.tools() else "missing", "tools/*/*.exe", "compile them (about a minute)")
+            have_assets = pr.assets()
+            row("assets", "Game files (from your ROM)", "present" if have_assets else "missing", ".assets_ok",
+                "check the ROM, download and convert the files", DOWNLOAD_MB["assets"])
+            b = pr.build_dir()
+            row("build_dir", "CMake build folder (build-win/out)", b,
+                {"present": "configured for this folder", "missing": "none yet: full compile", "outdated": "made for another folder: it is removed"}[b],
+                "configure and compile everything" if b != "present" else "")
+        else:
+            for tool in ("podman", "distrobox"):
+                have = pr.which(tool)
+                row(tool, tool, "present" if have else "missing", have or "not found: install it with your package manager",
+                    "install %s (needs your administrator password; the app never asks for it)" % tool)
+            name = self.settings().get("container") or "emerald-build"
+            if pr.which("distrobox"):
+                ok = pr.container(name)
+                row("container", "Container '%s'" % name, "present" if ok else "missing", "distrobox list",
+                    "create it (Arch Linux image) and install the 32-bit toolchain", 400)
+            else:
+                row("container", "Container '%s'" % name, "missing", "distrobox is missing", "create it after distrobox is installed", 400)
+            d = self.default_dir()
+            row("deps32", "SDL2 + SDL2_image 32-bit (static)", "present" if pr.linux_deps(d) else "missing", "deps32/lib",
+                "build them inside the container (a few minutes)", DOWNLOAD_MB["deps"])
+            row("assets", "Game files (from your ROM)", "present" if pr.assets() else "missing", ".assets_ok",
+                "check the ROM, download and convert the files", DOWNLOAD_MB["assets"])
+            row("build_dir", "Build folder", "present" if pr.linux_build_dir(d) else "missing", "build/CMakeCache.txt", "configure and compile everything")
+        return rows
+
+    def plan_text(self, target=None):
+        rows = self.plan(target)
+        out = ["%-10s %-9s %8s  %s" % ("component", "state", "download", "what a build does")]
+        for r in rows:
+            out.append("%-10s %-9s %8s  %s  [%s]" % (r["id"], r["state"].upper(), ("%d MB" % r["mb"]) if r["mb"] else "-", r["todo"], r["detail"]))
+        total = sum(r["mb"] for r in rows)
+        out.append("Total download: about %d MB%s" % (total, "" if total else " (nothing to install)"))
+        return chr(10).join(out)
 
     # ----- prerequisite checks
     def checks(self):
@@ -259,7 +336,7 @@ class Builder:
             raise ValueError("Jobs must be a number from 1 to 64.")
         low = bool(opts.get("low_priority"))
         rom = ""
-        if not self.have_assets() or opts.get("force_assets"):
+        if not self.probe.assets() or opts.get("force_assets"):
             rom = clean_path(opts.get("rom", ""), "ROM path", no_space=(target == "linux32"))
             v = validate_rom(rom)
             if not v["ok"]:
@@ -276,22 +353,24 @@ class Builder:
             if blockers:
                 raise ValueError("Cannot build yet: " + "; ".join("%s (%s)" % (c["label"], c["detail"]) for c in blockers))
         steps = []
-        have_msys = os.path.isfile(self.msys_bash())
-        if not have_msys:
-            steps.append(Step("Install MSYS2 (official installer)", "install", [], func=self._msys2_step))
-        need_pkgs = not have_msys
+        rows = {r["id"]: r for r in self.plan("windows")}
+        have_msys = rows["msys2"]["state"] == "present"
+        need_pkgs = rows["packages"]["state"] != "present"
+
+        def noted(text):
+            return Step(text, "prereq", [], func=lambda task, t=text: task.log("already installed / up to date: skipped. " + t))
+
         if have_msys:
-            if self.pkg_missing is None and not self.dry_run:
-                missing, err = self._missing_packages()
-                self.pkg_missing = None if err else missing
-                need_pkgs = bool(err or missing)
-            else:
-                need_pkgs = bool(self.pkg_missing)
+            steps.append(noted("MSYS2 is installed: %s" % rows["msys2"]["detail"]))
+        else:
+            steps.append(Step("Install MSYS2 (official installer)", "install", [], func=self._msys2_step))
         if need_pkgs:
-            s1, e1 = self.msys_cmd("pacman --noconfirm -Syu")
-            s2, e2 = self.msys_cmd('pacman --noconfirm -S --needed "$@"', MSYS_PACKAGES)
-            steps.append(Step("Update MSYS2 (it may ask for a restart of MSYS2; that is fine)", "install", s1, e1, tolerate=lambda lines: True))
-            steps.append(Step("Install the build packages", "install", s2, e2))
+            sync = lambda task: self._pacman_sync(task)
+            steps.append(Step("Update MSYS2 (repeated until pacman has nothing left to do)", "install", [], func=sync))
+            s2, e2 = self.msys_cmd('pacman --noconfirm --needed -S "$@"', MSYS_PACKAGES)
+            steps.append(Step("Install the missing build packages (retried up to 3 times if a mirror times out)", "install", s2, e2, retries=3))
+        else:
+            steps.append(noted("all %d MSYS2 packages are installed: no pacman run" % len(MSYS_PACKAGES)))
         bash_rules = [
             (r"=== Building the host tools", "tools"), (r"=== Converting the game files", "assets"),
             (r"=== Intro margins", "assets"), (r"=== SDL2 and SDL2_image", "deps"),
@@ -303,8 +382,11 @@ class Builder:
             a, e = self.msys_cmd(fetch, [self.repo, rom], "MINGW64")
             steps.append(Step("Game files, pass 1 (checks the ROM, downloads the files; stops at the port's files, as documented)", "files", a, e,
                               tolerate=lambda lines: any("Generating the port's files" in l for l in lines) and any("=== Copying" in l for l in lines)))
-            a, e = self.msys_cmd('cd "$(cygpath -u "$1")" && make -f make_tools.mk -j"$2" CC="gcc -static" CXX="g++ -static"', [self.repo, jobs], "MINGW64")
-            steps.append(Step("Host tools (static)", "tools", a, e))
+            if rows["tools"]["state"] == "present":
+                steps.append(noted("host tools (preproc, gbagfx) are built"))
+            else:
+                a, e = self.msys_cmd('cd "$(cygpath -u "$1")" && make -f make_tools.mk -j"$2" CC="gcc -static" CXX="g++ -static"', [self.repo, jobs], "MINGW64")
+                steps.append(Step("Host tools (static)", "tools", a, e))
             a, e = self.msys_cmd('cd "$(cygpath -u "$1")" && make -f vita/assets.mk -j"$2"', [self.repo, jobs], "MINGW64")
             steps.append(Step("Converting the game's graphics and data", "assets", a, e))
             a, e = self.msys_cmd('cd "$(cygpath -u "$1")" && bash ./fetch_assets.sh "$(cygpath -u "$2")"', [self.repo, rom], "MINGW64")
@@ -421,31 +503,9 @@ class Builder:
                         task.finish("failed", hints=[{"title": "The step failed.", "fix": str(e)}], step=step.name)
                         return
                     continue
-                try:
-                    proc, real = self._spawn(step, low)
-                except OSError as e:
-                    task.log("ERROR: cannot start: %s" % e)
-                    task.finish("failed", hints=[{"title": "The program could not be started.", "fix": str(e)}])
+                rc, lines = self._run_proc(task, step, low, tail)
+                if rc is None:                      # could not start
                     return
-                task.proc = proc
-                lines = []
-                for raw in iter(proc.stdout.readline, b""):
-                    line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-                    lines.append(line)
-                    tail.append(line)
-                    if len(tail) > 600:
-                        del tail[:200]
-                    task.log(line)
-                    for pat, st in step.stage_rules:
-                        if re.search(pat, line):
-                            task.set_stage(st)
-                    m = re.match(r"^\[\s*(\d+)%\]", line)
-                    if m:
-                        task.emit("progress", pct=int(m.group(1)))
-                proc.wait()
-                proc.stdout.close()
-                task.proc = None
-                rc = proc.returncode
                 if task.cancel_requested:
                     break
                 if rc != 0 and not (step.tolerate and step.tolerate(lines)):
@@ -472,6 +532,106 @@ class Builder:
         except Exception as e:           # never leave the UI waiting
             task.log("INTERNAL ERROR: %r" % (e,))
             task.finish("failed", hints=[{"title": "Internal error in the builder.", "fix": repr(e)}])
+
+    RETRY_RE = re.compile(r"failed retrieving file|Operation too slow|Connection timed out|Could not resolve host|"
+                          r"error: failed to (retrieve|commit)|download library error|SSL connect error|Connection reset|"
+                          r"unable to lock database|Maximum file size exceeded|curl: \(\d+\)", re.I)
+
+    def _run_proc(self, task, step, low, tail):
+        """Run one subprocess step, retrying up to step.retries times when the output shows a network or mirror problem.
+        Returns (exit code, lines); (None, []) when the program could not be started (the task is finished as failed)."""
+        for attempt in range(step.retries + 1):
+            try:
+                proc, real = self._spawn(step, low)
+            except OSError as e:
+                task.log("ERROR: cannot start: %s" % e)
+                task.finish("failed", hints=[{"title": "The program could not be started.", "fix": str(e)}], step=step.name)
+                return None, []
+            task.proc = proc
+            lines = []
+            for raw in iter(proc.stdout.readline, b""):
+                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                lines.append(line)
+                tail.append(line)
+                if len(tail) > 600:
+                    del tail[:200]
+                task.log(line)
+                for pat, st in step.stage_rules:
+                    if re.search(pat, line):
+                        task.set_stage(st)
+                m = re.match(r"^\[\s*(\d+)%\]", line)
+                if m:
+                    task.emit("progress", pct=int(m.group(1)))
+            proc.wait()
+            proc.stdout.close()
+            task.proc = None
+            rc = proc.returncode
+            if rc == 0 or task.cancel_requested or attempt >= step.retries or not self.RETRY_RE.search("\n".join(lines[-80:])):
+                return rc, lines
+            task.log("")
+            task.log("The download did not work (the mirror or the network is slow). Trying again, attempt %d of %d, in %d seconds." %
+                     (attempt + 2, step.retries + 1, 10 * (attempt + 1)))
+            for _ in range(10 * (attempt + 1)):
+                if task.cancel_requested:
+                    return rc, lines
+                time.sleep(1)
+        return rc, lines
+
+    def _pacman_sync(self, task):
+        """First sync on a fresh MSYS2, following https://www.msys2.org/docs/updating/ : the core update may end the shell
+        (restart needed), so repeat 'pacman -Syuu' until it has nothing left to do (at most 4 rounds)."""
+        root = self.msys()
+        low = task.meta.get("low", False)
+        self._wait_pacman_lock(task, root)
+        init = ('[ -f /etc/pacman.d/gnupg/trustdb.gpg ] || { echo "Setting up the pacman keyring"; pacman-key --init && pacman-key --populate msys2; }; '
+                'echo "MSYS2 shell ready (home: $HOME)"')
+        a, e = self.msys_cmd(init)
+        rc, _ = self._run_proc(task, Step("keyring", "install", a, e), low, [])
+        for rnd in range(1, 5):
+            if task.cancel_requested:
+                return
+            task.log("")
+            task.log("-- pacman system update, round %d (a restart of MSYS2 in the middle is normal)" % rnd)
+            a, e = self.msys_cmd("pacman --noconfirm -Syuu")
+            rc, lines = self._run_proc(task, Step("pacman -Syuu", "install", a, e, retries=3), low, [])
+            text = "\n".join(lines)
+            if rc == 0 and ("there is nothing to do" in text and "starting full system upgrade" in text.lower()) :
+                task.log("-- system is up to date")
+                return
+            if rc == 0 and rnd > 1 and "there is nothing to do" in text:
+                return
+            if rc not in (0, None) and not re.search(r"terminate|restart|msys2-runtime|core system", text, re.I) and rnd >= 2:
+                raise RuntimeError("pacman -Syuu failed (exit code %s); see the lines above." % rc)
+        task.log("-- the update ran 4 rounds; going on with the package install")
+
+    def _wait_pacman_lock(self, task, root):
+        lock = os.path.join(root, "var", "lib", "pacman", "db.lck")
+        if not os.path.exists(lock):
+            return
+        task.log("pacman lock file found: %s" % lock)
+        for i in range(30):
+            if not self._pacman_running():
+                try:
+                    os.remove(lock)
+                    task.log("No pacman is running: the old lock file was removed.")
+                except OSError as e:
+                    raise RuntimeError("Cannot remove %s: %s. Close MSYS2 windows and try again." % (lock, e))
+                return
+            if i == 0:
+                task.log("Another pacman is running. Waiting for it (up to 5 minutes).")
+            time.sleep(10)
+        raise RuntimeError("Another pacman keeps running. Close the MSYS2 windows (or wait for the update) and try again.")
+
+    @staticmethod
+    def _pacman_running():
+        if os.name != "nt":
+            return False
+        try:
+            p = subprocess.run(["tasklist", "/FI", "IMAGENAME eq pacman.exe", "/NH"], capture_output=True, text=True, timeout=20,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return "pacman.exe" in p.stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return False
 
     def _msys2_step(self, task):
         if not self._run_msys2_install(task):

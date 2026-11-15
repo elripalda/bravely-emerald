@@ -198,12 +198,12 @@ class PlanTests(unittest.TestCase):
     def test_windows_steps(self):
         b = self._builder("windows")
         if b.have_assets():
-            steps = b.plan_build({"targets": ["windows"], "jobs": 3})[2]
+            steps = [s for s in b.plan_build({"targets": ["windows"], "jobs": 3})[2] if s.stage != "prereq"]
             self.assertEqual([s.stage for s in steps], ["tools", "package", "package"])
         else:
             rom = os.path.join(tempfile.mkdtemp(), "e.gba")
             make_rom(rom)
-            steps = b.plan_build({"targets": ["windows"], "jobs": 3, "rom": rom})[2]
+            steps = [s for s in b.plan_build({"targets": ["windows"], "jobs": 3, "rom": rom})[2] if s.stage != "prereq"]
             self.assertEqual([s.stage for s in steps], ["files", "tools", "assets", "files", "tools", "package", "package"])
             self.assertIn("FETCH_NO_CONVERT=1", steps[0].argv[2])
             self.assertEqual(steps[0].env["MSYSTEM"], "MINGW64")

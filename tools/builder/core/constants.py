@@ -13,6 +13,11 @@ MSYS_PACKAGES = [                       # docs/WINDOWS_BUILD.md, Rebuild step 1
     "mingw-w64-x86_64-gcc", "mingw-w64-x86_64-libpng", "mingw-w64-x86_64-pkgconf",
     "mingw-w64-x86_64-python-pillow",
 ]
+MSYS_DEFAULT_ROOT = "C:\\msys64"
+SDL2_VERSION = "2.32.10"
+SDL2_IMAGE_VERSION = "2.8.12"
+# rough download sizes in MB, shown by the plan (the real ones are logged by the build)
+DOWNLOAD_MB = {"msys2": 85, "packages": 900, "deps": 12, "assets": 40}
 MSYS_INSTALLER_URL = "https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-latest.exe"
 MSYS_INSTALLER_FILE = "msys2-x86_64-latest.exe"
 MSYS_INSTALLER_HOST_OK = ("https://github.com/msys2/msys2-installer/",)

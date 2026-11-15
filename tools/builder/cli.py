@@ -3,6 +3,7 @@
 exe can be tested without a display:  BravelyEmeraldBuilder.exe --selftest   |   --build --rom X --out DIR
 
     cli.py checks   [--repo DIR]
+    cli.py plan     [--repo DIR] [--target windows|linux32] [--json]   (present / missing / outdated, download size, what a build does)
     cli.py rom FILE
     cli.py source   [--repo DIR] [--force]     (resolve the source; extract the bundle)
     cli.py selftest
@@ -107,11 +108,13 @@ def main(argv=None):
     setup_stdout()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("checks", "build", "source"):
+    for name in ("checks", "build", "source", "plan"):
         p = sub.add_parser(name)
         p.add_argument("--repo", default=None)
         p.add_argument("--dry-run", action="store_true")
     sub.choices["source"].add_argument("--force", action="store_true")
+    sub.choices["plan"].add_argument("--target", default=None, choices=["windows", "linux32"])
+    sub.choices["plan"].add_argument("--json", action="store_true")
     bp = sub.choices["build"]
     bp.add_argument("--target", default=None, choices=["windows", "linux32"])
     bp.add_argument("--rom", default="")
@@ -135,6 +138,12 @@ def main(argv=None):
             make_builder(a.repo, a.dry_run, a.force)
             return 0
         b, _ = make_builder(a.repo, a.dry_run)
+        if a.cmd == "plan":
+            if a.json:
+                print(json.dumps(b.plan(a.target), indent=1))
+            else:
+                print(b.plan_text(a.target))
+            return 0
         if a.cmd == "checks":
             for c in b.checks():
                 print("%-5s %-10s %s" % (c["status"], c["id"], c["detail"]))
@@ -148,6 +157,8 @@ def main(argv=None):
             print("ERROR:", e)
             return 2
         meta["container"] = a.container
+        print("What this build will do about what is already on this PC:", flush=True)
+        print(b.plan_text(target), flush=True)
         return run_task(b, label, stages, steps, meta)[0]
     except SourceError as e:
         print("ERROR:", e)
