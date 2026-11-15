@@ -82,7 +82,7 @@ All port settings are in the START menu under **OPTIONS** (tabs GENERAL, WORLD, 
 They are stored in `userdata/settings.txt` as `key=value` lines, so you can also
 edit the file with the game closed. Level rows store `0` OFF, `1` AUTO, `2` LOW, `3` MEDIUM, `4` HIGH
 (AUTO follows *EFFECTS PRESET*). The full list of keys and menu labels is in the
-[README](../README.md#settings-reference). Useful ones:
+[settings reference](FEATURES.md#settings-reference). Useful ones:
 
 | Want | Key | Value |
 |---|---|---|
