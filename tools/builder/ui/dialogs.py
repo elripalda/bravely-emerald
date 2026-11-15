@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
                                QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTextBrowser, QVBoxLayout)
 
 from core.source import help_file
-from . import classic
+from . import win95
 
 CPU_TEXT = [("low", "Low (recommended): half of the processor threads, low priority. The computer stays usable."),
             ("normal", "Normal: three quarters of the processor threads."),
@@ -29,16 +29,6 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Settings")
         self.setMinimumWidth(620)
         lay = QVBoxLayout(self)
-
-        g = QGroupBox("Install folder")
-        gl = QHBoxLayout(g)
-        self.dir_edit = QLineEdit(main.install_dir())
-        self.dir_edit.setAccessibleName("Install folder")
-        b = QPushButton("Browse...")
-        b.clicked.connect(self.pick_dir)
-        gl.addWidget(self.dir_edit, 1)
-        gl.addWidget(b)
-        lay.addWidget(g)
 
         g = QGroupBox("CPU usage")
         gl = QVBoxLayout(g)
@@ -97,7 +87,7 @@ class SettingsDialog(QDialog):
         gl = QVBoxLayout(g)
         self.check_out = QPlainTextEdit()
         self.check_out.setReadOnly(True)
-        self.check_out.setFont(classic.mono_font())
+        self.check_out.setFont(win95.mono_font())
         self.check_out.setMaximumHeight(130)
         self.check_btn = QPushButton("Check now")
         self.check_btn.clicked.connect(self.run_check)
@@ -124,11 +114,6 @@ class SettingsDialog(QDialog):
         self.work_edit.setText(m.source.work)
         self.bundled.setEnabled(bool(m.source.own) and m.source.manifest is not None)
 
-    def pick_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Install folder", self.dir_edit.text() or os.path.expanduser("~"))
-        if d:
-            self.dir_edit.setText(os.path.normpath(d))
-
     def run_check(self):
         if not self.main.builder.repo:
             self.check_out.setPlainText("The source is not ready yet.")
@@ -143,7 +128,7 @@ class SettingsDialog(QDialog):
         self.check_btn.setEnabled(True)
 
     def values(self):
-        v = {"dir": self.dir_edit.text().strip(), "cpu": self.cpu.currentData()}
+        v = {"cpu": self.cpu.currentData()}
         if self.linux_box is not None:
             v["container"] = self.container.text().strip() or "emerald-build"
             v["run_test"] = self.run_test.isChecked()

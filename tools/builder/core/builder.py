@@ -53,7 +53,9 @@ class Builder:
 
     def default_dir(self):
         if self.host["kind"] == "windows":
-            return os.path.join(os.path.expanduser("~"), "BravelyEmerald", "game")
+            home = os.path.expanduser("~")
+            docs = os.path.join(home, "Documents")
+            return os.path.join(docs if os.path.isdir(docs) else home, "Bravely Emerald")
         return os.path.join(os.path.expanduser("~"), "emerald-deck")
 
     def have_assets(self):

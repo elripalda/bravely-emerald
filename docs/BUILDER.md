@@ -1,12 +1,12 @@
 # The builder app
 
-A small desktop program (Python 3 and Qt through PySide6, in the look of a 1995 installer) that builds the game from
+A small desktop program (Python 3 and Qt through PySide6, in the look of Windows 95) that builds the game from
 **your own Pokemon Emerald dump**, for Windows or for Linux and the Steam Deck. You choose the ROM and press one button.
 The program carries the project source inside it, checks the computer, installs what is missing, gets the game files,
 compiles and packs the game. It runs the existing build scripts (`tools/deck/build_deck.sh`, `fetch_assets.sh` and
 `tools/windows/*`) as subprocesses; it does not replace them.
 
-![The main screen](screens/builder_main.png)
+![The main screen](screens/builder_idle.png)
 
 Legal note first: the repository holds no ROM and no game data, and neither does the app. The result of a build
 contains Nintendo's data. Use it yourself and **do not share it**. The ROM is only read to check it (by
@@ -45,40 +45,48 @@ window and quit, a self test), `--selftest` (extract the bundled source and dry-
 
 ## The screens
 
-**Main screen.** The title and one line of what it does; *Choose your ROM* with a Browse button and the result under
-it (a tick and "Pokemon Emerald (USA) found.", or a short reason); the notice *Before you start* (internet, what is
-downloaded, 30 to 60 minutes, 15 GB, the ROM is only read, own use only); and **Build Bravely Emerald**. The target is
-chosen from the computer: a Windows exe on Windows, the Linux 32-bit (Steam Deck) build on Linux and SteamOS.
-The prerequisite check runs by itself in the background at start and only shows a problem when it stops the build.
+The window has the layout of the mockup: a Windows 95 window (520 x 392 at 1x, fixed size) with its own title bar, a `?` button
+(opens the Help page) and an `X` button (close). Esc and Alt+F4 close it too; double-clicking the title bar does nothing.
 
-![Confirmation](screens/builder_confirm.png)
+![Main screen, 2x](screens/builder_idle.png)
 
-The button asks one question (Continue or Cancel) that repeats the download notice. Then everything runs without more
-decisions: check the computer, install the build tools, get the game files, compile, package.
+1. **Select ROM location**: a sunken text field and **Browse**. The result is shown under it: "Pokemon Emerald found (USA)." or a
+   short reason (wrong size, not Emerald, modified header). The ROM is only needed the first time.
+2. **Where to build?**: the folder for the finished game (default `Documents\Bravely Emerald` on Windows, `~/emerald-deck` on Linux).
+3. The consent checkbox: "Yeah, download the nerdy stuff needed to build (requires internet and it is safe). \*". The link under
+   it opens a message box with what is downloaded and the approximate sizes (MSYS2 or the build container, compiler packages, SDL2,
+   the game files from the public pret/pokeemerald project), the 30 to 60 minutes, the 15 GB, that the ROM is only read and never copied
+   or uploaded, and that the build is for your own use only. The checkbox is the consent: there is no extra dialog.
+4. **Build** (default button). It stays disabled until a valid ROM (or the game files of an earlier build), a valid folder and the
+   ticked checkbox are there. A **Settings...** link sits at the bottom left.
+
+![Ready to build](screens/builder_ready_to_build.png)
+
+The target follows the computer: a Windows exe on Windows, the Linux 32-bit (Steam Deck) build on Linux and SteamOS. The prerequisite
+check runs by itself in the background at start and only shows a problem on the form when it stops the build. Then everything runs
+without more decisions: check the computer, install the build tools, get the game files, compile, package.
 
 ![Building, details shown](screens/builder_building.png)
 
-**While building:** a progress bar (the classic segmented bar), the step in plain words, the elapsed time, *Cancel*
-(stops the whole process tree) and *Show details >>* for the live log. *Copy log* copies it. When a step fails the program shows a short
-explanation and the suggested fix from the table of known errors, with *Try again* (it resumes: finished steps are
-skipped), *Copy log* and *Show details*.
+**While building:** the form is replaced by the progress view: the classic blue-block bar, the step in plain words, the elapsed time,
+**Cancel** (stops the whole process tree) and **Show details >>** for the live log (a sunken white field, monospace). **Copy log**
+copies it. A failure shows a short explanation and the suggested fix from the table of known errors, in the window and in a classic
+message box with **Retry**; **Try again** resumes (finished steps are skipped).
 
 ![A failed step](screens/builder_failed.png)
 
-**Ready.** "Your build is ready." with the folder, *Open folder*, *Play*, and one line of next step (Windows: press
-Play or double-click `run.bat`; Linux and Deck: add the launcher to Steam, with a Help button).
+**Done:** "Your build is ready" with the folder, **Open folder**, **Play**, and one line of next step (Windows: press Play or
+double-click `run.bat`; Linux and Deck: add the launcher to Steam, with a Help button).
 
-![Ready](screens/builder_ready.png)
+![Done](screens/builder_done.png)
 
-**File, Settings.** Install folder (default `%USERPROFILE%\BravelyEmerald\game` on Windows, `~/emerald-deck` on
-Linux), CPU usage (Low is the default: half of the threads at low priority; Normal three quarters; High all), the source
-(work folder, *Use my own checkout*, *Re-extract bundled source*), the Linux container name and start-up test, a button
-that lists the result of the computer check, and the place of the build logs.
-**Help, Contents** opens `docs/BUILDER_HELP.md`, bundled in the app and rendered inside it (no browser, no network): the Steam Game
-Mode steps, saves, settings, troubleshooting and the legal text.
+**Settings...** (CPU usage Low/Normal/High, Low is the default: half of the threads at low priority; the source: work folder, *Use my
+own checkout*, *Re-extract bundled source*; the Linux container name and start-up test; a button that lists the result of the computer
+check; the place of the build logs) and **?** (the Help page, `docs/BUILDER_HELP.md`, bundled in the app and rendered inside it, no
+browser, no network: Steam Game Mode steps, saves, troubleshooting, legal text) hold everything else.
 
-Choices are remembered in `bravely_builder_settings.json` next to the app (or in `~/.config/bravely-builder` when that
-folder is not writable): paths and option values only, never ROM contents.
+Choices are remembered in `bravely_builder_settings.json` next to the app (or in `~/.config/bravely-builder` when that folder is not
+writable): paths and option values only, never ROM contents.
 
 ## The bundled source
 
@@ -126,7 +134,8 @@ tools/builder/
     host.py  constants.py  validate.py  errors.py  settings.py  tasks.py  repo.py
     builder.py      targets, checks, command construction, runner, installs, results
     source.py       bundled source: manifest, safe extraction, update, which repository is used
-  ui/               classic.py (Windows 95 look), main_window.py (the screen), dialogs.py (Settings, Help)
+  ui/               win95.py (the Windows 95 style, colours, pixel glyphs, font), main_window.py (the window), dialogs.py (Settings, Help)
+  fonts/            W95FA.otf and its licence
   tests/            test_core.py, test_source.py, test_ui.py (offscreen), shots.py (renders every screen to PNG)
   package.py        bundle + PyInstaller        packaging/  Linux install files, container build script
 docs/BUILDER_HELP.md   the Help page (bundled into the app)
@@ -142,9 +151,54 @@ docs/BUILDER_HELP.md   the Help page (bundled into the app)
 
 ## Look
 
-Qt's classic `Windows` style with a classic palette (face `#C0C0C0`, navy `#000080`, tooltip `#FFFFE1`), a small sans UI font, no
-style sheet, no gradients, no rounded corners. It is built into Qt, so Linux looks the same. The window keeps the native
-frame; it does not fake a title bar.
+A hand written Windows 95 style (`ui/win95.py`: a `QProxyStyle` over Qt's `Windows` style, no style sheet) with the colours of the
+**Windows 95 "Windows Standard" scheme**. The values come from the "Windows Classic" column of
+[brethorsting.com/blog/2007/12/windows-system-colors](https://www.brethorsting.com/blog/2007/12/windows-system-colors/); Wine's defaults
+and the "Windows Standard" column of that page are the later Windows 2000 / XP scheme (face `#D4D0C8`) and were not used.
+
+| Element | Colour |
+|---|---|
+| Face (windows, buttons) | `#C0C0C0` |
+| 3D highlight (ButtonHilight) | `#FFFFFF` |
+| 3D light (ButtonLight) | `#C0C0C0` (the same as the face in Windows 95) |
+| 3D shadow (ButtonShadow) | `#808080` |
+| 3D dark shadow | `#000000` |
+| Text, window (text fields) | `#000000`, `#FFFFFF` |
+| Active caption, selection | `#000080` with `#FFFFFF` text (inactive caption `#808080`, text `#C0C0C0`, not used: the window is always active) |
+| Tooltip | `#FFFFE1` |
+| Disabled text (GrayText) | `#808080` |
+
+The Win95 scheme has no `#DFDFDF`: in Windows 95 the "light" edge colour is `#C0C0C0`, so the inner top-left line of a raised edge
+is invisible against the face. (`#DFDFDF` appears in later themes.)
+
+Edges are built like GDI `DrawEdge`, two pixels wide: raised = outer top-left highlight, outer bottom-right dark shadow, inner
+top-left light, inner bottom-right shadow; sunken (text fields, the progress trough, the log) = the reverse, with the dark shadow
+inside at the top left; pressed buttons are the raised edge inverted; the default button has an extra black 1 px outline; the focus
+is a dotted rectangle; the etched line is 1 px `#808080` over 1 px white; the window border is 2 px (light and white at the top
+left, black and `#808080` at the bottom right). Check boxes are 13 x 13 sunken white squares with a hand drawn black check. The
+progress bar is a sunken trough with navy `#000080` blocks 8 px wide and 2 px apart. The caption is 20 px high (Win95 uses 18; the
+16 px font needs the room), with the 16 x 16 gem icon, the title in bold white and two 16 x 14 raised buttons whose `?` and `X`
+glyphs are pixel bitmaps in `win95.py`, not font characters. There are no animations and no sounds. `tests/test_ui.py` checks the
+pixels of the edges.
+
+![Zoom: the default button](screens/builder_zoom_button.png)
+![Zoom: the progress bar](screens/builder_zoom_progress.png)
+
+**Font.** The authentic Windows 95 font is MS Sans Serif 8 pt, a bitmap font that is not redistributable and does not exist on
+Linux. The app bundles **W95FA** (`tools/builder/fonts/W95FA.otf`, 43,372 bytes), a Windows 95 style pixel font by Alina Sava under
+the **SIL Open Font License 1.1**, downloaded from its source, https://fontsarena.com/wp-content/uploads/2020/01/W95FA.zip (the
+licence text is in `docs/licenses/W95FA-OFL.txt` and in the package). It is drawn at 16 px with no antialiasing and full hinting;
+the section labels use the same font at 32 px (an exact doubling, so they stay crisp pixels); bold is the font smeared by one pixel
+(the caption) or synthesised. `BRAVELY_FONT=system` uses Microsoft Sans Serif, Tahoma or DejaVu Sans instead. The log uses Courier New.
+
+**Scaling** is by whole numbers only: the UI is drawn at 1x and enlarged with `QT_SCALE_FACTOR` (rounding policy Floor), so bevels
+stay crisp. The factor is the largest whole number that keeps the 392 pixel high window on the screen (2x on 1080p and on the Deck's
+1280 x 800); `BRAVELY_SCALE=1..4` overrides it.
+
+**Frame.** The window is frameless with the title bar drawn by the app. Dragging uses `QWindow.startSystemMove()`; if the platform
+does not support it the app moves the window by mouse and says so in the details log; on Wayland without move support it falls back to
+the native frame, also logged. `BRAVELY_NATIVE_FRAME=1` forces the native frame. The Settings and Help dialogs and the message boxes
+use the native frame of the system with the same style inside.
 
 ## Packaging
 

@@ -98,7 +98,8 @@ def run_pyinstaller():
         sys.exit("PyInstaller is not installed in this Python: pip install pyinstaller PySide6-Essentials")
     args = ["--noconfirm", "--clean", "--windowed", "--name", NAME, "--distpath", OUT, "--workpath", WORK, "--specpath", WORK,
             "--paths", HERE, "--add-data", BUNDLE + os.pathsep + "bundle",
-            "--add-data", os.path.join(REPO, "docs", "BUILDER_HELP.md") + os.pathsep + "help"]
+            "--add-data", os.path.join(REPO, "docs", "BUILDER_HELP.md") + os.pathsep + "help",
+            "--add-data", os.path.join(HERE, "fonts") + os.pathsep + "fonts"]
     for m in EXCLUDES:
         args += ["--exclude-module", m]
     args.append(os.path.join(HERE, "app.py"))
