@@ -112,3 +112,7 @@ __pycache__/
 
 # scratch screenshots from test runs
 /.shots_tmp/
+.venv-builder/
+tools/builder/bravely_builder_settings.json
+tools/builder/dist-builder/
+tools/builder/build-builder/
