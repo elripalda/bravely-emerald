@@ -116,7 +116,7 @@ class WindowTests(unittest.TestCase):
         from ui.main_window import TITLE, WIDTH, HEIGHT
         self.assertIsInstance(self.app.style(), win95.Win95Style)
         self.assertEqual(self.app.styleSheet(), "")             # no style sheet: the style class draws every edge
-        self.assertEqual(win95.load_font(), "W95FA")
+        self.assertNotEqual(win95.load_font(), "W95FA")         # the normal font is a scalable system font; W95FA is a Settings option
         w = self.window()
         self.assertEqual(TITLE, "Pokemon Bravely Emerald Builder")
         self.assertEqual((w.width(), w.height()), (WIDTH, HEIGHT))      # fixed size

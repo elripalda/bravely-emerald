@@ -117,7 +117,12 @@ def main(argv=None):
     ap.add_argument("--smoke", action="store_true", help="start, create the window, quit after a second (self test)")
     args = ap.parse_args(argv)
     from core import scale as uiscale
-    scale_info = uiscale.configure()
+    try:
+        from core.settings import load_settings
+        classic = os.environ.get("BRAVELY_FONT") == "classic" or (os.environ.get("BRAVELY_FONT") != "system" and bool(load_settings().get("classic_font")))
+    except Exception:
+        classic = False
+    scale_info = uiscale.configure(whole_numbers=classic)
     try:
         from PySide6.QtCore import QTimer
         from PySide6.QtWidgets import QApplication

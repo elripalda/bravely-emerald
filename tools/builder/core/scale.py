@@ -1,30 +1,45 @@
-"""Whole-number UI scale. No Qt imports: the probe runs Qt in a child process, the rule is a pure function (tested).
+"""UI scale. No Qt imports: the probe runs Qt in a child process, the rule is a pure function (tested).
 
-The window is designed at 1x (WINDOW_SIZE, a normal Windows 95 dialog size) and only ever enlarged by 1, 2 or 3:
-  natural = what the OS gives (its scale factor rounded down), and 2 on screens 2560 pixels wide or more that have no OS scaling
-  cap     = the largest whole number that keeps the window within 55% of the screen width and of the screen height
-  scale   = the smaller of the two; BRAVELY_UI_SCALE=1|2|3 overrides it.
+The window is designed at 1x (WINDOW_SIZE, a normal Windows 95 dialog size). The text is a vector font and the bevels are drawn in
+device pixels, so the scale can be fractional (1.0, 1.25, 1.5, 1.75, 2.0 ...). The rule:
+  target  = the scale that makes the window about 42% of the screen height (the middle of 40 to 45%), in steps of 0.25
+  os      = the scale the operating system gives (Windows 125% or 150%, a 2x display), used when it is larger than the target
+  cap     = the largest step that keeps the window within 55% of the screen width and height
+  scale   = max(os, target), but never above the cap, never below 1.0; BRAVELY_UI_SCALE=1.25 (decimals) overrides it.
+Qt applies the OS scale itself (rounding policy PassThrough: 125% stays 125%), so QT_SCALE_FACTOR only carries scale / os.
 """
 import json
+import math
 import os
 import subprocess
 import sys
 
 WINDOW_SIZE = (480, 360)
+TARGET_FRACTION = 0.42        # of the screen height; 0.40 to 0.45 is the aim
 CAP_FRACTION = 0.55
-MAX_SCALE = 3
+STEP = 0.25
+MIN_SCALE = 1.0
+MAX_SCALE = 4.0
+
+
+def _floor_step(x):
+    return math.floor(x / STEP + 1e-9) * STEP
+
+
+def _round_step(x):
+    return round(x / STEP) * STEP
 
 
 def choose_scale(screen_w, screen_h, os_scale=1.0, window=WINDOW_SIZE, override=None):
-    """Returns (scale, natural, cap). screen_w/h are physical pixels."""
-    if override in (1, 2, 3):
-        return override, override, override
-    natural = max(1, int(os_scale))
-    if screen_w >= 2560 and natural < 2:
-        natural = 2
-    cap = int(min(CAP_FRACTION * screen_w // window[0], CAP_FRACTION * screen_h // window[1]))
-    cap = max(1, min(MAX_SCALE, cap))
-    return min(natural, cap), natural, cap
+    """Returns (scale, target, cap). screen_w/h are physical pixels, os_scale is the OS device pixel ratio (may be fractional)."""
+    if override:
+        v = max(0.5, min(MAX_SCALE, float(override)))
+        return v, v, v
+    target = _round_step(TARGET_FRACTION * screen_h / window[1])
+    cap = _floor_step(min(CAP_FRACTION * screen_w / window[0], CAP_FRACTION * screen_h / window[1]))
+    cap = max(MIN_SCALE, min(MAX_SCALE, cap))
+    wanted = max(MIN_SCALE, target, _round_step(os_scale) if os_scale > 1 else MIN_SCALE)
+    return min(wanted, cap), max(MIN_SCALE, target), cap
 
 
 PROBE_CODE = ("import json; from PySide6.QtGui import QGuiApplication; a = QGuiApplication([]); s = a.primaryScreen(); "
@@ -36,7 +51,7 @@ def probe_screen():
     still be configured afterwards. None when it cannot be found."""
     env = dict(os.environ)
     env.pop("QT_SCALE_FACTOR", None)
-    env["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "Floor"
+    env["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
     cmd = [sys.executable, "--probe-screen"] if getattr(sys, "frozen", False) else [sys.executable, "-c", PROBE_CODE]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=20, env=env).stdout.strip().splitlines()
@@ -46,26 +61,36 @@ def probe_screen():
         return None
 
 
-def configure(window=WINDOW_SIZE):
-    """Set QT_SCALE_FACTOR (before Qt starts) so that the total scale is the chosen whole number. Returns a log line."""
+def parse_override(text):
+    try:
+        v = float((text or "").replace(",", "."))
+        return v if 0.5 <= v <= MAX_SCALE else None
+    except ValueError:
+        return None
+
+
+def configure(window=WINDOW_SIZE, whole_numbers=False):
+    """Set QT_SCALE_FACTOR (before Qt starts) so that the total scale is the chosen one. Returns a log line.
+    whole_numbers: the classic pixel font only looks right at whole multiples of its 16 pixel grid."""
+    os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
     if os.environ.get("QT_SCALE_FACTOR"):
         return "UI scale from QT_SCALE_FACTOR=%s (set by the caller)" % os.environ["QT_SCALE_FACTOR"]
-    override = os.environ.get("BRAVELY_UI_SCALE") or os.environ.get("BRAVELY_SCALE")
-    override = int(override) if override and override.isdigit() else None
+    override = parse_override(os.environ.get("BRAVELY_UI_SCALE") or os.environ.get("BRAVELY_SCALE"))
     if os.environ.get("QT_QPA_PLATFORM") == "offscreen" and not override:
         return "UI scale 1 (offscreen platform)"
     info = probe_screen()
-    os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "Floor"
     if info is None:
-        scale, natural, cap = (override or 1), 1, 1
+        scale, target, cap = (override or 1.0), 1.0, 1.0
         screen = "unknown screen"
-        os_scale = 1
+        os_scale = 1.0
     else:
         w, h, os_scale = info
-        scale, natural, cap = choose_scale(w, h, os_scale, window, override)
+        scale, target, cap = choose_scale(w, h, os_scale, window, override)
         screen = "screen %dx%d, OS scale %g" % (w, h, os_scale)
-    factor = scale / max(1, int(os_scale))                    # Qt already applies the OS scale; add only the difference
-    if factor != 1:
-        os.environ["QT_SCALE_FACTOR"] = repr(factor)
-    return "UI scale %d (%s, natural %d, cap %d%s): window %dx%d px" % (scale, screen, natural, cap, ", override" if override else "",
-                                                                          window[0] * scale, window[1] * scale)
+    if whole_numbers and not override:
+        scale = max(1, int(scale))
+    factor = scale / max(1.0, os_scale)                       # Qt already applies the OS scale; add only the difference
+    if abs(factor - 1) > 1e-6:
+        os.environ["QT_SCALE_FACTOR"] = repr(round(factor, 4))
+    return "UI scale %g (%s, target %g, cap %g%s): window %dx%d px" % (scale, screen, target, cap, ", override" if override else "",
+                                                                         round(window[0] * scale), round(window[1] * scale))

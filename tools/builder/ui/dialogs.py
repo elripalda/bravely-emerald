@@ -40,6 +40,13 @@ class SettingsDialog(QDialog):
         gl.addWidget(self.cpu)
         lay.addWidget(g)
 
+        g = QGroupBox("Text")
+        gl = QVBoxLayout(g)
+        self.classic = QCheckBox("Classic pixel font (Windows 95 look; sharp only at whole-number sizes; takes effect after a restart)")
+        self.classic.setChecked(bool(main.setting("classic_font", False)))
+        gl.addWidget(self.classic)
+        lay.addWidget(g)
+
         g = QGroupBox("Source files")
         gl = QGridLayout(g)
         self.src_lbl = QLabel(main.source.describe())
@@ -128,7 +135,7 @@ class SettingsDialog(QDialog):
         self.check_btn.setEnabled(True)
 
     def values(self):
-        v = {"cpu": self.cpu.currentData()}
+        v = {"cpu": self.cpu.currentData(), "classic_font": self.classic.isChecked()}
         if self.linux_box is not None:
             v["container"] = self.container.text().strip() or "emerald-build"
             v["run_test"] = self.run_test.isChecked()

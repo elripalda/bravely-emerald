@@ -184,31 +184,44 @@ pixels of the edges.
 ![Zoom: the default button](screens/builder_zoom_button.png)
 ![Zoom: the progress bar](screens/builder_zoom_progress.png)
 
-**Font.** The authentic Windows 95 font is MS Sans Serif 8 pt, a bitmap font that is not redistributable and does not exist on
-Linux. The app bundles **W95FA** (`tools/builder/fonts/W95FA.otf`, 43,372 bytes), a Windows 95 style pixel font by Alina Sava under
-the **SIL Open Font License 1.1**, downloaded from its source, https://fontsarena.com/wp-content/uploads/2020/01/W95FA.zip (the
-licence text is in `docs/licenses/W95FA-OFL.txt` and in the package). It is drawn at 16 px with no antialiasing and full hinting;
-the section labels use the same font at 32 px (an exact doubling, so they stay crisp pixels); bold is the font smeared by one pixel
-(the caption) or synthesised. `BRAVELY_FONT=system` uses Microsoft Sans Serif, Tahoma or DejaVu Sans instead. The log uses Courier New.
+**Font.** The text is a scalable, antialiased font in point sizes, so it is crisp at every size: 9 pt for the text, 10 pt bold for the
+section labels, 9 pt bold in the caption, 9 pt Consolas / Courier New in the log. On Windows the first installed of Microsoft Sans
+Serif (the TrueType successor of Windows 95's MS Sans Serif), Tahoma, Segoe UI, Arial; elsewhere Liberation Sans, DejaVu Sans, Noto
+Sans (`win95.pick_family`, tested). Nothing new is bundled for this. The Settings, Help and message boxes use the same font. The
+pixel font **W95FA** (`tools/builder/fonts/W95FA.otf`, Alina Sava, SIL Open Font License 1.1, from
+https://fontsarena.com/wp-content/uploads/2020/01/W95FA.zip, licence in `docs/licenses/W95FA-OFL.txt`) is only an option:
+Settings > Text > "Classic pixel font" (default off; needs a restart) or `BRAVELY_FONT=classic`. It is drawn at 16 px with no
+antialiasing and the UI scale is then rounded down to a whole number, because a pixel font is only sharp at whole multiples of its
+grid. `BRAVELY_FONT=system` forces the normal font.
 
-**Size and scaling.** The window is designed at 1x: **480 x 360 pixels**, text 16 px (the native size of the pixel font; the
-section labels are the same size in bold). The UI is only ever enlarged by a whole number (1, 2 or 3), so bevels stay crisp pixels.
-The rule (`core/scale.py`, tested): the *natural* scale is what the OS gives, its scale factor rounded down (and 2 on screens 2560
-pixels wide or more that have no OS scaling); the *cap* is the largest whole number that keeps the window within 55% of the screen
-width and of the screen height; the scale is the smaller of the two. The OS scale is not multiplied again: the app adds only the
-difference through `QT_SCALE_FACTOR` (rounding policy Floor). The screen is found by a short child process before Qt starts
-(`--probe-screen` in the packaged exe). `BRAVELY_UI_SCALE=1|2|3` overrides the choice. The chosen scale and window size are printed
-and written to the first lines of the details log. Results of `tests/screens_sim.py`:
+**Edges in device pixels.** Bevel lines, the etched line and the pixel glyphs (check mark, ? and X) are drawn in device pixels
+(`win95._device_rect` maps the logical rectangle through the painter transform and rounds the edges), so every line is exactly one
+device pixel wide at 100%, 125%, 150% and so on, never a blurred 1.25 px line. The icons are drawn at the device resolution.
+
+**Size and scaling.** The window is designed at 1x (**480 x 360 logical pixels**) and enlarged by a scale that can be fractional,
+because the text is vector. The rule (`core/scale.py`, tested): the *target* is the scale that makes the window about 42% of the
+screen height (the middle of 40 to 45%), in steps of 0.25 and never below 1.0; the *OS scale* (Windows 125%, 150%, a 2x display) is
+used when it is larger than the target; the *cap* is the largest step that keeps the window within 55% of the screen width and
+height; scale = max(OS, target), limited by the cap. The OS scale is not multiplied again: Qt applies it (rounding policy
+PassThrough, so 125% stays 125% and is not rounded to 100% or 200%) and the app adds only the difference through `QT_SCALE_FACTOR`.
+The screen is found by a short child process before Qt starts (`--probe-screen` in the packaged exe). `BRAVELY_UI_SCALE=1.25`
+(decimals) overrides the choice. The chosen scale and window size are the first line of the details log.
 
 | Screen | OS scale | UI scale | Window | % of width / height |
 |---|---|---|---|---|
-| 1280 x 800 (Steam Deck) | 100% | 1x | 480 x 360 | 38 / 45 |
-| 1366 x 768 | 100% | 1x | 480 x 360 | 35 / 47 |
-| 1920 x 1080 | 100% | 1x | 480 x 360 | 25 / 33 |
-| 2560 x 1440 | 100% | 2x | 960 x 720 | 38 / 50 |
-| 3840 x 2160 | 100% or 200% | 2x | 960 x 720 | 25 / 33 |
+| 1280 x 800 (Steam Deck) | 100% | 1.0 | 480 x 360 | 38 / 45 |
+| 1366 x 768 | 100% | 1.0 | 480 x 360 | 35 / 47 |
+| 1920 x 1080 | 100% | 1.25 | 600 x 450 | 31 / 42 |
+| 2560 x 1080 (ultrawide) | 100% | 1.25 | 600 x 450 | 23 / 42 |
+| 1920 x 1080 | 150% | 1.5 | 720 x 540 | 38 / 50 |
+| 2560 x 1440 | 100% | 1.75 | 840 x 630 | 33 / 44 |
+| 3840 x 2160 | 100% | 2.5 | 1200 x 900 | 31 / 42 |
 
-![The window on a 1920 x 1080 desktop, actual pixels](screens/builder_desktop_1080p.png)
+Screenshots of the text at 125% and 200%, and a 4x zoom of the letters (smooth antialiasing, no staircase pixels):
+
+![The window at 125%](screens/builder-text-125.png)
+![The window at 200%](screens/builder-text-200.png)
+![Zoom 4x of the text](screens/builder-text-zoom4x.png)
 
 **Frame.** The window is frameless with the title bar drawn by the app. Dragging uses `QWindow.startSystemMove()`; if the platform
 does not support it the app moves the window by mouse and says so in the details log; on Wayland without move support it falls back to

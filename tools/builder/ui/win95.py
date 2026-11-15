@@ -12,11 +12,12 @@ Edges are built like GDI DrawEdge:
   raised  : outer top-left HILIGHT, outer bottom-right DKSHADOW, inner top-left LIGHT, inner bottom-right SHADOW
   sunken  : outer top-left SHADOW,  outer bottom-right HILIGHT,  inner top-left DKSHADOW, inner bottom-right LIGHT
   etched  : 1 px SHADOW over 1 px HILIGHT
-All painting is integer pixels with no antialiasing; the whole UI is scaled by an integer factor (QT_SCALE_FACTOR) only.
+Text is a scalable antialiased font (Microsoft Sans Serif or Tahoma; Liberation / DejaVu / Noto Sans elsewhere); the classic pixel font
+W95FA is an optional setting. Bevel lines are drawn in DEVICE pixels, exactly 1 pixel wide at any scale (see _device_rect).
 """
 import os
 
-from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtCore import QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygon
 from PySide6.QtWidgets import QProxyStyle, QStyle, QStyleOptionButton
 
@@ -34,7 +35,37 @@ TOOLTIP = QColor("#FFFFE1")
 
 BASE_PX = 16                     # W95FA is drawn on a 16 pixel grid: one font pixel = one screen pixel at 1x
 FONT_FILE = "W95FA.otf"
+UI_PT = 9.0                      # body text, 12 px at 96 DPI
+LABEL_PT = 10.0                  # bold section labels
 _family = None
+_classic = False
+
+UI_FAMILIES_WINDOWS = ("Microsoft Sans Serif", "Tahoma", "Segoe UI", "Arial")
+UI_FAMILIES_OTHER = ("Liberation Sans", "DejaVu Sans", "Noto Sans", "Arial", "Helvetica")
+MONO_FAMILIES_WINDOWS = ("Consolas", "Courier New", "Lucida Console")
+MONO_FAMILIES_OTHER = ("Liberation Mono", "DejaVu Sans Mono", "Noto Sans Mono", "Courier New", "Courier")
+
+
+def pick_family(have, windows, mono=False):
+    """First installed family of the rule for this system, or None (the caller then uses Qt's default)."""
+    table = (MONO_FAMILIES_WINDOWS if windows else MONO_FAMILIES_OTHER) if mono else (UI_FAMILIES_WINDOWS if windows else UI_FAMILIES_OTHER)
+    have = set(have)
+    for fam in table:
+        if fam in have:
+            return fam
+    return None
+
+
+def classic_font_wanted():
+    """The optional classic pixel font: Settings, or BRAVELY_FONT=classic. BRAVELY_FONT=system forces the normal font."""
+    env = os.environ.get("BRAVELY_FONT")
+    if env in ("classic", "system"):
+        return env == "classic"
+    try:
+        from core.settings import load_settings
+        return bool(load_settings().get("classic_font"))
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------------------------- fonts
@@ -52,59 +83,65 @@ def font_path():
 
 
 def load_font():
-    """Register the bundled W95FA (SIL OFL 1.1) and return the family name; falls back to Microsoft Sans Serif, Tahoma, DejaVu Sans."""
-    global _family
+    """The UI family: the system sans serif by the rule above; W95FA only when the classic font is switched on."""
+    global _family, _classic
     if _family:
         return _family
-    if not os.environ.get("BRAVELY_FONT") == "system":
+    if classic_font_wanted():
         path = font_path()
         if path:
             fid = QFontDatabase.addApplicationFont(path)
             fams = QFontDatabase.applicationFontFamilies(fid) if fid >= 0 else []
             if fams:
-                _family = fams[0]
+                _family, _classic = fams[0], True
                 return _family
-    have = set(QFontDatabase.families())
-    for fam in ("MS Sans Serif", "Microsoft Sans Serif", "Tahoma", "DejaVu Sans", "Arial"):
-        if fam in have:
-            _family = fam
-            return _family
-    _family = QFont().family()
+    _family = pick_family(QFontDatabase.families(), os.name == "nt") or QFont().family()
+    _classic = False
     return _family
 
 
 def uses_pixel_font():
-    return load_font() == "W95FA"
+    load_font()
+    return _classic
 
 
-def ui_font(scale=1, bold=False):
-    """The UI font: W95FA at 16 px (an integer multiple for big labels), crisp: no antialiasing, full hinting."""
+def ui_font(scale=1, bold=False, pt=None):
+    """Scalable text in point sizes (9 pt body, 10 pt bold labels), antialiased, so it is crisp at every scale. The classic pixel
+    font is 16 px per font pixel times a whole number, no antialiasing."""
     f = QFont(load_font())
     if uses_pixel_font():
         f.setPixelSize(BASE_PX * scale)
+        f.setStyleStrategy(QFont.NoAntialias)
+        f.setHintingPreference(QFont.PreferFullHinting)
     else:
-        f.setPixelSize(11 * scale)                 # MS Sans Serif / Tahoma 8 pt
+        f.setPointSizeF((pt or (LABEL_PT if bold else UI_PT)) * scale)
+        f.setStyleStrategy(QFont.PreferAntialias)
+        f.setHintingPreference(QFont.PreferFullHinting if os.name == "nt" else QFont.PreferDefaultHinting)
     f.setBold(bold)
-    f.setStyleStrategy(QFont.NoAntialias)
-    f.setHintingPreference(QFont.PreferFullHinting)
     return f
 
 
 def mono_font():
-    have = set(QFontDatabase.families())
-    for fam in ("Courier New", "Lucida Console", "DejaVu Sans Mono", "Courier"):
-        if fam in have:
-            f = QFont(fam)
-            break
-    else:
-        f = QFont()
+    fam = pick_family(QFontDatabase.families(), os.name == "nt", mono=True)
+    f = QFont(fam) if fam else QFont()
+    if not fam:
         f.setStyleHint(QFont.Monospace)
-    f.setPixelSize(13)
-    f.setStyleStrategy(QFont.NoAntialias)
+    f.setPointSizeF(UI_PT)
+    f.setStyleStrategy(QFont.PreferAntialias)
+    f.setHintingPreference(QFont.PreferFullHinting if os.name == "nt" else QFont.PreferDefaultHinting)
     return f
 
 
 # ---------------------------------------------------------------------------------------------- edge drawing
+def _device_rect(p, r):
+    """The rectangle r (in the painter's logical pixels) as whole device pixels, edges rounded the same way for neighbours."""
+    t = p.transform()
+    a = t.map(QPointF(r.x(), r.y()))
+    b = t.map(QPointF(r.x() + r.width(), r.y() + r.height()))
+    x0, y0, x1, y1 = round(a.x()), round(a.y()), round(b.x()), round(b.y())
+    return QRect(x0, y0, max(1, x1 - x0), max(1, y1 - y0))
+
+
 def _hline(p, x, y, w, c):
     if w > 0:
         p.fillRect(x, y, w, 1, c)
@@ -116,10 +153,14 @@ def _vline(p, x, y, h, c):
 
 
 def edge(p, r, tl_outer, br_outer, tl_inner, br_inner, face=None):
-    """Two pixel edge in the DrawEdge way. r is the QRect of the whole element."""
-    x, y, w, h = r.x(), r.y(), r.width(), r.height()
+    """Two pixel edge in the DrawEdge way. r is the QRect of the whole element. Drawn in device pixels: each line is exactly one
+    device pixel wide at 100%, 125%, 150% ... so nothing is blurred by the scale."""
+    p.save()
+    d = _device_rect(p, r)
+    p.resetTransform()
+    x, y, w, h = d.x(), d.y(), d.width(), d.height()
     if face is not None:
-        p.fillRect(r, face)
+        p.fillRect(d, face)
     # outer ring: top-left lines stop one pixel short, bottom-right lines own the corners
     _hline(p, x, y, w - 1, tl_outer)
     _vline(p, x, y, h - 1, tl_outer)
@@ -130,6 +171,7 @@ def edge(p, r, tl_outer, br_outer, tl_inner, br_inner, face=None):
     _vline(p, x + 1, y + 1, h - 3, tl_inner)
     _hline(p, x + 1, y + h - 2, w - 2, br_inner)
     _vline(p, x + w - 2, y + 1, h - 2, br_inner)
+    p.restore()
 
 
 def raised(p, r, face=FACE):
@@ -151,15 +193,23 @@ def window_frame(p, r):
 
 
 def etched_h(p, x, y, w):
-    _hline(p, x, y, w, SHADOW)
-    _hline(p, x, y + 1, w, HILIGHT)
+    p.save()
+    d = _device_rect(p, QRect(x, y, w, 2))
+    p.resetTransform()
+    _hline(p, d.x(), d.y(), d.width(), SHADOW)
+    _hline(p, d.x(), d.y() + 1, d.width(), HILIGHT)
+    p.restore()
 
 
 def draw_bitmap(p, x, y, rows, color, scale=1):
-    for j, row in enumerate(rows):
-        for i, ch in enumerate(row):
-            if ch == "X":
-                p.fillRect(x + i * scale, y + j * scale, scale, scale, color)
+    """Pixel glyphs (check mark, ? and X): every cell is a block of whole device pixels, neighbours share their edges."""
+    p.save()
+    cells = [(i, j) for j, row in enumerate(rows) for i, ch in enumerate(row) if ch == "X"]
+    rects = [_device_rect(p, QRect(x + i * scale, y + j * scale, scale, scale)) for i, j in cells]
+    p.resetTransform()
+    for d in rects:
+        p.fillRect(d, color)
+    p.restore()
 
 
 CHECK = ("......X", ".....XX", "X...XXX", "XX.XXX.", "XXXXX..", ".XXX...", "..X....")
@@ -285,12 +335,22 @@ def apply(app):
 
 
 # ---------------------------------------------------------------------------------------------- icons
+def icon_ratio():
+    """Whole device pixel ratio for the icons: they are drawn at this resolution and shown at their logical size."""
+    from PySide6.QtGui import QGuiApplication
+    app = QGuiApplication.instance()
+    r = app.devicePixelRatio() if app else 1.0
+    return max(1, min(4, int(-(-r // 1))))
+
+
 def gem_pixmap(size=16):
     """The emerald gem, flat, 16-colour palette, drawn on a 16 pixel grid."""
-    pm = QPixmap(16, 16)
+    k = icon_ratio()
+    pm = QPixmap(16 * k, 16 * k)
+    pm.setDevicePixelRatio(k)
     pm.fill(Qt.transparent)
     q = QPainter(pm)
-    q.setRenderHint(QPainter.Antialiasing, False)
+    q.setRenderHint(QPainter.Antialiasing, k > 1)
 
     def poly(pts, fill):
         q.setPen(QPen(QColor("#000000"), 1))
@@ -303,7 +363,7 @@ def gem_pixmap(size=16):
     q.drawPoint(5, 3)
     q.drawPoint(6, 3)
     q.end()
-    return pm if size == 16 else pm.scaled(size, size, Qt.IgnoreAspectRatio, Qt.FastTransformation)
+    return pm if size == 16 else pm.scaled(size * k, size * k, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
 
 def gem_icon():
@@ -315,10 +375,13 @@ def gem_icon():
 
 def flat_icon(kind, size=32):
     """Flat message-box icons: question, info, warning, error, tick, cross."""
-    pm = QPixmap(32, 32)
+    k = icon_ratio()
+    pm = QPixmap(32 * k, 32 * k)
+    pm.setDevicePixelRatio(k)
     pm.fill(Qt.transparent)
     q = QPainter(pm)
-    q.setRenderHint(QPainter.Antialiasing, False)
+    q.setRenderHint(QPainter.Antialiasing, k > 1)
+    q.setRenderHint(QPainter.TextAntialiasing, True)
     f = ui_font(1, True)
     f.setPixelSize(20)
     q.setFont(f)
@@ -353,4 +416,4 @@ def flat_icon(kind, size=32):
         q.drawLine(6, 6, 26, 26)
         q.drawLine(26, 6, 6, 26)
     q.end()
-    return pm if size == 32 else pm.scaled(size, size, Qt.IgnoreAspectRatio, Qt.FastTransformation)
+    return pm if size == 32 else pm.scaled(size * k, size * k, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)

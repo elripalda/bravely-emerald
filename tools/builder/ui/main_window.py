@@ -177,10 +177,11 @@ class TitleBar(QWidget):
         p.fillRect(self.rect(), win95.NAVY)
         p.drawPixmap(3, 2, win95.gem_pixmap(16))
         p.setPen(win95.HILIGHT)
-        p.setFont(win95.ui_font(1, True))
+        p.setFont(win95.ui_font(1, True, pt=9.0))
         box = QRect(24, 0, self.width() - 60, self.height())
         p.drawText(box, Qt.AlignVCenter | Qt.AlignLeft, TITLE)
-        p.drawText(box.translated(1, 0), Qt.AlignVCenter | Qt.AlignLeft, TITLE)      # the Win95 bold caption is the text smeared by one pixel
+        if win95.uses_pixel_font():                    # the pixel font has no bold: Win95 smeared the text by one pixel
+            p.drawText(box.translated(1, 0), Qt.AlignVCenter | Qt.AlignLeft, TITLE)
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -356,7 +357,8 @@ class MainWindow(QMainWindow):
         self.consent = QCheckBox()
         self.consent.setAccessibleName(CONSENT)
         self.consent.toggled.connect(lambda _: self.update_state())
-        ctext = ClickLabel(CONSENT)
+        ctext = ClickLabel(CONSENT.replace(" (requires", "<br>(requires"))      # a break where it reads well, not after one word
+        ctext.setTextFormat(Qt.RichText)
         ctext.setFont(win95.ui_font(1))
         ctext.setWordWrap(True)
         ctext.clicked.connect(self.consent.toggle)

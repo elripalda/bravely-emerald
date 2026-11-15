@@ -15,7 +15,7 @@ class PackagingTests(unittest.TestCase):
         src = open(os.path.join(BUILDER, "package.py"), encoding="utf-8").read()
         self.assertIn('"--collect-submodules", "core", "--collect-submodules", "ui"', src)
         self.assertNotIn("--hidden-import", src)
-        self.assertEqual(src.count("verify_frozen(exe)"), 2)                 # Windows and Linux packaging both verify the exe
+        self.assertEqual([ln.strip() for ln in src.splitlines()].count("verify_frozen(exe)"), 2)                # Windows and Linux packaging both verify the exe
 
     def test_module_list_matches_the_files(self):
         import package
