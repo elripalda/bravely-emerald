@@ -7,8 +7,9 @@ import threading
 import time
 
 class Step:
-    def __init__(self, name, stage, argv, env=None, cwd=None, tolerate=None, stage_rules=None, note=None):
+    def __init__(self, name, stage, argv, env=None, cwd=None, tolerate=None, stage_rules=None, note=None, func=None):
         self.name, self.stage, self.argv = name, stage, argv
+        self.func = func                           # in-process step: callable(task); raises on failure (argv is then unused)
         self.env, self.cwd, self.tolerate = env or {}, cwd, tolerate
         self.stage_rules = stage_rules or []       # [(regex, stage)] applied to each output line
         self.note = note

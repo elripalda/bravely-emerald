@@ -117,3 +117,4 @@ tools/builder/bravely_builder_settings.json
 tools/builder/dist-builder/
 tools/builder/build-builder/
 tools/builder/smoke.txt
+tools/builder/bundle/

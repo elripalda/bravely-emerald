@@ -20,7 +20,8 @@ MIN_FREE_GB = 15
 HARD_MIN_FREE_GB = 4
 
 SETTING_KEYS = {"targets": list, "rom": str, "dir": str, "jobs": int, "low_priority": bool,
-                "run_test": bool, "container": str, "msys_root": str}
+                "run_test": bool, "container": str, "msys_root": str,
+                "own_checkout": str, "source_dir": str}
 CONTAINER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,40}$")
 
 LEGAL_NOTE = ("Build from your own Pokemon Emerald cartridge dump only. The result contains Nintendo's game data: "

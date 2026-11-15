@@ -4,6 +4,7 @@
     pip install PySide6          (PySide6-Essentials is enough)
     python tools/builder/app.py [--repo DIR] [--dry-run] [--smoke]
 
+--selftest extracts the bundled source and dry-runs this host's build; --build --rom X --out DIR builds without a window.
 --smoke opens the window, lets it run for a moment and quits (used to test the packaged app).
 The logic is in tools/builder/core (no Qt); the windows are in tools/builder/ui. See docs/BUILDER.md.
 """
@@ -17,6 +18,16 @@ if HERE not in sys.path:
 
 
 def main(argv=None):
+    # headless modes, used to test the packaged exe: they run the core without a window (see cli.py)
+    if argv is None:
+        argv = sys.argv[1:]
+    if "--selftest" in argv:
+        import cli
+        return cli.main(["selftest"])
+    if "--build" in argv:
+        import cli
+        rest = [a for a in argv if a != "--build"]
+        return cli.main(["build"] + rest)
     ap = argparse.ArgumentParser(description="Bravely Emerald builder")
     ap.add_argument("--repo", default=None, help="folder of the repository (default: auto-detect, else asked in the window)")
     ap.add_argument("--dry-run", action="store_true", help="show the commands in the log, execute nothing")
@@ -36,8 +47,8 @@ def main(argv=None):
     win.show()
     if args.smoke:
         def finish():
-            msg = "SMOKE OK: window %dx%d visible=%s host=%s repo=%r" % (win.width(), win.height(), win.isVisible(),
-                                                                         win.builder.host["kind"], win.builder.repo)
+            msg = "SMOKE OK: window %dx%d visible=%s host=%s source=%s" % (win.width(), win.height(), win.isVisible(),
+                                                                         win.builder.host["kind"], win.source.mode)
             if sys.stdout is not None:
                 print(msg, flush=True)
             else:                       # a windowed (no console) exe has no stdout: write next to the settings file

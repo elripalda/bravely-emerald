@@ -1,4 +1,4 @@
-"""Main window: Setup (repository, prerequisites, ROM, options), Build (stages, live log), Result."""
+"""Main window: Setup (bundled source, prerequisites, ROM, options), Build (stages, live log), Result."""
 import os
 import sys
 import threading
@@ -10,14 +10,15 @@ from PySide6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QGro
                                QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
                                QRadioButton, QScrollArea, QSpinBox, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
 
-from core import Builder, LEGAL_NOTE, REPO_URL, load_settings, save_settings, validate_rom
-from core.repo import guess_repo, is_repo
+from core import Builder, LEGAL_NOTE, load_settings, save_settings, validate_rom
+from core.repo import is_repo
+from core.source import Source, SourceError, default_work_dir
 from core.validate import fmt_secs
 from . import theme
 
 STAGE_LABELS = {"prereq": "Prerequisites", "container": "Container", "files": "Game files", "tools": "Tools", "assets": "Assets",
                 "deps": "SDL2", "compile": "Compile", "link": "Link", "package": "Package", "test": "Start-up test",
-                "clone": "Clone", "download": "Download", "install": "Install", "packages": "Packages"}
+                "download": "Download", "install": "Install", "packages": "Packages"}
 STATUS_STYLE = {"ok": ("OK", theme.OK), "warn": ("TODO", theme.WARN), "bad": ("MISSING", theme.BAD), "info": ("INFO", theme.MUTED)}
 
 
@@ -26,6 +27,7 @@ class Bridge(QObject):
     event = Signal(dict)
     checks_done = Signal(list)
     msys_info = Signal(dict)
+    source_ready = Signal(str, str)         # repository path, error text
 
 
 def hline():
@@ -87,7 +89,10 @@ class MainWindow(QMainWindow):
         self.bridge.checks_done.connect(self.apply_checks)
         self.bridge.msys_info.connect(self.show_msys_consent)
         self.settings = load_settings()
-        self.builder = Builder(repo if repo is not None else guess_repo(), dry_run)
+        self.source = Source(force_repo=repo)
+        self.source_busy = True
+        self.builder = Builder("", dry_run)
+        self.bridge.source_ready.connect(self.on_source_ready)
         self.checks = []
         self.task = None
         self.stage_labels = {}
@@ -123,7 +128,7 @@ class MainWindow(QMainWindow):
         outer.addWidget(self.status)
         self.load_settings_into_ui()
         self.update_repo_ui()
-        QTimer.singleShot(0, self.refresh_checks)
+        QTimer.singleShot(0, self.prepare_source)
 
     # ------------------------------------------------------------------ header
     def _header(self):
@@ -151,21 +156,39 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(page)
         lay.setContentsMargins(0, 8, 8, 8)
 
-        g = QGroupBox("Repository (the build scripts)")
-        gl = QGridLayout(g)
-        self.repo_edit = QLineEdit()
-        self.repo_edit.setReadOnly(True)
-        self.repo_edit.setAccessibleName("Repository folder")
-        self.repo_choose = QPushButton("Choose &folder...")
-        self.repo_choose.clicked.connect(self.choose_repo)
-        self.repo_clone = QPushButton("&Clone repository")
-        self.repo_clone.clicked.connect(self.clone_repo)
-        self.repo_note = label("", muted=True)
-        gl.addWidget(self.repo_edit, 0, 0)
-        gl.addWidget(self.repo_choose, 0, 1)
-        gl.addWidget(self.repo_clone, 0, 2)
-        gl.addWidget(self.repo_note, 1, 0, 1, 3)
-        lay.addWidget(g)
+        self.source_lbl = QLabel("")
+        self.source_lbl.setObjectName("h2")
+        self.source_lbl.setWordWrap(True)
+        self.source_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        lay.addWidget(self.source_lbl)
+        self.adv_btn = QPushButton("Advanced")
+        self.adv_btn.setCheckable(True)
+        self.adv_btn.setAccessibleName("Advanced source options")
+        self.adv_btn.toggled.connect(lambda on: self.adv_box.setVisible(on))
+        lay.addWidget(self.adv_btn, 0, Qt.AlignLeft)
+        self.adv_box = QFrame()
+        self.adv_box.setObjectName("card")
+        al = QGridLayout(self.adv_box)
+        self.work_edit = QLineEdit(self.source.work)
+        self.work_edit.setAccessibleName("Work folder for the extracted source")
+        work_btn = QPushButton("Change...")
+        work_btn.clicked.connect(self.choose_work)
+        own_btn = QPushButton("Use my own &checkout instead...")
+        own_btn.clicked.connect(self.choose_own)
+        self.bundled_btn = QPushButton("Use the &bundled source")
+        self.bundled_btn.clicked.connect(self.use_bundled)
+        re_btn = QPushButton("&Re-extract bundled source")
+        re_btn.clicked.connect(lambda: self.prepare_source(force=True))
+        al.addWidget(QLabel("Work folder:"), 0, 0)
+        al.addWidget(self.work_edit, 0, 1)
+        al.addWidget(work_btn, 0, 2)
+        al.addWidget(own_btn, 1, 0, 1, 2)
+        al.addWidget(self.bundled_btn, 1, 2)
+        al.addWidget(re_btn, 2, 0, 1, 2)
+        al.addWidget(label("The bundled source is unpacked into the work folder and built there; a checkout of yours is only read, never "
+                           "changed. Rebuilds reuse the work folder (libraries and game files stay).", muted=True), 3, 0, 1, 3)
+        self.adv_box.hide()
+        lay.addWidget(self.adv_box)
 
         g = QGroupBox("Prerequisites")
         self.checks_lay = QVBoxLayout(g)
@@ -364,57 +387,73 @@ class MainWindow(QMainWindow):
         o = self.collect_opts()
         save_settings({"targets": o["targets"], "rom": o["rom"], "jobs": o["jobs"], "low_priority": o["low_priority"],
                        "run_test": o["run_test"], "container": o["container"],
-                       "dir": o["dir"] if self.current_target() == "linux32" else self.settings.get("dir", "")})
+                       "dir": o["dir"]})
 
     # ------------------------------------------------------------------ setup actions
     def on_target_changed(self):
         lin = self.current_target() == "linux32"
-        win = self.current_target() == "windows"
         for w in (self.container, self.container_lbl, self.run_test):
             w.setVisible(lin)
-        self.dir_edit.setEnabled(lin)
-        self.dir_btn.setEnabled(lin)
-        if win:
-            self.dir_edit.setText(os.path.join(self.builder.repo, "dist-win") + "   (inside the repository)")
-        elif lin and "(inside" in self.dir_edit.text():
-            self.dir_edit.setText(self.settings.get("dir") or self.builder.default_dir())
         self.update_start_state()
 
     def update_repo_ui(self):
-        ok = is_repo(self.builder.repo)
-        self.repo_edit.setText(self.builder.repo if ok else "")
-        self.repo_edit.setPlaceholderText("No repository chosen yet")
-        self.repo_note.setText("Build scripts found." if ok else
-                               "The app needs a clone of %s (the repository is private for now, so a clone may need credentials). "
-                               "Pick an existing clone, or press Clone repository." % REPO_URL)
+        self.source_lbl.setText(self.source.describe() if not self.source_busy else "Preparing the source...")
+        self.bundled_btn.setEnabled(self.source.manifest is not None and bool(self.source.own))
         self.update_start_state()
 
-    def choose_repo(self):
-        d = QFileDialog.getExistingDirectory(self, "Choose the bravely-emerald folder", self.builder.repo or os.path.expanduser("~"))
-        if d:
-            try:
-                self.builder.set_repo(d)
-            except ValueError as e:
-                QMessageBox.warning(self, "Not the repository", str(e))
-                return
-            self.update_repo_ui()
-            self.on_target_changed()
-            self.refresh_checks()
+    def prepare_source(self, force=False):
+        """Extract the bundled source (or select the chosen checkout) in a thread, then run the prerequisite checks."""
+        self.source_busy = True
+        self.update_repo_ui()
+        self.status.setText("Preparing the source...")
 
-    def clone_repo(self):
-        base = QFileDialog.getExistingDirectory(self, "Choose the folder to clone into", os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, "frozen", False) else os.path.expanduser("~"))
-        if not base:
+        def work():
+            try:
+                path = self.source.prepare(force)
+                self.bridge.source_ready.emit(path, "")
+            except (SourceError, OSError) as e:
+                self.bridge.source_ready.emit("", str(e))
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_source_ready(self, path, err):
+        self.source_busy = False
+        if err:
+            self.builder.repo = ""
+            self.source_lbl.setText("Source problem")
+            self.status.setText("")
+            QMessageBox.warning(self, "Source", err)
+            self.update_start_state()
             return
-        dest = os.path.join(base, "bravely-emerald")
-        try:
-            label_, stages, steps, meta = self.builder.plan_clone(dest)
-        except ValueError as e:
-            QMessageBox.warning(self, "Clone", str(e))
+        self.builder.repo = os.path.abspath(path)
+        self.status.setText("")
+        self.update_repo_ui()
+        self.check_rom() if self.rom_edit.text() else None
+        self.refresh_checks()
+
+    def choose_work(self):
+        d = QFileDialog.getExistingDirectory(self, "Work folder for the extracted source", self.work_edit.text() or os.path.expanduser("~"))
+        if d:
+            target = os.path.join(os.path.normpath(d), "source")
+            self.source.work = target
+            self.work_edit.setText(target)
+            save_settings({"source_dir": target})
+            self.prepare_source()
+
+    def choose_own(self):
+        d = QFileDialog.getExistingDirectory(self, "Choose your own checkout of the repository", os.path.expanduser("~"))
+        if not d:
             return
-        if QMessageBox.question(self, "Clone repository", "Run git clone of\n%s\ninto\n%s\n\nThe repository is private for now: "
-                                "git may ask for credentials (the app never sees them)." % (REPO_URL, dest)) != QMessageBox.Yes:
+        if not is_repo(d):
+            QMessageBox.warning(self, "Not the repository", "%s does not contain the build scripts (fetch_assets.sh, tools/deck, tools/windows)." % d)
             return
-        self.begin_task(label_, stages, steps, meta, "clone")
+        self.source.own = os.path.abspath(d)
+        save_settings({"own_checkout": self.source.own})
+        self.prepare_source()
+
+    def use_bundled(self):
+        self.source.own = ""
+        save_settings({"own_checkout": ""})
+        self.prepare_source()
 
     def browse_rom(self):
         f, _ = QFileDialog.getOpenFileName(self, "Select your Pokemon Emerald .gba file", os.path.dirname(self.rom_edit.text()) or os.path.expanduser("~"),
@@ -477,8 +516,10 @@ class MainWindow(QMainWindow):
         blockers = [c for c in self.checks if c["blocking"]]
         need_rom = repo_ok and not self.builder.have_assets()
         reasons = []
-        if not repo_ok:
-            reasons.append("choose or clone the repository")
+        if self.source_busy:
+            reasons.append("the source is being prepared")
+        elif not repo_ok:
+            reasons.append("no source available (see Advanced)")
         if not self.current_target():
             reasons.append("no target available on this computer")
         if blockers:
@@ -657,14 +698,7 @@ class MainWindow(QMainWindow):
         elif st == "done":
             if kind == "build":
                 self.show_result(self.task.result or {})
-            elif kind == "clone":
-                try:
-                    self.builder.set_repo(self.task.meta["clone_dest"])
-                    self.update_repo_ui()
-                    self.on_target_changed()
-                except ValueError as e:
-                    QMessageBox.warning(self, "Clone", str(e))
-            if kind in ("install", "clone"):
+            if kind == "install":
                 self.refresh_checks()
         self.update_start_state()
         self.status.setText("%s: %s in %s" % (self.task.label, st, fmt_secs((self.task.finished or time.time()) - self.task.started)))

@@ -11,7 +11,7 @@ import time
 import urllib.request
 
 from .constants import (MSYS_PACKAGES, MSYS_INSTALLER_URL, MSYS_INSTALLER_FILE, MIN_FREE_GB, HARD_MIN_FREE_GB,
-                        CONTAINER_RE, REPO_URL)
+                        CONTAINER_RE)
 from .errors import explain
 from .host import detect_host
 from .repo import is_repo
@@ -51,7 +51,7 @@ class Builder:
 
     def default_dir(self):
         if self.host["kind"] == "windows":
-            return os.path.join(self.repo, "dist-win")
+            return os.path.join(os.path.expanduser("~"), "BravelyEmerald", "game")
         return os.path.join(os.path.expanduser("~"), "emerald-deck")
 
     def have_assets(self):
@@ -291,8 +291,13 @@ class Builder:
         steps.append(Step("tools/windows/build.sh", "tools", a, e, stage_rules=bash_rules))
         a, e = self.msys_cmd('cd "$(cygpath -u "$1")" && tools/windows/package.sh', [self.repo], "MSYS")
         steps.append(Step("tools/windows/package.sh", "package", a, e))
+        out = clean_path(opts.get("dir") or self.default_dir(), "Install folder", no_space=False)
+        repo_n = os.path.normcase(os.path.abspath(self.repo))
+        if os.path.normcase(os.path.abspath(out)) == repo_n or os.path.normcase(os.path.abspath(out)).startswith(repo_n + os.sep):
+            raise ValueError("The install folder must be outside the source folder.")
+        steps.append(Step("Copy the game to the install folder (saves and settings are kept)", "package", [], func=lambda task: install_windows_result(task, self.repo, out)))
         stages = ["prereq", "files", "tools", "assets", "deps", "compile", "link", "package"]
-        meta = {"target": "windows", "dir": self.repo, "logdir": os.path.join(self.repo, "build-win", "builder-logs"),
+        meta = {"target": "windows", "dir": out, "logdir": os.path.join(self.repo, "build-win", "builder-logs"),
                 "low": low}
         return "Windows build", stages, steps, meta
 
@@ -326,20 +331,6 @@ class Builder:
         if not is_repo(path):
             raise ValueError("%s does not contain the build scripts (fetch_assets.sh, tools/deck, tools/windows)." % path)
         self.repo = os.path.abspath(path)
-
-    def plan_clone(self, dest):
-        """git clone of the repository. The repository is private for now, so this may need credentials."""
-        dest = clean_path(dest, "Clone folder")
-        if os.path.exists(dest) and os.listdir(dest):
-            raise ValueError("%s exists and is not empty." % dest)
-        git = shutil.which("git")
-        if not git and os.path.isfile(os.path.join(self.msys(), "usr", "bin", "git.exe")):
-            git = os.path.join(self.msys(), "usr", "bin", "git.exe")
-        if not git:
-            raise ValueError("git was not found. Install Git (https://git-scm.com) or the MSYS2 packages first.")
-        step = Step("git clone " + REPO_URL, "clone", [git, "clone", "--progress", REPO_URL, dest], {"GIT_TERMINAL_PROMPT": "0"})
-        meta = {"logdir": os.path.join(tempfile.gettempdir(), "bravely-builder-logs"), "low": False, "clone_dest": dest}
-        return "Clone the repository", ["clone"], [step], meta
 
     # ----- running
     def start(self, label, stages, steps, meta, kind="build", listener=None):
@@ -391,10 +382,21 @@ class Builder:
                 task.set_stage(step.stage)
                 task.log("")
                 task.log("##### %s" % step.name)
-                task.log("$ " + subprocess.list2cmdline(step.argv))
+                if step.func:
+                    task.log("(in-process step)")
+                else:
+                    task.log("$ " + subprocess.list2cmdline(step.argv))
                 if self.dry_run:
                     time.sleep(0.05)
                     task.log("[dry run] not executed")
+                    continue
+                if step.func:
+                    try:
+                        step.func(task)
+                    except Exception as e:
+                        task.log("ERROR: %s" % e)
+                        task.finish("failed", hints=[{"title": "The step failed.", "fix": str(e)}], step=step.name)
+                        return
                     continue
                 try:
                     proc, real = self._spawn(step, low)
@@ -500,7 +502,7 @@ class Builder:
     def collect_result(self, task):
         meta = task.meta
         if meta.get("target") == "windows":
-            d = os.path.join(self.repo, "dist-win")
+            d = meta.get("dir") or os.path.join(self.repo, "dist-win")
             exe = os.path.join(d, "pokeemerald.exe")
             zp = os.path.join(self.repo, "pokeemerald-win.zip")
             ok = os.path.isfile(exe) and os.path.isdir(os.path.join(d, "app0"))
@@ -547,3 +549,24 @@ class Builder:
                 subprocess.Popen([res["launcher"]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             return "Started the game."
         raise ValueError("unknown action")
+
+
+def install_windows_result(task, repo, out):
+    """Copy repo/dist-win to the install folder. Existing saves and settings are never overwritten."""
+    src = os.path.join(repo, "dist-win")
+    if not os.path.isfile(os.path.join(src, "pokeemerald.exe")):
+        raise RuntimeError("dist-win/pokeemerald.exe is missing; the package step did not finish")
+    n = kept = 0
+    for root, _, files in os.walk(src):
+        rel_root = os.path.relpath(root, src)
+        os.makedirs(os.path.normpath(os.path.join(out, rel_root)), exist_ok=True)
+        for fn in files:
+            rel = os.path.normpath(os.path.join(rel_root, fn)).replace("\\", "/")
+            dst = os.path.join(out, rel)
+            if os.path.exists(dst) and (rel.startswith("userdata/saves/") or rel == "userdata/settings.txt"):
+                kept += 1
+                continue
+            shutil.copy2(os.path.join(root, fn), dst)
+            n += 1
+    os.makedirs(os.path.join(out, "userdata", "saves"), exist_ok=True)
+    task.log("copied %d files to %s (%d existing save/settings files kept)" % (n, out, kept))
