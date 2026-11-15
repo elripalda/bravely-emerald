@@ -1,9 +1,11 @@
 #!/bin/bash
 # Packs the build into dist-win/ (the game folder) and pokeemerald-win.zip. Never copies saves:
 # only settings.txt is seeded into userdata/. Run after build.sh (build.bat does both).
-set -eo pipefail
+set -eEo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+. "$ROOT/tools/windows/lib_cache.sh"
+bravely_trap package.sh
 export PATH="/mingw64/bin:/usr/bin"
 SRC="build-win/out/dist"
 OUT="dist-win"

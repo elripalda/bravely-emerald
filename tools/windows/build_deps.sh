@@ -2,16 +2,34 @@
 # Builds static 32-bit SDL2 2.32.10 and SDL2_image 2.8.12 for the Windows build (MSYS2 MINGW32
 # shell: the mingw32 repo has no SDL2 package). Sources come from the official libsdl-org
 # releases and are cached in build-win/src. Result: build-win/deps (prefix).
-set -euo pipefail
+set -eEuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$ROOT/tools/windows/lib_cache.sh"
+bravely_trap build_deps.sh
 W="$ROOT/build-win"
 P="$W/deps"
+case "$(deps_state "$P")" in
+    present) echo "already done: SDL2 $SDL2_VERSION and SDL2_image $SDL2_IMAGE_VERSION are built in $P"; exit 0 ;;
+    outdated) echo "the SDL2 build in $P is half done or another version: starting it again"
+              rm -rf "$P" "$W/src/SDL2-$SDL2_VERSION/build" "$W/src/SDL2_image-$SDL2_IMAGE_VERSION/build" ;;
+esac
 mkdir -p "$W/src" "$P"
 cd "$W/src"
-SDL=SDL2-2.32.10
-IMG=SDL2_image-2.8.12
-[ -f $SDL.tar.gz ] || curl -fsSLO https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/$SDL.tar.gz
-[ -f $IMG.tar.gz ] || curl -fsSLO https://github.com/libsdl-org/SDL_image/releases/download/release-2.8.12/$IMG.tar.gz
+SDL=SDL2-$SDL2_VERSION
+IMG=SDL2_image-$SDL2_IMAGE_VERSION
+# fetch <file> <url>: download once; a leftover partial or damaged archive is thrown away and fetched again
+fetch() {
+    if [ -f "$1" ] && tar tzf "$1" >/dev/null 2>&1; then
+        echo "already downloaded: $1"
+        return 0
+    fi
+    rm -f "$1" "$1.part"
+    echo "downloading $1"
+    curl -fsSL --retry 3 --retry-delay 5 -o "$1.part" "$2"
+    mv "$1.part" "$1"
+}
+fetch $SDL.tar.gz https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/$SDL.tar.gz
+fetch $IMG.tar.gz https://github.com/libsdl-org/SDL_image/releases/download/release-$SDL2_IMAGE_VERSION/$IMG.tar.gz
 [ -d $SDL ] || tar xf $SDL.tar.gz
 [ -d $IMG ] || tar xf $IMG.tar.gz
 cmake -S $SDL -B $SDL/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -24,4 +42,5 @@ cmake -S $IMG -B $IMG/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_L
   -DSDL2IMAGE_TIF=OFF -DSDL2IMAGE_WEBP=OFF -DSDL2IMAGE_AVIF=OFF -DSDL2IMAGE_JXL=OFF -DSDL2IMAGE_QOI=OFF
 cmake --build $IMG/build
 cmake --install $IMG/build
+[ "$(deps_state "$P")" = present ] || die "the SDL2 build finished but $P is not complete"
 echo "deps ready: $P"
