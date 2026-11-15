@@ -671,6 +671,7 @@ class MainWindow(QMainWindow):
                 if c.get("manual"):
                     problem += " Run this in a terminal: " + c["manual"]
         self.problem_text.setText(problem)
+        self.problem_text.setStyleSheet("color:%s" % ("#000000" if self.source_busy else "#A00000"))      # waiting is not an error
         dir_ok, _ = self.dir_valid()
         ready = (bool(self.builder.repo) and not self.source_busy and not self.blockers and (have_files or self.rom_ok)
                  and dir_ok and self.consent.isChecked())
