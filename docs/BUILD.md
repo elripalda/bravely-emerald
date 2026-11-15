@@ -33,7 +33,7 @@ rebuild delete the build folder (or run `tools/windows/build.sh --clean`).
 
 | Option | Default | Effect |
 |---|---|---|
-| `DECK` | OFF | Steam Deck build (32-bit x86 Linux) |
+| `DECK` | always ON | Steam Deck build (32-bit x86 Linux); the PS Vita build was removed, so this is the base and `-DDECK=ON` is only kept for old command lines |
 | `WINDOWS` | OFF | Windows build; implies `DECK` |
 | `VITA_PARALLEL_DRAW` | ON | Draw GBA frames on the worker threads. Also enables the 288-px widescreen lines |
 | `VITA_LOGGING` | OFF | `VITA_LOG` writes a debug log |
