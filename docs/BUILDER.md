@@ -39,6 +39,8 @@ Options: `--repo DIR` (repository folder), `--dry-run` (the log shows every comm
 
 ## The three pages
 
+![Setup page](screens/builder_setup.png)
+
 1. **Setup.**
    - Repository folder.
    - Prerequisites checklist with an *Install* button where the app can fix an item.
@@ -56,6 +58,14 @@ Options: `--repo DIR` (repository folder), `--dry-run` (the log shows every comm
 3. **Result.** Folder, zip (Windows), launcher (Linux), save folder, *Open folder*, *Launch game*, the Steam
    Game Mode steps from `docs/BUILD_DECK.md`, how to import a save between the Deck and Windows builds, and the
    legal note.
+
+![Build page, a simulated run](screens/builder_build.png)
+
+![A failed step with the known-error explanation](screens/builder_failed_hint.png)
+
+![Result page](screens/builder_result.png)
+
+(The screens are rendered offscreen with a simulated build log.)
 
 Choices are remembered in `bravely_builder_settings.json` next to the app (or in `~/.config/bravely-builder`
 when that folder is not writable). It holds paths and option values only, never ROM contents.
