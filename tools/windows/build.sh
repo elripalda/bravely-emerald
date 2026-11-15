@@ -49,7 +49,11 @@ CACHE="$BUILD_DIR/CMakeCache.txt"
 # CMake stores the source folder as a Windows path (F:/x/y) while $ROOT is an MSYS path (/f/x/y): compare the mixed form, ignoring
 # case, or every run would throw the build folder away and compile everything again
 ROOT_MIXED="$(cygpath -m "$ROOT" 2>/dev/null || echo "$ROOT")"
-CACHED_HOME="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$CACHE" 2>/dev/null | tr 'A-Z' 'a-z')"
+# On a first build there is no cache file yet: sed would fail and, with "set -e" and "pipefail", end this script silently
+CACHED_HOME=""
+if [ -f "$CACHE" ]; then
+    CACHED_HOME="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$CACHE" 2>/dev/null | tr 'A-Z' 'a-z' || true)"
+fi
 if [ -f "$CACHE" ] && [ "$CACHED_HOME" != "$(echo "$ROOT_MIXED" | tr 'A-Z' 'a-z')" ] && [ "$CACHED_HOME" != "$(echo "$ROOT" | tr 'A-Z' 'a-z')" ]; then
     rm -rf "$BUILD_DIR"
 fi
