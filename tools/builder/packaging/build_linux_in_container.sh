@@ -26,7 +26,7 @@ trap cleanup EXIT
 distrobox enter --name "$NAME" --no-tty -- bash -lc "
 set -e
 sudo pacman -Syu --noconfirm
-sudo pacman -S --needed --noconfirm python python-pip tar gzip \
+sudo pacman -S --needed --noconfirm python python-pip git tar gzip xz \
     libxkbcommon libxkbcommon-x11 xcb-util-cursor xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-wm \
     libglvnd fontconfig freetype2 dbus
 cd '$REPO'
