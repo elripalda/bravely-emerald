@@ -110,6 +110,8 @@ launcher you can add to Steam. Step by step, with Game Mode, saves and troublesh
 **Windows** (32-bit build with MSYS2): get the game files once with `fetch_assets.sh`, then run
 `tools\windows\build.bat`. See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md).
 
+**GUI builder** (Windows, Linux, SteamOS): a desktop app checks your computer, installs what is missing and runs the two builds above with a live log. Download `BravelyEmeraldBuilder-win.zip`, unzip it and run `BravelyEmeraldBuilder.exe` (Linux: unpack the `.tar.gz` and run `sh install.sh`), or from a clone: `pip install PySide6` then `python tools/builder/app.py`. It needs your own ROM and does not upload anything. See [docs/BUILDER.md](docs/BUILDER.md).
+
 PS Vita builds are not covered by this fork's instructions (the Vita code lineage remains in the tree).
 
 ### Performance
@@ -293,6 +295,7 @@ Buttons can be remapped in Options. Settings and saves live in `ux0:data/POKEVIT
 | Document | Covers |
 |---|---|
 | [docs/BUILD_DECK.md](docs/BUILD_DECK.md) | Build for the Steam Deck, step by step |
+| [docs/BUILDER.md](docs/BUILDER.md) | The desktop builder app (Windows, Linux, SteamOS) |
 | [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) | The 32-bit Windows build (MSYS2) |
 | [docs/BUILD.md](docs/BUILD.md) | Build overview: host tools, game assets, CMake options |
 | [docs/README.md](docs/README.md) | Index of the technical documentation |

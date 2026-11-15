@@ -14,6 +14,7 @@ changing. Contribution rules are in [../CONTRIBUTING.md](../CONTRIBUTING.md).
 | [BUILD.md](BUILD.md) | Build overview: shared host-tool and asset steps, CMake options |
 | [BUILD_DECK.md](BUILD_DECK.md) | For users: build the Steam Deck version with one script from your own ROM |
 | [WINDOWS_BUILD.md](WINDOWS_BUILD.md) | The 32-bit Windows build (MSYS2) |
+| [BUILDER.md](BUILDER.md) | The desktop builder app: install, what it runs, security model, packaging |
 | [DECK_NOTES.md](DECK_NOTES.md) | Deck and Windows effects: constants, settings levels, container and SDL2 notes |
 | [ASSETS.md](ASSETS.md) | Where every data file comes from and how it is generated |
 | [DEBUGGING.md](DEBUGGING.md) | Logs, per-frame telemetry, crash dumps |

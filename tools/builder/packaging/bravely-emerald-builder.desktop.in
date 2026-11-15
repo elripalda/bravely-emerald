@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Bravely Emerald builder
+Comment=Build Pokemon Emerald (Deck and Windows ports) from your own ROM
+Exec=@EXEC@
+Path=@PATH@
+Terminal=false
+Categories=Game;Utility;

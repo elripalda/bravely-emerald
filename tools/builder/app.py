@@ -36,8 +36,14 @@ def main(argv=None):
     win.show()
     if args.smoke:
         def finish():
-            print("SMOKE OK: window %dx%d visible=%s host=%s repo=%r" % (win.width(), win.height(), win.isVisible(),
-                                                                         win.builder.host["kind"], win.builder.repo), flush=True)
+            msg = "SMOKE OK: window %dx%d visible=%s host=%s repo=%r" % (win.width(), win.height(), win.isVisible(),
+                                                                         win.builder.host["kind"], win.builder.repo)
+            if sys.stdout is not None:
+                print(msg, flush=True)
+            else:                       # a windowed (no console) exe has no stdout: write next to the settings file
+                from core.settings import app_home
+                with open(os.path.join(app_home(), "smoke.txt"), "w", encoding="utf-8") as f:
+                    f.write(msg + chr(10))
             win.close()
         QTimer.singleShot(1500, finish)
     return app.exec()
