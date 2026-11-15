@@ -604,7 +604,7 @@ class MainWindow(QMainWindow):
         if not d:
             return
         if not is_repo(d):
-            self.run_box(info_box(self, "error", "Settings", "%s does not hold the build scripts (fetch_assets.sh, tools\\deck, tools\\windows)." % d, QMessageBox.Ok))
+            self.run_box(info_box(self, "error", "Settings", "%s does not hold the build scripts (tools/fetch_assets.sh, tools\\deck, tools\\windows)." % d, QMessageBox.Ok))
             return
         self.source.own = os.path.abspath(d)
         save_settings({"own_checkout": self.source.own})

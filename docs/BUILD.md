@@ -12,7 +12,7 @@ Emerald cartridge; see the legal note at the top of [BUILD_DECK.md](BUILD_DECK.m
 
 ## Steps both flows share
 
-0. **Game files** (once): `./fetch_assets.sh <your Emerald dump>` (MINGW64 or Linux shell) checks the
+0. **Game files** (once): `./tools/fetch_assets.sh <your Emerald dump>` (MINGW64 or Linux shell) checks the
    dump, downloads the decompilation's graphics, sounds and data, and generates the files made from
    them. Its last step needs the graphics that `assets.mk` converts, so on a clean tree it has to
    run twice, with steps 1 and 2 between the runs (`FETCH_NO_CONVERT=1` makes the first run stop

@@ -27,7 +27,7 @@ git-ignored.
 | `assets/voxel/trees.rgba5551` | `app0:voxel/` | `voxel_renderer.c` | Tree atlas | `voxelgen/scripts/gen_voxel_trees.py` |
 | `assets/ui/menu.bin` (`EM3DMNU1`) | `app0:ui/` | `vita_ui_plate.c` | Menu backdrop | `tools/ui_gen/gen_menu_art.py` |
 | `assets/ui/battle.bin` (`EM3DBTA1`) | `app0:ui/` | `vita_ui_plate.c` | Battle UI art | `tools/ui_gen/gen_battle_art.py` |
-| `assets/ui/intro_margins.bin` (`EM3DLVS1`) | `app0:ui/` | `vita_stage.c` | Leaves margins of the intro | `tools/ui_gen/gen_intro_margins.py` (reads `graphics/intro/scene_1`; run by `build_vita.sh`, not committed) |
+| `assets/ui/intro_margins.bin` (`EM3DLVS1`) | `app0:ui/` | `vita_stage.c` | Leaves margins of the intro | `tools/ui_gen/gen_intro_margins.py` (reads `graphics/intro/scene_1`; run by `tools/deck/build_deck.sh` and `tools/windows/build.sh`, not committed) |
 | `assets/followers/` | `app0:followers/` | `src/follower_mon.c` | HGSS follower sprites (FMN1) and messages | Sources in `assets/followers/sources.txt` |
 
 The voxel data files are made by Emerald 3DS's generators, copied into `voxelgen/`

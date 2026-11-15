@@ -364,7 +364,7 @@ class ScriptFirstRunTests(unittest.TestCase):
 
     def test_every_script_has_valid_syntax(self):
         scripts = [os.path.join(REPO, "tools", "windows", f) for f in os.listdir(os.path.join(REPO, "tools", "windows")) if f.endswith(".sh")]
-        scripts += [os.path.join(REPO, "tools", "deck", "build_deck.sh"), os.path.join(REPO, "fetch_assets.sh")]
+        scripts += [os.path.join(REPO, "tools", "deck", "build_deck.sh"), os.path.join(REPO, "tools", "fetch_assets.sh")]
         for s in scripts:
             with self.subTest(os.path.basename(s)):
                 p = subprocess.run([BASH, "-n", posix(s)], capture_output=True, text=True, timeout=60)
@@ -396,7 +396,7 @@ class CommandLineTests(unittest.TestCase):
         # a tiny stand-in repository (just the build scripts): `plan` and `build --dry-run` then need no unpacking of the bundled source
         cls.repo = tempfile.mkdtemp(prefix="bb-cli-repo-")
         make_workspace(cls.repo, populated=False)
-        for rel in ("fetch_assets.sh", "tools/deck/build_deck.sh"):
+        for rel in ("tools/fetch_assets.sh", "tools/deck/build_deck.sh"):
             p = os.path.join(cls.repo, *rel.split("/"))
             os.makedirs(os.path.dirname(p), exist_ok=True)
             open(p, "w").close()

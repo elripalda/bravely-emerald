@@ -1,5 +1,5 @@
 """Builder: what can be built on this host, the prerequisite checks, the commands for the existing scripts
-(tools/deck/build_deck.sh, fetch_assets.sh, tools/windows/*) and the runner that executes them. No UI code."""
+(tools/deck/build_deck.sh, tools/fetch_assets.sh, tools/windows/*) and the runner that executes them. No UI code."""
 import os
 import re
 import shutil
@@ -382,7 +382,7 @@ class Builder:
             (r"Linking (C|CXX) executable|\bld\b.*pokeemerald\.exe", "link"),
         ]
         if rom:
-            fetch = 'cd "$(cygpath -u "$1")" && FETCH_NO_CONVERT=1 bash ./fetch_assets.sh "$(cygpath -u "$2")"'
+            fetch = 'cd "$(cygpath -u "$1")" && FETCH_NO_CONVERT=1 bash ./tools/fetch_assets.sh "$(cygpath -u "$2")"'
             a, e = self.msys_cmd(fetch, [self.repo, rom], "MINGW64")
             steps.append(Step("Game files, pass 1 (checks the ROM, downloads the files; stops at the port's files, as documented)", "files", a, e,
                               tolerate=lambda lines: any("Generating the port's files" in l for l in lines) and any("=== Copying" in l for l in lines)))
@@ -393,7 +393,7 @@ class Builder:
                 steps.append(Step("Host tools (static)", "tools", a, e))
             a, e = self.msys_cmd('cd "$(cygpath -u "$1")" && make -f vita/assets.mk -j"$2"', [self.repo, jobs], "MINGW64")
             steps.append(Step("Converting the game's graphics and data", "assets", a, e))
-            a, e = self.msys_cmd('cd "$(cygpath -u "$1")" && bash ./fetch_assets.sh "$(cygpath -u "$2")"', [self.repo, rom], "MINGW64")
+            a, e = self.msys_cmd('cd "$(cygpath -u "$1")" && bash ./tools/fetch_assets.sh "$(cygpath -u "$2")"', [self.repo, rom], "MINGW64")
             steps.append(Step("Game files, pass 2 (UI atlas)", "files", a, e))
         # build.sh takes its job count from nproc; GNU nproc honours OMP_NUM_THREADS
         a, e = self.msys_cmd('export OMP_NUM_THREADS="$2"; cd "$(cygpath -u "$1")" && tools/windows/build.sh', [self.repo, jobs], "MSYS")
@@ -438,7 +438,7 @@ class Builder:
     # ----- repository
     def set_repo(self, path):
         if not is_repo(path):
-            raise ValueError("%s does not contain the build scripts (fetch_assets.sh, tools/deck, tools/windows)." % path)
+            raise ValueError("%s does not contain the build scripts (tools/fetch_assets.sh, tools/deck, tools/windows)." % path)
         self.repo = os.path.abspath(path)
 
     # ----- running

@@ -67,13 +67,13 @@ Host tools (`make -f make_tools.mk -j8`):
 - First run failed: `png.h` missing / `libpng` not found. Re-run passed with no change; `libpng 1.6.59-1` and `/usr/lib/pkgconfig/libpng.pc` present. Likely the other agent's concurrent install was still in progress.
 
 Assets:
-- `bash ./fetch_assets.sh` needs `bash`: the script has no exec bit in the clone (`Permission denied` on `./fetch_assets.sh`).
+- `bash ./tools/fetch_assets.sh` needs `bash`: the script has no exec bit in the clone (`Permission denied` on `./tools/fetch_assets.sh`).
 - ROM check: `Pokémon Emerald (BPEE), USA/Europe 1.0: verified`. Download + manifest check + copy of 9168 files passed.
 - Then fails: `ERROR: Python 3 with Pillow is needed`. Container has `/usr/bin/python3` but no `PIL`. `python-pillow` is not in the Arch repos under that name (pacman -Q / pip not run; no install per rule). Needs `python-pillow` or `pip install pillow` by the user.
 - Impact: "Generating the port's files" step (intro margins) not done.
 - `make -f vita/assets.mk -j8`: OK, 9300 binary assets, 420 songs. `include/constants/map_groups.h` exists after this step.
 
-Status: partial. Blocked on Pillow for fetch_assets.sh step 3.
+Status: partial. Blocked on Pillow for tools/fetch_assets.sh step 3.
 
 ## 32-bit SDL2 deps
 
@@ -113,7 +113,7 @@ Dist: `build-deck/dist/{pokeemerald,run.sh,app0/{voxel,ui,ui2,followers},userdat
 3D off: key `voxel_3d=0` (and `voxel_battle=0`) in `userdata/settings.txt` (read by `VitaExtras_Init`, vita_extras.c). `pokeemerald.cfg` has no 3D key (`voxelRes` is ignored, `voxelFps` is only the frame cap).
 Run over SSH: `DISPLAY=:0 XAUTHORITY=$(ls /run/user/1000/xauth_*) XDG_RUNTIME_DIR=/run/user/1000`, in the container. The game runs 20+ s without crash; smoke test passes.
 Window: fullscreen 1280x800; the 960x544 picture is letterboxed through `DeckGlViewport` (glViewport macro in compat/vitaGL.h) with a scissor, bars cleared black in `DeckVideo_Swap`.
-Open: (1) 8 early `Failed to queue audio: Invalid audio device ID` lines, then none (device opens with pulseaudio/pipewire drivers; alsa fails). Likely calls made before the device is opened; sound not verified by ear. (2) Intro scene shows repeated tile slivers at the left/right edges: the port's "intro margins" generation (fetch_assets.sh step 3) was skipped (needs Pillow). (3) debug.log is absent (VITA_LOGGING off), perf_summary.txt exists but reports Vita labels.
+Open: (1) 8 early `Failed to queue audio: Invalid audio device ID` lines, then none (device opens with pulseaudio/pipewire drivers; alsa fails). Likely calls made before the device is opened; sound not verified by ear. (2) Intro scene shows repeated tile slivers at the left/right edges: the port's "intro margins" generation (tools/fetch_assets.sh step 3) was skipped (needs Pillow). (3) debug.log is absent (VITA_LOGGING off), perf_summary.txt exists but reports Vita labels.
 Screenshot: `spectacle -b -n -f -o file.png` on the Deck host (no import/xwd/scrot in the container).
 
 ## Phase 1: swap interval (2026-11-13)

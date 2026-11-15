@@ -115,11 +115,11 @@ These parts build and run in the design mocks, but have not been checked on the 
 ## Repository layout
 
 ```
-CMakeLists.txt, build_*.sh/.ps1      CMake build (Deck and Windows; the Vita scripts remain)
+CMakeLists.txt                       CMake build (Deck and Windows; the Vita build scripts were removed)
 make_tools.mk, *_rules.mk, vita/     host tools, asset rules, Vita-lineage platform files
 src/, include/, asm/, data/,         the pokeemerald decompilation (game code and text data;
 constants/                           graphics/, sound/ and data binaries come from fetch_assets)
-fetch_assets.sh/.ps1, tools/assets/  game files download (checks your ROM, then the manifest)
+tools/fetch_assets.sh/.ps1, tools/assets/  game files download (checks your ROM, then the manifest)
 src/platform/                        GBA hardware emulation and main loop
 src/platform/voxel/                  3D voxel world
 src/platform/vita/                   native UI and Vita-specific features

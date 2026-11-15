@@ -25,7 +25,7 @@ KNOWN_ERRORS = [
     (r"Generating the port's files.*|No such file or directory.*\.(4bpp|gbapal|lz)|export_assets",
      "The game's graphics were not converted yet (asset ordering).",
      "The fetch script needs the host tools and converted graphics first. The builder runs the steps in the right "
-     "order; if you ran fetch_assets.sh by hand, run 'make -f make_tools.mk' and 'make -f vita/assets.mk', then fetch_assets.sh again."),
+     "order; if you ran tools/fetch_assets.sh by hand, run 'make -f make_tools.mk' and 'make -f vita/assets.mk', then tools/fetch_assets.sh again."),
     (r"not a Pok.mon Emerald dump|header is damaged|does not exist\b",
      "The ROM was rejected.",
      "Use an unmodified dump of Pokemon Emerald (any language, 16 MiB, game code BPE?). Patched or truncated files fail."),

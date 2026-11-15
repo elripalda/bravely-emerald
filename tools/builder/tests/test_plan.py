@@ -60,7 +60,7 @@ class WindowsPlanTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="bb-plan-repo-")
-        for rel in ("fetch_assets.sh", "tools/deck/build_deck.sh", "tools/windows/build.sh"):
+        for rel in ("tools/fetch_assets.sh", "tools/deck/build_deck.sh", "tools/windows/build.sh"):
             os.makedirs(os.path.dirname(os.path.join(cls.tmp, rel)), exist_ok=True)
             open(os.path.join(cls.tmp, rel), "w").close()
         cls.rom = os.path.join(cls.tmp, "e.gba")

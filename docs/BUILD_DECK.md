@@ -133,13 +133,13 @@ Messages that came up in real runs on a Deck:
   container with `distrobox rm --force <name>` and run the script again.
 - **`png.h: No such file` or `libpng not found` while building the host tools.** The libraries were
   still being installed or the install was interrupted. Run the script again; it installs what is missing.
-- **`ERROR: Python 3 with Pillow is needed`** from `fetch_assets.sh`. The script installs
-  `python-pillow` in the container; if you run `fetch_assets.sh` by hand outside it, install Pillow
+- **`ERROR: Python 3 with Pillow is needed`** from `tools/fetch_assets.sh`. The script installs
+  `python-pillow` in the container; if you run `tools/fetch_assets.sh` by hand outside it, install Pillow
   (`pip install pillow`).
-- **`fetch_assets.sh` fails at its last step on a clean tree.** Fixed in the current script (it now builds
+- **`tools/fetch_assets.sh` fails at its last step on a clean tree.** Fixed in the current script (it now builds
   the host tools and converts the graphics first). If you use an old copy, run
-  `make -f make_tools.mk` and `make -f vita/assets.mk` and then `fetch_assets.sh` again.
-- **`Permission denied` when you run `./fetch_assets.sh` or the script.** Run them with `bash`, as in this
+  `make -f make_tools.mk` and `make -f vita/assets.mk` and then `tools/fetch_assets.sh` again.
+- **`Permission denied` when you run `./tools/fetch_assets.sh` or the script.** Run them with `bash`, as in this
   guide.
 - **Black window, or the game starts but there is no picture, when started over SSH.** SSH has no X
   authority. SDL then falls back to its offscreen driver. Run from Konsole on the Deck, or export

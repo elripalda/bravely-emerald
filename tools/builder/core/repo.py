@@ -5,7 +5,7 @@ import sys
 
 def is_repo(path):
     """True when `path` is a checkout with the scripts the builder drives."""
-    if not path or not os.path.isfile(os.path.join(path, "fetch_assets.sh")):
+    if not path or not os.path.isfile(os.path.join(path, "tools", "fetch_assets.sh")):
         return False
     # the Linux script or the Windows scripts (older checkouts have only the Windows ones)
     return (os.path.isfile(os.path.join(path, "tools", "deck", "build_deck.sh")) or

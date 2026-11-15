@@ -75,7 +75,7 @@ __pycache__/
 /.claude/
 /handoff.yaml
 /memory.yaml
-# Game files: not in this repository. fetch_assets.sh downloads them (tools/assets/manifest.txt)
+# Game files: not in this repository. tools/fetch_assets.sh downloads them (tools/assets/manifest.txt)
 # after checking the user's Pokémon Emerald dump, and generates the port files made from them.
 /graphics/**/*.png
 /graphics/**/*.pal

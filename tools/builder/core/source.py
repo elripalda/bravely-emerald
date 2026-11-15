@@ -25,9 +25,8 @@ FILELIST = ".bravely-source-files.txt"
 MAX_TOTAL_BYTES = 1 << 30                  # refuse an archive that unpacks to more than 1 GiB (the real one is about 85 MB)
 
 # Paths left out of the snapshot because no build needs them (a real build proves the list, see docs/BUILDER.md).
-# Prefix match on the repository path. design/stitch/_tools is kept: fetch_assets.sh runs export_assets.py from it.
-EXCLUDE_PREFIXES = ("docs/", "design/", "tools/builder/", ".github/", "README.md", "CONTRIBUTING.md", "build_vita.ps1",
-                    "build_vita.sh", "build_all.ps1", "build_all.sh", "fetch_assets.ps1")
+# Prefix match on the repository path. design/stitch/_tools is kept: tools/fetch_assets.sh runs export_assets.py from it.
+EXCLUDE_PREFIXES = ("docs/", "design/", "tools/builder/", ".github/", "README.md", "CONTRIBUTING.md", "tools/fetch_assets.ps1")
 KEEP_PREFIXES = ("docs/licenses/", "design/stitch/_tools/")
 
 
