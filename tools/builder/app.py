@@ -17,6 +17,72 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 
+def check_imports():
+    """--imports: import every module of core and ui and print OK or FAIL for each. The list comes from the bundle (modules.txt,
+    written by package.py from the files on disk), so a module missing from the frozen app is found."""
+    import importlib
+    names = None
+    try:
+        from core.source import bundle_dir
+        bd = bundle_dir()
+        if bd and os.path.isfile(os.path.join(bd, "modules.txt")):
+            with open(os.path.join(bd, "modules.txt"), encoding="utf-8") as f:
+                names = [ln.strip() for ln in f if ln.strip()]
+    except Exception as e:                           # core itself is broken: say so
+        print("FAIL core (%r)" % (e,))
+        return 1
+    if names is None:                                # a checkout: the files on disk
+        names = []
+        for pkg in ("core", "ui"):
+            for fn in sorted(os.listdir(os.path.join(HERE, pkg))):
+                if fn.endswith(".py"):
+                    names.append(pkg if fn == "__init__.py" else "%s.%s" % (pkg, fn[:-3]))
+    bad = 0
+    for n in names:
+        try:
+            importlib.import_module(n)
+            print("OK   %s" % n)
+        except BaseException as e:
+            bad += 1
+            print("FAIL %s: %r" % (n, e))
+    print("IMPORTS %s: %d modules, %d failed" % ("OK" if not bad else "FAILED", len(names), bad))
+    return 1 if bad else 0
+
+
+def fatal_box(title, text):
+    """A plain native message box (no Qt, no Tk) for errors before the window exists; stderr elsewhere."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, text, title, 0x10)
+            return
+    except Exception:
+        pass
+    try:
+        sys.stderr.write("%s: %s\n" % (title, text))
+    except Exception:
+        pass
+
+
+def start_failed(exc):
+    """The app could not start (a missing module, a broken install): log it and tell the user in plain words."""
+    import traceback
+    tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    where = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else HERE
+    for base in (os.environ.get("BRAVELY_BUILDER_HOME"), where, os.environ.get("TEMP") or "/tmp"):
+        if not base:
+            continue
+        try:
+            path = os.path.join(base, "crash.log")
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(tb + "\n")
+            break
+        except OSError:
+            path = "(the log could not be saved)"
+    fatal_box("Bravely Emerald Builder", "The builder could not start.\n\n%s\n\nThe app files are probably incomplete: download the "
+              "package again and unpack it into an empty folder.\n\nDetails were saved in:\n%s" % (repr(exc)[:300], path))
+
+
 def main(argv=None):
     # headless modes, used to test the packaged exe: they run the core without a window (see cli.py)
     if argv is None:
@@ -33,9 +99,14 @@ def main(argv=None):
         else:
             os.write(1, (line + "\n").encode())
         return 0
+    if "--imports" in argv:
+        return check_imports()
     if "--selftest" in argv:
         import cli
         return cli.main(["selftest"])
+    if "--plan" in argv:                              # what is present / missing / outdated, nothing is changed
+        import cli
+        return cli.main(["plan"] + [a for a in argv if a != "--plan"])
     if "--build" in argv:
         import cli
         rest = [a for a in argv if a != "--build"]
@@ -109,4 +180,10 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except ImportError as e:                          # a module missing from the install: a message box, not a traceback dialog
+        start_failed(e)
+        sys.exit(1)

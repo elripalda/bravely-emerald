@@ -237,6 +237,34 @@ builds compile the decompiled game with Nintendo's graphics and data linked into
 executable would distribute game data, and a 32-bit native compiler cannot run in a browser. A browser-only builder is therefore not
 possible here and its code is not reused (it is also under CC BY-NC-SA 4.0). This app runs on your computer and nothing leaves it.
 
+## How to check a fresh install without installing anything
+
+The builder looks at what is already on the PC before it does anything (`core/probe.py`), so it installs, downloads or builds only
+what is missing or outdated, and it prints a visible "already installed / already done" line for everything it skips.
+`plan` shows this without changing anything: one row per component (MSYS2, MSYS2 packages, SDL2 + SDL2_image, host tools, game
+files, CMake build folder; on Linux podman, distrobox, container, deps32, game files, build folder) as PRESENT, MISSING or OUTDATED,
+the size to download, and what a build would do.
+
+    BravelyEmeraldBuilder.exe --plan                 (or: python tools/builder/cli.py plan [--target windows|linux32] [--json])
+    BravelyEmeraldBuilder.exe --build --dry-run --rom X.gba --out DIR     (prints the commands, runs nothing)
+    set BRAVELY_MSYS2_ROOT=C:\empty-folder           (pretend MSYS2 is not installed: the plan then lists the MSYS2 and package steps)
+
+One command runs the smoke tests (no network, no installs, about two minutes):
+
+    python -I -m unittest discover -s tools/builder/tests -t . -p test_fresh_smoke.py
+
+It runs the real core code against a stub `pacman` (first sync that asks for a restart, mirror timeouts and retries, lock file,
+keyring error, resume), runs the real `build.sh`, `build_deps.sh` and `package.sh` with stand-in tools (`BRAVELY_STUBS`) from an empty
+folder, a folder with spaces, one with an accent and a `Users\Adame\AppData\Local\BravelyEmerald\source` style path, and runs `plan`
+and `build --dry-run` against this PC and against an empty MSYS2 folder, on the source and on the packaged exe when
+`tools/builder/dist-builder/` holds one (or `BRAVELY_PACKAGED_EXE` names it). A failed check prints which step and which line.
+It does not prove that a real MSYS2 install, the real mirrors or the real compile work on a clean PC: only a real run on one does.
+
+When something fails, the app's "Copy log" button copies a block for a GitHub issue: versions (app, bundled source commit), system,
+CPU, RAM, disk, MSYS2 and `pacman -Q` versions, the plan table, the full log with stdout and stderr, and at the end
+`FAILED: <step> (exit code N)` and a one-line probable cause. The same text is the log file. An error inside the app itself is written to
+`crash.log` in the app folder and shown in a box with Copy log.
+
 ## Tested and not verified
 
 Tested on Windows 10 (2026-11-15): 66 core and window tests; every screen rendered offscreen at 1x and 2x and read (with 4x zooms of the title bar, buttons, field, checkbox and progress bar); simulated desktops of 1280x800 to 3840x2160; the packaged exe (`--smoke`, `--selftest`); and builds through the packaged exe whose repository is only its bundled snapshot, from a folder with no repository: a full build (29 min 22 s), a second full build of the newer bundle onto the same work folder (4 min 52 s), and a rebuild after the `build.sh` cache fix (1 min 47 s, nothing recompiled). The game started, showed the title screen and logged no GL error each time.

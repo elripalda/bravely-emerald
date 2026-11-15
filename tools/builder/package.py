@@ -87,9 +87,36 @@ def make_bundle():
                 "excluded_prefixes": list(EXCLUDE_PREFIXES), "kept_prefixes": list(KEEP_PREFIXES), "excluded_files": skipped}
     with open(os.path.join(BUNDLE, MANIFEST_NAME), "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
+    # every module of core/ and ui/ that must be inside the frozen app: `--imports` imports each one (see app.py)
+    with open(os.path.join(BUNDLE, "modules.txt"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(module_names()) + "\n")
     print("bundle: %s files, %.1f MB unpacked, %.1f MB compressed (%s), %d files left out, commit %s"
           % (count, size / 1048576, os.path.getsize(archive) / 1048576, ARCHIVE_NAME, skipped, commit[:10]))
     return manifest
+
+
+def module_names():
+    """core.x and ui.y for every .py file of the two packages (never a hand-written list)."""
+    names = []
+    for pkg in ("core", "ui"):
+        for fn in sorted(os.listdir(os.path.join(HERE, pkg))):
+            if fn.endswith(".py"):
+                names.append(pkg if fn == "__init__.py" else "%s.%s" % (pkg, fn[:-3]))
+                if fn == "__init__.py":
+                    names[-1] = pkg
+    return names
+
+
+def verify_frozen(exe):
+    """Run the frozen app with --imports; a missing module stops the packaging, so a stale or partial build is never handed out."""
+    import tempfile
+    home = tempfile.mkdtemp(prefix="bb-verify-")
+    env = dict(os.environ, BRAVELY_BUILDER_HOME=home, QT_QPA_PLATFORM="offscreen")
+    p = subprocess.run([exe, "--imports"], capture_output=True, text=True, timeout=300, env=env)
+    print(p.stdout.strip())
+    shutil.rmtree(home, ignore_errors=True)
+    if p.returncode != 0 or "FAIL" in p.stdout:
+        sys.exit("The frozen app is missing modules (see FAIL above): not packaged.")
 
 
 def run_pyinstaller():
@@ -101,6 +128,7 @@ def run_pyinstaller():
             "--paths", HERE, "--add-data", BUNDLE + os.pathsep + "bundle",
             "--add-data", os.path.join(REPO, "docs", "BUILDER_HELP.md") + os.pathsep + "help",
             "--add-data", os.path.join(HERE, "fonts") + os.pathsep + "fonts"]
+    args += ["--collect-submodules", "core", "--collect-submodules", "ui"]
     for m in EXCLUDES:
         args += ["--exclude-module", m]
     args.append(os.path.join(HERE, "app.py"))
@@ -112,6 +140,7 @@ def package_windows():
     exe = os.path.join(folder, NAME + ".exe")
     if not os.path.isfile(exe):
         sys.exit("PyInstaller did not produce %s" % exe)
+    verify_frozen(exe)
     with open(os.path.join(folder, "README.txt"), "w", encoding="utf-8") as f:
         f.write(README.format(exe=NAME + ".exe"))
     zp = os.path.join(OUT, NAME + "-win.zip")
@@ -150,6 +179,7 @@ def package_linux():
     exe = os.path.join(folder, NAME)
     if not os.path.isfile(exe):
         sys.exit("PyInstaller did not produce %s" % exe)
+    verify_frozen(exe)
     # the archive holds ONE folder, BravelyEmeraldBuilder/: the one-folder app plus install.sh, the .desktop template,
     # README.txt and the font licence, so "tar xf; cd BravelyEmeraldBuilder; ./BravelyEmeraldBuilder" works as written
     stage = os.path.join(WORK, "linux-stage")

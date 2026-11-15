@@ -37,6 +37,7 @@ class Builder:
         self.pkg_missing = None        # missing MSYS2 packages from the last check (None: unknown)
         self.msys_root = None
         self.probe = Probe(self)       # tests replace it with a fake host
+        self.retry_wait = 10           # seconds per retry attempt after a mirror or network problem (tests set 0)
         self.manifest = None           # manifest of the bundled source (set by the caller), shown in the log header
 
     # ----- environment helpers
@@ -576,8 +577,8 @@ class Builder:
                 return rc, lines
             task.log("")
             task.log("The download did not work (the mirror or the network is slow). Trying again, attempt %d of %d, in %d seconds." %
-                     (attempt + 2, step.retries + 1, 10 * (attempt + 1)))
-            for _ in range(10 * (attempt + 1)):
+                     (attempt + 2, step.retries + 1, self.retry_wait * (attempt + 1)))
+            for _ in range(self.retry_wait * (attempt + 1)):
                 if task.cancel_requested:
                     return rc, lines
                 time.sleep(1)
@@ -593,6 +594,9 @@ class Builder:
                 'echo "MSYS2 shell ready (home: $HOME)"')
         a, e = self.msys_cmd(init)
         rc, _ = self._run_proc(task, Step("keyring", "install", a, e), low, [])
+        if rc not in (0, None):
+            raise RuntimeError("MSYS2 could not set up its package keyring (exit code %s). Close other MSYS2 windows, check that the "
+                               "clock of this PC is right, and try again." % rc)
         for rnd in range(1, 5):
             if task.cancel_requested:
                 return

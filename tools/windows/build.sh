@@ -20,7 +20,9 @@ have() { echo "already done: $*"; }
 [ "${1:-}" = "--clean" ] && rm -rf "$BUILD_DIR"
 
 # i686 compiler first, then the 64-bit one (host tools, Python with Pillow), then MSYS
-export PATH="/mingw32/bin:/mingw64/bin:/usr/bin"
+# BRAVELY_STUBS (tests only): a folder of stand-in tools that comes first, so the script can be run without MSYS2
+STUBS="${BRAVELY_STUBS:+$BRAVELY_STUBS:}"
+export PATH="${STUBS}/mingw32/bin:/mingw64/bin:/usr/bin"
 command -v i686-w64-mingw32-gcc >/dev/null || die "mingw-w64-i686-toolchain missing: pacman -S mingw-w64-i686-toolchain"
 command -v cmake >/dev/null || die "pacman -S cmake (MSYS package)"
 [ "$(i686-w64-mingw32-gcc -dumpmachine)" = "i686-w64-mingw32" ] || die "wrong compiler"
@@ -32,13 +34,13 @@ have "game files (.assets_ok)"
 
 if [ ! -x tools/preproc/preproc.exe ] || [ ! -x tools/gbagfx/gbagfx.exe ]; then
     step "Building the host tools"
-    PATH="/mingw64/bin:/usr/bin" make -f make_tools.mk -j"$JOBS" CC="gcc -static" CXX="g++ -static"
+    PATH="${STUBS}/mingw64/bin:/usr/bin" make -f make_tools.mk -j"$JOBS" CC="gcc -static" CXX="g++ -static"
 else
     have "host tools (preproc, gbagfx) are built"
 fi
 
 step "Converting the game files (make only redoes what changed)"
-PATH="/mingw64/bin:/usr/bin" make -f vita/assets.mk -j"$JOBS"
+PATH="${STUBS}/mingw64/bin:/usr/bin" make -f vita/assets.mk -j"$JOBS"
 
 if [ ! -f assets/ui/intro_margins.bin ]; then
     step "Intro margins"
@@ -52,7 +54,11 @@ if [ "$DEPS" = "present" ]; then
     have "SDL2 $SDL2_VERSION and SDL2_image $SDL2_IMAGE_VERSION are built (build-win/deps)"
 else
     step "SDL2 and SDL2_image (static, 32-bit): $DEPS"
-    MSYSTEM=MINGW32 bash -lc "bash '$ROOT/tools/windows/build_deps.sh'"
+    if [ -n "${BRAVELY_STUBS:-}" ]; then        # tests only: no login shell, so the stand-in tools stay first on PATH
+        PATH="${STUBS}$PATH" bash "$ROOT/tools/windows/build_deps.sh"
+    else
+        MSYSTEM=MINGW32 bash -lc "bash '$ROOT/tools/windows/build_deps.sh'"
+    fi
 fi
 
 step "Configuring CMake in $BUILD_DIR"

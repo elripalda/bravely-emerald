@@ -21,12 +21,15 @@ die() {
 
 # run_logged <log file> <command...>: run, show and keep the output; on failure repeat the last 30 lines and return the code
 run_logged() {
-    local log="$1" rc
+    local log="$1" rc had_e=0
     shift
     mkdir -p "$(dirname "$log")"
     BRAVELY_LOG="$log"
+    case "$-" in *e*) had_e=1 ;; esac
+    set +e                                  # a failing command must reach the lines below, not end the script inside the pipe
     "$@" 2>&1 | tee "$log"
     rc=${PIPESTATUS[0]}
+    [ "$had_e" -eq 1 ] && set -e
     if [ "$rc" -ne 0 ]; then
         echo
         echo "--- $1 failed (exit code $rc); last 30 lines of its output ---"
