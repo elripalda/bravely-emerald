@@ -15,6 +15,7 @@ import tempfile
 import time
 
 from .repo import is_repo, guess_repo
+from .validate import source_path_problem
 from .settings import load_settings
 
 MANIFEST_NAME = "source-manifest.json"
@@ -78,8 +79,11 @@ def default_work_dir():
     if os.environ.get("BRAVELY_BUILDER_HOME"):
         return os.path.join(os.environ["BRAVELY_BUILDER_HOME"], "source")
     if os.name == "nt":
-        return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local"),
+        path = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local"),
                             "BravelyEmerald", "source")
+        if source_path_problem(path):            # a space or an accent in the user name: use a plain folder on the system drive
+            path = os.path.join(os.environ.get("SystemDrive", "C:") + os.sep, "BravelyEmerald", "source")
+        return path
     base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
     return os.path.join(base, "bravely-emerald", "source")
 

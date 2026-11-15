@@ -29,6 +29,25 @@ def clean_path(p, what="path", allow_empty=False, no_space=True):
     return os.path.normpath(os.path.expanduser(p))
 
 
+def source_path_problem(path, windows=True):
+    """Plain-language reason why the build scripts cannot work in this folder, or None. Checked before anything starts.
+    Unsupported: a space (make cannot handle it), letters outside plain ASCII (the MinGW tools read the path with the
+    ANSI code page), a network path, a path so long that Windows file names go over 260 characters, shell symbols."""
+    if " " in path:
+        return ("The source folder path has a space in it (%s). The build tools cannot handle spaces: use a folder such as "
+                "C:\\BravelyEmerald\\source." % path)
+    if any(ord(c) > 126 for c in path):
+        return ("The source folder path has letters outside plain English letters, such as an accent (%s). The compiler tools "
+                "cannot read them: use a folder such as C:\\BravelyEmerald\\source." % path)
+    if windows and (path.startswith("\\\\") or path.startswith("//")):
+        return "The source folder is on a network path (%s). Build on a local drive, for example C:\\BravelyEmerald\\source." % path
+    if re.search(r"[\"'`$;&|<>*?!]", path):
+        return "The source folder path has quotes or symbols the build scripts cannot handle (%s)." % path
+    if len(path) > 110:
+        return "The source folder path is %d characters long; keep it under 110 so Windows file names stay under 260." % len(path)
+    return None
+
+
 def validate_rom(path):
     """Mirror of the check in fetch_assets.sh (size, title, game code, header checksum, SHA-1).
     Returns dict(ok, code, message, level). Reads the file only; never copies it."""

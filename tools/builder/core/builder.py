@@ -18,7 +18,7 @@ from .probe import Probe, find_msys_root
 from .repo import is_repo
 from .settings import load_settings
 from .tasks import Step, Task, kill_tree
-from .validate import clean_path, validate_rom, free_gb, network_ok, fmt_secs, sha256_file
+from .validate import source_path_problem, clean_path, validate_rom, free_gb, network_ok, fmt_secs, sha256_file
 
 
 class Builder:
@@ -341,8 +341,9 @@ class Builder:
             v = validate_rom(rom)
             if not v["ok"]:
                 raise ValueError("ROM: " + v["message"])
-        if " " in self.repo:
-            raise ValueError("The repository path contains a space; move the clone to a path without spaces.")
+        problem = source_path_problem(self.repo, self.host["kind"] == "windows")
+        if problem:
+            raise ValueError(problem)
         if target == "windows":
             return self._plan_windows(rom, jobs, low, opts)
         return self._plan_linux(rom, jobs, low, opts)
@@ -579,7 +580,7 @@ class Builder:
 
     def _pacman_sync(self, task):
         """First sync on a fresh MSYS2, following https://www.msys2.org/docs/updating/ : the core update may end the shell
-        (restart needed), so repeat 'pacman -Syuu' until it has nothing left to do (at most 4 rounds)."""
+        (restart needed), so repeat pacman -Suy until it has nothing left to do (at most 4 rounds)."""
         root = self.msys()
         low = task.meta.get("low", False)
         self._wait_pacman_lock(task, root)
@@ -591,9 +592,9 @@ class Builder:
             if task.cancel_requested:
                 return
             task.log("")
-            task.log("-- pacman system update, round %d (a restart of MSYS2 in the middle is normal)" % rnd)
-            a, e = self.msys_cmd("pacman --noconfirm -Syuu")
-            rc, lines = self._run_proc(task, Step("pacman -Syuu", "install", a, e, retries=3), low, [])
+            task.log("-- pacman -Suy, round %d (a restart of MSYS2 in the middle is normal)" % rnd)
+            a, e = self.msys_cmd("pacman --noconfirm -Suy")
+            rc, lines = self._run_proc(task, Step("pacman -Suy", "install", a, e, retries=3), low, [])
             text = "\n".join(lines)
             if rc == 0 and ("there is nothing to do" in text and "starting full system upgrade" in text.lower()) :
                 task.log("-- system is up to date")
@@ -601,7 +602,7 @@ class Builder:
             if rc == 0 and rnd > 1 and "there is nothing to do" in text:
                 return
             if rc not in (0, None) and not re.search(r"terminate|restart|msys2-runtime|core system", text, re.I) and rnd >= 2:
-                raise RuntimeError("pacman -Syuu failed (exit code %s); see the lines above." % rc)
+                raise RuntimeError("pacman -Suy failed (exit code %s); see the lines above." % rc)
         task.log("-- the update ran 4 rounds; going on with the package install")
 
     def _wait_pacman_lock(self, task, root):
@@ -637,19 +638,24 @@ class Builder:
         if not self._run_msys2_install(task):
             raise RuntimeError("The MSYS2 installer did not finish (see the details).")
 
-    def _run_msys2_install(self, task):
-        """Download the official installer (consent was given in the UI) and run it silently."""
-        dest_dir = os.path.join(tempfile.gettempdir(), "bravely-builder-dl")
-        os.makedirs(dest_dir, exist_ok=True)
-        dest = os.path.join(dest_dir, MSYS_INSTALLER_FILE)
-        task.set_stage("install")
-        task.log("Downloading %s" % MSYS_INSTALLER_URL)
-        if self.dry_run:
-            task.log("[dry run] would download to %s and run: %s in --confirm-command --accept-messages --root %s" % (dest, dest, self.msys()))
-            return True
+    def _published_sha256(self, task):
+        """The checksum MSYS2 publishes next to the installer, or None when it cannot be read."""
+        try:
+            req = urllib.request.Request(MSYS_INSTALLER_URL + ".sha256", headers={"User-Agent": "bravely-builder"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                m = re.match(r"\s*([0-9a-fA-F]{64})", r.read(400).decode("ascii", "replace"))
+            if m:
+                task.log("Published checksum (msys2-installer release): %s" % m.group(1).lower())
+                return m.group(1).lower()
+        except Exception as e:
+            task.log("Could not read the published checksum (%s); the download is only checked for size." % e)
+        return None
+
+    def _download(self, task, dest, expected):
+        part = dest + ".part"
         try:
             req = urllib.request.Request(MSYS_INSTALLER_URL, headers={"User-Agent": "bravely-builder"})
-            with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as out:
+            with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as out:
                 total = int(r.headers.get("Content-Length") or 0)
                 got, last = 0, 0
                 while True:
@@ -664,9 +670,45 @@ class Builder:
                     if total and got * 100 // total >= last + 10:
                         last = got * 100 // total
                         task.log("  %d%% (%d of %d MB)" % (last, got >> 20, total >> 20))
-            task.log("Downloaded %d bytes, sha256 %s" % (os.path.getsize(dest), sha256_file(dest)))
+            if total and os.path.getsize(part) != total:
+                task.log("ERROR: the download is incomplete (%d of %d bytes). Check the connection and try again." % (os.path.getsize(part), total))
+                return False
+            got_sha = sha256_file(part)
+            task.log("Downloaded %d bytes, sha256 %s" % (os.path.getsize(part), got_sha))
+            if expected and got_sha != expected:
+                task.log("ERROR: the installer does not match the published checksum. It was deleted; try again later.")
+                os.remove(part)
+                return False
+            os.replace(part, dest)
+            return True
         except Exception as e:
-            task.log("ERROR: download failed: %s" % e)
+            task.log("ERROR: download failed: %s. Check the internet connection; a proxy or antivirus may be blocking github.com." % e)
+            return False
+
+    def _run_msys2_install(self, task):
+        """Download the official installer (consent was given in the UI) and run it silently."""
+        dest_dir = os.path.join(tempfile.gettempdir(), "bravely-builder-dl")
+        os.makedirs(dest_dir, exist_ok=True)
+        dest = os.path.join(dest_dir, MSYS_INSTALLER_FILE)
+        task.set_stage("install")
+        task.log("MSYS2 installer: %s" % MSYS_INSTALLER_URL)
+        if self.dry_run:
+            task.log("[dry run] would download to %s and run: %s in --confirm-command --accept-messages --root %s" % (dest, dest, self.msys()))
+            return True
+        local = os.environ.get("BRAVELY_MSYS2_INSTALLER")
+        if local and os.path.isfile(local):
+            dest = local
+            task.log("Using the installer you named in BRAVELY_MSYS2_INSTALLER: %s" % local)
+            task.log("sha256 %s (compare it with the checksum on https://github.com/msys2/msys2-installer/releases)" % sha256_file(dest))
+        else:
+            expected = self._published_sha256(task)
+            if os.path.isfile(dest) and expected and sha256_file(dest) == expected:
+                task.log("already downloaded and verified: %s (%d MB): not downloaded again" % (dest, os.path.getsize(dest) >> 20))
+            elif not self._download(task, dest, expected):
+                return False
+        problem = source_path_problem(self.msys())
+        if problem:
+            task.log("ERROR: " + problem.replace("source folder", "MSYS2 folder"))
             return False
         task.set_stage("install")
         task.log("Running the installer silently (a Windows permission prompt may appear).")
