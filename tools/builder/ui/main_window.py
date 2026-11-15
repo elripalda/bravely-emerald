@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLab
                                QProgressBar, QPushButton, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 
 from core import Builder, LEGAL_NOTE, load_settings, save_settings, validate_rom
+from core import report
 from core.repo import is_repo
 from core.source import Source, SourceError
 from core.validate import clean_path, cpu_profile, fmt_secs
@@ -221,6 +222,7 @@ class MainWindow(QMainWindow):
         self.blockers = []
         self.source_error = ""
         self.builder = Builder("", dry_run)
+        self.builder.manifest = self.source.manifest
         self.task = None
         self.res = {}
         self.rom_ok = False
@@ -816,8 +818,12 @@ class MainWindow(QMainWindow):
         self.details_btn.setText("<< Hide details" if on else "Show details >>")
 
     def copy_log(self):
+        """The whole report for a GitHub issue: header, plan, full log, FAILED line and probable cause."""
         self.flush_log()
-        QGuiApplication.clipboard().setText(self.log.toPlainText())
+        if self.task:
+            QGuiApplication.clipboard().setText(report.full_report(self.task, self.builder, self.source.manifest))
+        else:
+            QGuiApplication.clipboard().setText(self.log.toPlainText())
 
     def tick(self):
         t = self.task
@@ -856,7 +862,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ closing
     def closeEvent(self, e):
         if self.task and self.task.state == "running":
-            box = info_box(self, "question", TITLE, "A build is running. Cancel it and exit?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            box = info_box(self, "question", TITLE, "A build is running. Stop it and quit?\n\nEverything the build started is closed; finished steps are kept.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if self.run_box(box) != QMessageBox.Yes:
                 e.ignore()
                 return

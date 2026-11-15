@@ -52,11 +52,39 @@ def main(argv=None):
         from PySide6.QtWidgets import QApplication
     except ImportError:
         sys.exit("PySide6 is needed: pip install PySide6   (or use the packaged BravelyEmeraldBuilder)")
+    from PySide6.QtCore import QObject, Signal, qInstallMessageHandler
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QMessageBox
+    from core import crash
+    from core.instance import InstanceLock, MESSAGE as ALREADY_RUNNING
     from ui import win95
-    from ui.main_window import MainWindow
+    from ui.main_window import MainWindow, info_box, TITLE
     app = QApplication(sys.argv[:1])
     app.setApplicationName("Bravely Emerald Builder")
     win95.apply(app)
+
+    class CrashBridge(QObject):                       # lets any thread ask the GUI thread for the message box
+        crashed = Signal(str, str)
+
+    bridge = CrashBridge()
+
+    def show_crash(text, path):
+        box = info_box(None, "error", "Something went wrong",
+                       "Something went wrong and the program has to stop what it was doing.\n\nThe details were saved in:\n%s\n\n"
+                       "Press Copy log, then paste it into a new issue at the project page. Nothing was lost: finished build steps are kept."
+                       % (path or "(the log could not be saved)"), QMessageBox.Ok)
+        copy = box.addButton("Copy log", QMessageBox.ActionRole)
+        box.exec()
+        if box.clickedButton() is copy:
+            QGuiApplication.clipboard().setText(text)
+
+    bridge.crashed.connect(show_crash)
+    crash.install(lambda text, path: bridge.crashed.emit(text, path or ""))
+    qInstallMessageHandler(crash.qt_message_handler)
+    lock = InstanceLock()
+    if not lock.acquire():
+        info_box(None, "info", TITLE, ALREADY_RUNNING, QMessageBox.Ok).exec()
+        return 0
     win = MainWindow(args.repo, args.dry_run)
     win.note(scale_info)
     win.show()

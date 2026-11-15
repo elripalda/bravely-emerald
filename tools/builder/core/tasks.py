@@ -33,6 +33,8 @@ class Task:
         self.hints = []
         self.listeners = []            # callables(event dict), called from the worker thread
         self.meta = {}
+        self.cur_step = None           # name of the step that is running (for the FAILED line)
+        self.final = {}
         self._fh = None
         if logfile:
             try:
@@ -68,6 +70,15 @@ class Task:
             self.emit("stage", stage=stage)
 
     def finish(self, state, **kw):
+        if state == "failed":
+            # the last lines of every failed log: which step, its exit code and the probable cause (for pasting into an issue)
+            step = kw.get("step") or self.cur_step or self.label
+            code = kw.get("code")
+            self.log("")
+            self.log("FAILED: %s (exit code %s)" % (step, code if code is not None else "none: the step failed before or without a program exit"))
+            hints = kw.get("hints") or []
+            self.log("Probable cause: %s" % ("%s %s" % (hints[0]["title"], hints[0]["fix"]) if hints else "unknown, no entry of the known-error table matches"))
+            self.final = dict(kw, step=step)
         self.state = state
         self.finished = time.time()
         self.emit("state", state=state, **kw)

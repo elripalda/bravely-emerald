@@ -41,7 +41,9 @@ def make_builder(repo_arg, dry_run=False, force=False):
     print("source:", src.describe(), flush=True)
     path = src.prepare(force=force, progress=lambda m: print("  " + m, flush=True))
     print("repository:", path, flush=True)
-    return Builder(path, dry_run), src
+    b = Builder(path, dry_run)
+    b.manifest = src.manifest
+    return b, src
 
 
 def write_synthetic_rom(path):

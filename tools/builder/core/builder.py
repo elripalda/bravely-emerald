@@ -14,6 +14,7 @@ from .constants import (DOWNLOAD_MB, SDL2_VERSION, SDL2_IMAGE_VERSION, MSYS_PACK
                         CONTAINER_RE)
 from .errors import explain
 from .host import detect_host
+from . import report
 from .probe import Probe, find_msys_root
 from .repo import is_repo
 from .settings import load_settings
@@ -36,6 +37,7 @@ class Builder:
         self.pkg_missing = None        # missing MSYS2 packages from the last check (None: unknown)
         self.msys_root = None
         self.probe = Probe(self)       # tests replace it with a fake host
+        self.manifest = None           # manifest of the bundled source (set by the caller), shown in the log header
 
     # ----- environment helpers
     def settings(self):
@@ -476,6 +478,10 @@ class Builder:
         low = task.meta.get("low", False)
         tail = []
         try:
+            if task.kind == "build":
+                for ln in report.header(self, self.manifest):
+                    task.log(ln)
+                task.log("")
             task.log("# %s, started %s%s" % (task.label, time.strftime("%Y-%m-%d %H:%M:%S"), "  [DRY RUN: nothing is executed]" if self.dry_run else ""))
             if steps and isinstance(steps[0], tuple):          # the MSYS2 installer download
                 ok = self._run_msys2_install(task)
@@ -486,6 +492,7 @@ class Builder:
                 if task.cancel_requested:
                     break
                 task.set_stage(step.stage)
+                task.cur_step = step.name
                 task.log("")
                 task.log("##### %s" % step.name)
                 if step.func:
@@ -510,8 +517,6 @@ class Builder:
                 if task.cancel_requested:
                     break
                 if rc != 0 and not (step.tolerate and step.tolerate(lines)):
-                    task.log("")
-                    task.log("##### FAILED: %s (exit code %s)" % (step.name, rc))
                     hints = explain(tail)
                     task.hints = hints
                     task.finish("failed", hints=hints, code=rc, step=step.name)
