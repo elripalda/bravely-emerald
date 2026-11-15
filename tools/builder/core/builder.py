@@ -209,7 +209,12 @@ class Builder:
                 "text": "Download the official MSYS2 installer and run it silently into %s." % self.msys()}
 
     def plan_install(self, what, consent=False):
-        """Return (label, stages, [Step]) for an install action."""
+        """Return (label, stages, steps, meta) for an install action."""
+        label, stages, steps = self._plan_install(what, consent)
+        logdir = os.path.join(tempfile.gettempdir() if what == "msys2" else os.path.join(self.repo, "build-win"), "bravely-builder-logs" if what == "msys2" else "builder-logs")
+        return label, stages, steps, {"logdir": logdir, "low": False}
+
+    def _plan_install(self, what, consent=False):
         if self.host["kind"] != "windows":
             raise ValueError("Install actions exist for Windows only; on Linux run the shown package command in a terminal.")
         if what == "msys2":

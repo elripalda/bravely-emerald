@@ -234,7 +234,12 @@ class PlanTests(unittest.TestCase):
             self._builder("steamos").plan_install("deps")
         with self.assertRaises(ValueError):
             self._builder("windows").plan_install("msys2", consent=False)
-        self.assertTrue(self._builder("windows").plan_install("msys2", consent=True))
+        self.assertEqual(len(self._builder("windows").plan_install("msys2", consent=True)), 4)
+        b = self._builder("windows")
+        if os.path.isfile(b.msys_bash()):
+            for what in ("packages", "deps"):
+                label, stages, steps, meta = b.plan_install(what, True)
+                self.assertTrue(steps and "logdir" in meta)
 
     def test_clone_plan(self):
         b = self._builder("windows")

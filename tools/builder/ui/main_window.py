@@ -219,6 +219,9 @@ class MainWindow(QMainWindow):
         self.jobs = QSpinBox()
         self.jobs.setRange(1, 64)
         self.jobs.setAccessibleName("Compile jobs")
+        self.jobs.setButtonSymbols(QSpinBox.NoButtons)
+        self.jobs.setMaximumWidth(90)
+        self.jobs.setToolTip("Type a number, or use the Up and Down keys")
         self.low = QCheckBox("Low priority (keeps the computer usable while it builds)")
         gl.addWidget(QLabel("Compile jobs:"), r, 0)
         gl.addWidget(self.jobs, r, 1)
@@ -502,7 +505,7 @@ class MainWindow(QMainWindow):
         except ValueError as e:
             QMessageBox.warning(self, "Install", str(e))
             return
-        self.begin_task(label_, stages, steps, {"logdir": os.path.join(self.builder.repo, "build-win", "builder-logs"), "low": False}, "install")
+        self.begin_task(label_, stages, steps, meta, "install")
 
     def show_msys_consent(self, info):
         self.status.setText("")
@@ -523,7 +526,7 @@ class MainWindow(QMainWindow):
         except ValueError as e:
             QMessageBox.warning(self, "Install", str(e))
             return
-        self.begin_task(label_, stages, steps, {"logdir": os.path.join(os.environ.get("TEMP", "."), "bravely-builder-logs"), "low": False}, "install")
+        self.begin_task(label_, stages, steps, meta, "install")
 
     # ------------------------------------------------------------------ build
     def start_build(self):
