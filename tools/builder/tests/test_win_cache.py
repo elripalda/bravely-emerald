@@ -12,7 +12,7 @@ LIB = os.path.join(REPO, "tools", "windows", "lib_cache.sh")
 
 
 def find_bash():
-    for p in (shutil.which("bash"), r"C:\msys64\usr\bin\bash.exe", r"C:\Program Files\Git\bin\bash.exe"):
+    for p in (r"C:\msys64\usr\bin\bash.exe", r"C:\Program Files\Git\bin\bash.exe", shutil.which("bash")):
         if p and os.path.isfile(p):
             return p
     return None
