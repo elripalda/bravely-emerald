@@ -45,18 +45,8 @@ if [ ! -f build-win/deps/lib/libSDL2.a ] || [ ! -f build-win/deps/lib/libSDL2_im
 fi
 
 step "Configuring CMake in $BUILD_DIR"
-CACHE="$BUILD_DIR/CMakeCache.txt"
-# CMake stores the source folder as a Windows path (F:/x/y) while $ROOT is an MSYS path (/f/x/y): compare the mixed form, ignoring
-# case, or every run would throw the build folder away and compile everything again
-ROOT_MIXED="$(cygpath -m "$ROOT" 2>/dev/null || echo "$ROOT")"
-# On a first build there is no cache file yet: sed would fail and, with "set -e" and "pipefail", end this script silently
-CACHED_HOME=""
-if [ -f "$CACHE" ]; then
-    CACHED_HOME="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$CACHE" 2>/dev/null | tr 'A-Z' 'a-z' || true)"
-fi
-if [ -f "$CACHE" ] && [ "$CACHED_HOME" != "$(echo "$ROOT_MIXED" | tr 'A-Z' 'a-z')" ] && [ "$CACHED_HOME" != "$(echo "$ROOT" | tr 'A-Z' 'a-z')" ]; then
-    rm -rf "$BUILD_DIR"
-fi
+. "$ROOT/tools/windows/lib_cache.sh"
+drop_foreign_build "$BUILD_DIR" "$ROOT"
 cmake -S . -B "$BUILD_DIR" -G "Unix Makefiles" -DWINDOWS=ON -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=/mingw32/bin/gcc.exe -DCMAKE_MAKE_PROGRAM=/usr/bin/make.exe
 
