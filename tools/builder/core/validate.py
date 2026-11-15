@@ -101,3 +101,13 @@ def sha256_file(path):
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def cpu_profile(level, cpus):
+    """(jobs, low_priority) for the CPU usage setting: low keeps the PC usable, high uses every thread."""
+    cpus = max(1, int(cpus or 1))
+    if level == "high":
+        return cpus, False
+    if level == "normal":
+        return max(1, cpus * 3 // 4), False
+    return max(1, cpus // 2), True

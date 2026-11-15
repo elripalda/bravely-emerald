@@ -1,416 +1,379 @@
-"""Main window: Setup (bundled source, prerequisites, ROM, options), Build (stages, live log), Result."""
+"""The one-screen window: choose the ROM, read the notice, press Build. Then a progress view and a result view.
+Windows 95 look (see classic.py). Everything else is in the Settings dialog and the Help page."""
 import os
-import sys
 import threading
 import time
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal, QUrl
-from PySide6.QtGui import QDesktopServices, QTextCursor
-from PySide6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-                               QRadioButton, QScrollArea, QSpinBox, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QTextCursor
+from PySide6.QtWidgets import (QFileDialog, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit,
+                               QProgressBar, QPushButton, QStackedWidget, QVBoxLayout, QWidget)
 
 from core import Builder, LEGAL_NOTE, load_settings, save_settings, validate_rom
 from core.repo import is_repo
-from core.source import Source, SourceError, default_work_dir
-from core.validate import fmt_secs
-from . import theme
+from core.source import Source, SourceError
+from core.validate import cpu_profile, fmt_secs
+from . import classic
+from .dialogs import HelpDialog, SettingsDialog, sunken
 
-STAGE_LABELS = {"prereq": "Prerequisites", "container": "Container", "files": "Game files", "tools": "Tools", "assets": "Assets",
-                "deps": "SDL2", "compile": "Compile", "link": "Link", "package": "Package", "test": "Start-up test",
-                "download": "Download", "install": "Install", "packages": "Packages"}
-STATUS_STYLE = {"ok": ("OK", theme.OK), "warn": ("TODO", theme.WARN), "bad": ("MISSING", theme.BAD), "info": ("INFO", theme.MUTED)}
+TITLE = "Bravely Emerald Builder"
+LANG = {"E": "USA", "D": "German", "F": "French", "I": "Italian", "S": "Spanish", "J": "Japan", "P": "Europe"}
+
+# what the user reads while a stage runs
+STEP_TEXT = {"prereq": "Checking this computer...", "install": "Please wait while the build tools are installed...",
+             "container": "Please wait while the build environment is prepared...", "files": "Getting the game files...",
+             "tools": "Preparing the build tools...", "assets": "Converting the game data...",
+             "deps": "Building the game libraries...", "compile": "Compiling the game...", "link": "Compiling the game (last step)...",
+             "package": "Packaging the game...", "test": "Testing that the game starts..."}
+STEP_SHORT = {"prereq": "Checking this computer", "install": "Installing build tools", "container": "Preparing the build environment",
+              "files": "Getting game files", "tools": "Preparing build tools", "assets": "Converting game data",
+              "deps": "Building libraries", "compile": "Compiling", "link": "Compiling", "package": "Packaging", "test": "Testing"}
+WEIGHT = {"prereq": 1, "install": 8, "container": 8, "files": 8, "tools": 3, "assets": 12, "deps": 8, "compile": 50, "link": 3,
+          "package": 3, "test": 1}
 
 
 class Bridge(QObject):
     """Carries results from worker threads to the GUI thread (queued signals)."""
     event = Signal(dict)
     checks_done = Signal(list)
-    msys_info = Signal(dict)
     source_ready = Signal(str, str)         # repository path, error text
+    plan_ready = Signal(object, str)        # (label, stages, steps, meta) or None, error text
 
 
-def hline():
-    f = QFrame()
-    f.setFrameShape(QFrame.HLine)
-    f.setStyleSheet("color:#2c353d")
-    return f
+def notice_html(kind):
+    if kind == "windows":
+        tools = ("the build tools (MSYS2, about 85 MB, and the compiler and library packages, several hundred MB, if they are not "
+                 "installed yet), the SDL2 libraries (a few MB), and the game files from the public pret/pokeemerald project")
+    else:
+        tools = ("a build environment (a container of about 400 MB, with the compiler packages), the SDL2 libraries (a few MB), and "
+                 "the game files from the public pret/pokeemerald project")
+    return ("<ul>"
+            "<li>You need an <b>internet connection</b>. The build downloads %s.</li>"
+            "<li>The first build takes about <b>30 to 60 minutes</b>.</li>"
+            "<li>About <b>15 GB</b> of free disk space are needed.</li>"
+            "<li>Your ROM is only <b>read to check it</b>. It is never copied or uploaded.</li>"
+            "<li>The finished build is <b>for your own use only</b>. Please do not share it.</li>"
+            "</ul>" % tools)
 
 
-def label(text, name=None, wrap=True, muted=False):
-    lb = QLabel(text)
-    lb.setWordWrap(wrap)
-    if name:
-        lb.setObjectName(name)
-    if muted:
-        lb.setProperty("muted", True)
-    lb.setTextInteractionFlags(Qt.TextSelectableByMouse)
-    return lb
+def info_box(parent, icon, title, text, buttons, default=None):
+    box = QMessageBox(parent)
+    box.setWindowTitle(title)
+    box.setIconPixmap(classic.flat_icon(icon))
+    box.setText(text)
+    box.setStandardButtons(buttons)
+    if default is not None:
+        box.setDefaultButton(default)
+    return box
 
 
-class PrereqRow(QFrame):
-    def __init__(self, item, on_install):
-        super().__init__()
-        self.setObjectName("card")
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 8)
-        text, color = STATUS_STYLE.get(item["status"], ("?", theme.MUTED))
-        badge = QLabel(text)
-        badge.setFixedWidth(78)
-        badge.setAlignment(Qt.AlignCenter)
-        badge.setStyleSheet("background:%s;color:#071410;border-radius:4px;font-weight:700;padding:2px;" % color)
-        lay.addWidget(badge, 0, Qt.AlignTop)
-        col = QVBoxLayout()
-        title = QLabel(item["label"])
-        title.setStyleSheet("font-weight:600")
-        col.addWidget(title)
-        col.addWidget(label(item["detail"], muted=True))
-        if item.get("manual"):
-            ed = QLineEdit(item["manual"])
-            ed.setReadOnly(True)
-            ed.setAccessibleName("Command to run in a terminal for " + item["label"])
-            col.addWidget(ed)
-        lay.addLayout(col, 1)
-        if item.get("action"):
-            btn = QPushButton("&Install")
-            btn.setAccessibleName("Install " + item["label"])
-            btn.clicked.connect(lambda: on_install(item["action"]))
-            lay.addWidget(btn, 0, Qt.AlignTop)
-        self.setAccessibleName("%s: %s" % (item["label"], text))
+def bold(label, points):
+    f = label.font()
+    f.setBold(True)
+    f.setPointSize(points)
+    label.setFont(f)
 
 
 class MainWindow(QMainWindow):
     def __init__(self, repo=None, dry_run=False):
         super().__init__()
-        self.setWindowTitle("Bravely Emerald builder")
-        self.resize(1000, 780)
+        self.setWindowTitle(TITLE)
+        self.setWindowIcon(classic.gem_icon())
         self.bridge = Bridge()
         self.bridge.event.connect(self.on_event)
-        self.bridge.checks_done.connect(self.apply_checks)
-        self.bridge.msys_info.connect(self.show_msys_consent)
+        self.bridge.checks_done.connect(self.on_checks)
+        self.bridge.source_ready.connect(self.on_source_ready)
+        self.bridge.plan_ready.connect(self.on_plan)
         self.settings = load_settings()
         self.source = Source(force_repo=repo)
         self.source_busy = True
+        self.blockers = []
+        self.source_error = ""
         self.builder = Builder("", dry_run)
-        self.bridge.source_ready.connect(self.on_source_ready)
-        self.checks = []
         self.task = None
-        self.stage_labels = {}
-        self.stage_state = {}
-        self.stage_order = []
-        self.log_buf = []
-        self.pct = 0
+        self.res = {}
         self.rom_ok = False
-        self.task_kind = None
-        self.res_result = {}
+        self.stage_order = []
+        self.stage_done = set()
+        self.cur_stage = None
+        self.pct = 0
+        self.planning = False
+        self.log_buf = []
+        self.last_opts = None
+        self.no_modal = False          # tests: do not block in message boxes
+        self.last_box = None
+
+        self._menus()
+        self.stack = QStackedWidget()
+        self.setCentralWidget(self.stack)
+        self.stack.addWidget(self._idle_view())
+        self.stack.addWidget(self._progress_view())
+        self.stack.addWidget(self._ready_view())
+        self.step_panel = QLabel("Ready")
+        sunken(self.step_panel)
+        self.statusBar().addWidget(self.step_panel, 1)
+        self.resize(780, 580)
         self.log_timer = QTimer(self)
         self.log_timer.timeout.connect(self.flush_log)
-        self.log_timer.start(120)
+        self.log_timer.start(150)
         self.clock = QTimer(self)
         self.clock.timeout.connect(self.tick)
         self.clock.start(1000)
-
-        root = QWidget()
-        root.setObjectName("root")
-        self.setCentralWidget(root)
-        outer = QVBoxLayout(root)
-        outer.setContentsMargins(18, 14, 18, 12)
-        outer.addLayout(self._header())
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self._setup_page(), "&1  Setup")
-        self.tabs.addTab(self._build_page(), "&2  Build")
-        self.tabs.addTab(self._result_page(), "&3  Result")
-        self.tabs.setTabEnabled(1, False)
-        self.tabs.setTabEnabled(2, False)
-        outer.addWidget(self.tabs, 1)
-        self.status = QLabel("")
-        self.status.setProperty("muted", True)
-        outer.addWidget(self.status)
-        self.load_settings_into_ui()
-        self.update_repo_ui()
+        self.rom_edit.setText(self.settings.get("rom", ""))
+        if self.rom_edit.text():
+            self.check_rom()
+        self.update_state()
         QTimer.singleShot(0, self.prepare_source)
 
-    # ------------------------------------------------------------------ header
-    def _header(self):
-        lay = QVBoxLayout()
-        t = QLabel("Bravely Emerald builder")
-        t.setObjectName("title")
-        t.setAccessibleName("Bravely Emerald builder")
-        lay.addWidget(t)
-        h = self.builder.host
-        cpus = os.cpu_count() or 1
-        sub = "%s  |  %s  |  %d CPU threads" % (h["label"], h.get("arch", "?"), cpus)
-        self.host_lbl = QLabel("Detected: " + sub)
-        self.host_lbl.setObjectName("subtitle")
-        lay.addWidget(self.host_lbl)
-        lay.addWidget(label("Builds the game on this computer from your own Pokemon Emerald dump. Nothing is uploaded; "
-                            "the ROM is only read to check it.", muted=True))
-        return lay
+    # ------------------------------------------------------------------ menus
+    def _menus(self):
+        mb = self.menuBar()
+        fm = mb.addMenu("&File")
+        a = QAction("&Settings...", self)
+        a.triggered.connect(self.open_settings)
+        fm.addAction(a)
+        fm.addSeparator()
+        a = QAction("E&xit", self)
+        a.triggered.connect(self.close)
+        fm.addAction(a)
+        hm = mb.addMenu("&Help")
+        a = QAction("&Contents", self)
+        a.setShortcut(QKeySequence.HelpContents)
+        a.triggered.connect(lambda: self.open_help())
+        hm.addAction(a)
+        hm.addSeparator()
+        a = QAction("&About", self)
+        a.triggered.connect(self.about)
+        hm.addAction(a)
 
-    # ------------------------------------------------------------------ setup page
-    def _setup_page(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        page = QWidget()
-        scroll.setWidget(page)
-        lay = QVBoxLayout(page)
-        lay.setContentsMargins(0, 8, 8, 8)
+    # ------------------------------------------------------------------ views
+    def _idle_view(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(14, 12, 14, 10)
+        lay.setSpacing(10)
+        head = QHBoxLayout()
+        icon = QLabel()
+        icon.setPixmap(classic.gem_icon().pixmap(32, 32))
+        head.addWidget(icon, 0, Qt.AlignTop)
+        col = QVBoxLayout()
+        t = QLabel(TITLE)
+        bold(t, 13)
+        col.addWidget(t)
+        line = QLabel("This program builds Pokemon Bravely Emerald on this computer from your own Pokemon Emerald ROM.")
+        line.setWordWrap(True)
+        col.addWidget(line)
+        head.addLayout(col, 1)
+        lay.addLayout(head)
 
-        self.source_lbl = QLabel("")
-        self.source_lbl.setObjectName("h2")
-        self.source_lbl.setWordWrap(True)
-        self.source_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        lay.addWidget(self.source_lbl)
-        self.adv_btn = QPushButton("Advanced")
-        self.adv_btn.setCheckable(True)
-        self.adv_btn.setAccessibleName("Advanced source options")
-        self.adv_btn.toggled.connect(lambda on: self.adv_box.setVisible(on))
-        lay.addWidget(self.adv_btn, 0, Qt.AlignLeft)
-        self.adv_box = QFrame()
-        self.adv_box.setObjectName("card")
-        al = QGridLayout(self.adv_box)
-        self.work_edit = QLineEdit(self.source.work)
-        self.work_edit.setAccessibleName("Work folder for the extracted source")
-        work_btn = QPushButton("Change...")
-        work_btn.clicked.connect(self.choose_work)
-        own_btn = QPushButton("Use my own &checkout instead...")
-        own_btn.clicked.connect(self.choose_own)
-        self.bundled_btn = QPushButton("Use the &bundled source")
-        self.bundled_btn.clicked.connect(self.use_bundled)
-        re_btn = QPushButton("&Re-extract bundled source")
-        re_btn.clicked.connect(lambda: self.prepare_source(force=True))
-        al.addWidget(QLabel("Work folder:"), 0, 0)
-        al.addWidget(self.work_edit, 0, 1)
-        al.addWidget(work_btn, 0, 2)
-        al.addWidget(own_btn, 1, 0, 1, 2)
-        al.addWidget(self.bundled_btn, 1, 2)
-        al.addWidget(re_btn, 2, 0, 1, 2)
-        al.addWidget(label("The bundled source is unpacked into the work folder and built there; a checkout of yours is only read, never "
-                           "changed. Rebuilds reuse the work folder (libraries and game files stay).", muted=True), 3, 0, 1, 3)
-        self.adv_box.hide()
-        lay.addWidget(self.adv_box)
-
-        g = QGroupBox("Prerequisites")
-        self.checks_lay = QVBoxLayout(g)
-        top = QHBoxLayout()
-        top.addWidget(label("Live checklist of what this computer needs.", muted=True), 1)
-        self.refresh_btn = QPushButton("&Refresh")
-        self.refresh_btn.clicked.connect(self.refresh_checks)
-        top.addWidget(self.refresh_btn)
-        self.checks_lay.addLayout(top)
-        self.checks_body = QVBoxLayout()
-        self.checks_lay.addLayout(self.checks_body)
-        lay.addWidget(g)
-
-        g = QGroupBox("Your Pokemon Emerald ROM")
-        gl = QGridLayout(g)
+        g = QGroupBox("Choose your ROM")
+        gl = QVBoxLayout(g)
+        row = QHBoxLayout()
         self.rom_edit = QLineEdit()
-        self.rom_edit.setPlaceholderText("Path to your .gba dump (read only to check it, never copied)")
-        self.rom_edit.setAccessibleName("ROM path")
+        self.rom_edit.setPlaceholderText("Click Browse to find your Pokemon Emerald .gba file")
+        self.rom_edit.setAccessibleName("ROM file")
         self.rom_edit.editingFinished.connect(self.check_rom)
         browse = QPushButton("&Browse...")
         browse.clicked.connect(self.browse_rom)
-        self.rom_status = label("", wrap=True)
-        self.rom_need = label("", muted=True)
-        gl.addWidget(self.rom_edit, 0, 0)
-        gl.addWidget(browse, 0, 1)
-        gl.addWidget(self.rom_status, 1, 0, 1, 2)
-        gl.addWidget(self.rom_need, 2, 0, 1, 2)
+        row.addWidget(self.rom_edit, 1)
+        row.addWidget(browse)
+        gl.addLayout(row)
+        res = QHBoxLayout()
+        self.rom_icon = QLabel()
+        self.rom_icon.setFixedSize(16, 16)
+        self.rom_text = QLabel("")
+        self.rom_text.setWordWrap(True)
+        res.addWidget(self.rom_icon, 0, Qt.AlignTop)
+        res.addWidget(self.rom_text, 1)
+        gl.addLayout(res)
         lay.addWidget(g)
 
-        g = QGroupBox("Build options")
-        gl = QGridLayout(g)
-        self.target_radios = {}
-        r = 0
-        for t in self.builder.targets():
-            rb = QRadioButton(t["label"])
-            rb.setEnabled(t["available"])
-            rb.setToolTip(t["why"])
-            rb.toggled.connect(self.on_target_changed)
-            self.target_radios[t["id"]] = rb
-            gl.addWidget(rb, r, 0, 1, 2)
-            gl.addWidget(label(t["why"], muted=True), r, 2, 1, 2)
-            r += 1
-        self.dir_edit = QLineEdit()
-        self.dir_edit.setAccessibleName("Install folder")
-        self.dir_btn = QPushButton("Choose...")
-        self.dir_btn.clicked.connect(self.choose_dir)
-        gl.addWidget(QLabel("Install folder:"), r, 0)
-        gl.addWidget(self.dir_edit, r, 1, 1, 2)
-        gl.addWidget(self.dir_btn, r, 3)
-        r += 1
-        self.jobs = QSpinBox()
-        self.jobs.setRange(1, 64)
-        self.jobs.setAccessibleName("Compile jobs")
-        self.jobs.setButtonSymbols(QSpinBox.NoButtons)
-        self.jobs.setMaximumWidth(90)
-        self.jobs.setToolTip("Type a number, or use the Up and Down keys")
-        self.low = QCheckBox("Low priority (keeps the computer usable while it builds)")
-        gl.addWidget(QLabel("Compile jobs:"), r, 0)
-        gl.addWidget(self.jobs, r, 1)
-        gl.addWidget(self.low, r, 2, 1, 2)
-        r += 1
-        self.container = QLineEdit()
-        self.container.setAccessibleName("Container name")
-        self.run_test = QCheckBox("Run the 12 second start-up test at the end (needs the desktop)")
-        self.container_lbl = QLabel("Container name:")
-        gl.addWidget(self.container_lbl, r, 0)
-        gl.addWidget(self.container, r, 1)
-        gl.addWidget(self.run_test, r, 2, 1, 2)
+        g = QGroupBox("Before you start")
+        gl = QVBoxLayout(g)
+        self.notice = QLabel(notice_html(self.builder.host["kind"]))
+        self.notice.setWordWrap(True)
+        self.notice.setTextFormat(Qt.RichText)
+        gl.addWidget(self.notice)
         lay.addWidget(g)
 
-        row = QHBoxLayout()
-        self.blockers_lbl = label("", muted=True)
-        row.addWidget(self.blockers_lbl, 1)
-        self.start_btn = QPushButton("&Start build")
-        self.start_btn.setObjectName("primary")
-        self.start_btn.clicked.connect(self.start_build)
-        row.addWidget(self.start_btn)
-        lay.addLayout(row)
+        brow = QHBoxLayout()
+        self.problem_icon = QLabel()
+        self.problem_icon.setFixedSize(16, 16)
+        self.problem_text = QLabel("")
+        self.problem_text.setWordWrap(True)
+        brow.addWidget(self.problem_icon, 0, Qt.AlignTop)
+        brow.addWidget(self.problem_text, 1)
+        lay.addLayout(brow)
         lay.addStretch(1)
-        return scroll
+        self.build_btn = QPushButton("&Build Bravely Emerald")
+        bold(self.build_btn, 12)
+        self.build_btn.setMinimumHeight(52)
+        self.build_btn.setDefault(True)
+        self.build_btn.clicked.connect(self.confirm_and_build)
+        lay.addWidget(self.build_btn)
+        return w
 
-    # ------------------------------------------------------------------ build page
-    def _build_page(self):
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        lay.setContentsMargins(0, 10, 0, 0)
-        self.task_title = QLabel("")
-        self.task_title.setObjectName("h2")
-        lay.addWidget(self.task_title)
-        self.stage_row = QHBoxLayout()
-        lay.addLayout(self.stage_row)
-        pr = QHBoxLayout()
+    def _progress_view(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(14, 12, 14, 10)
+        lay.setSpacing(8)
+        self.prog_title = QLabel("Building Bravely Emerald")
+        bold(self.prog_title, 13)
+        lay.addWidget(self.prog_title)
+        self.prog_step = QLabel("")
+        self.prog_step.setWordWrap(True)
+        lay.addWidget(self.prog_step)
+        row = QHBoxLayout()
         self.bar = QProgressBar()
-        self.bar.setRange(0, 1000)
-        self.bar.setAccessibleName("Build progress")
-        pr.addWidget(self.bar, 1)
-        self.elapsed = QLabel("0:00:00")
-        self.elapsed.setMinimumWidth(70)
-        pr.addWidget(self.elapsed)
-        lay.addLayout(pr)
-        self.log = QPlainTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setMaximumBlockCount(60000)
-        self.log.setAccessibleName("Build log")
-        lay.addWidget(self.log, 1)
-        self.fail_box = QFrame()
-        self.fail_box.setObjectName("card")
-        self.fail_box.setStyleSheet("QFrame#card{border:1px solid %s}" % theme.BAD)
-        fl = QVBoxLayout(self.fail_box)
-        self.fail_lbl = label("")
-        self.fail_lbl.setTextFormat(Qt.RichText)
-        fl.addWidget(self.fail_lbl)
+        self.bar.setRange(0, 100)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(22)
+        self.bar.setAccessibleName("Progress")
+        self.pct_lbl = QLabel("0%")
+        self.pct_lbl.setMinimumWidth(36)
+        row.addWidget(self.bar, 1)
+        row.addWidget(self.pct_lbl)
+        lay.addLayout(row)
+        self.elapsed = QLabel("Time elapsed: 0:00:00")
+        lay.addWidget(self.elapsed)
+        lay.addWidget(QLabel("This takes a while. You can leave this window open and do something else."))
+
+        self.fail_box = QGroupBox("Something went wrong")
+        fl = QHBoxLayout(self.fail_box)
+        ic = QLabel()
+        ic.setPixmap(classic.flat_icon("warning"))
+        fl.addWidget(ic, 0, Qt.AlignTop)
+        self.fail_text = QLabel("")
+        self.fail_text.setWordWrap(True)
+        self.fail_text.setTextFormat(Qt.RichText)
+        self.fail_text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        fl.addWidget(self.fail_text, 1)
         self.fail_box.hide()
         lay.addWidget(self.fail_box)
-        row = QHBoxLayout()
-        self.cancel_btn = QPushButton("&Cancel build")
-        self.cancel_btn.setObjectName("danger")
-        self.cancel_btn.clicked.connect(self.cancel)
-        self.logfile_btn = QPushButton("Open &log file")
-        self.logfile_btn.clicked.connect(self.open_logfile)
-        self.again_btn = QPushButton("Back to &setup")
-        self.again_btn.clicked.connect(lambda: self.tabs.setCurrentIndex(0))
-        row.addWidget(self.cancel_btn)
-        row.addWidget(self.logfile_btn)
-        row.addStretch(1)
-        row.addWidget(self.again_btn)
-        lay.addLayout(row)
-        lay.addWidget(label("Running the build again is safe: finished steps are skipped and it continues where it stopped.", muted=True))
-        return page
 
-    # ------------------------------------------------------------------ result page
-    def _result_page(self):
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        lay.setContentsMargins(0, 10, 0, 0)
-        self.res_title = QLabel("")
-        self.res_title.setObjectName("h2")
-        lay.addWidget(self.res_title)
-        self.res_info = label("")
-        self.res_info.setTextFormat(Qt.RichText)
-        lay.addWidget(self.res_info)
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setFont(classic.mono_font())
+        self.log.setMaximumBlockCount(60000)
+        self.log.setAccessibleName("Details")
+        self.log.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.log.hide()
+        lay.addWidget(self.log, 10)
+        lay.addStretch(1)
+
+        row = QHBoxLayout()
+        self.details_btn = QPushButton("Show &details >>")
+        self.details_btn.setCheckable(True)
+        self.details_btn.toggled.connect(self.toggle_details)
+        self.copy_btn = QPushButton("Copy &log")
+        self.copy_btn.clicked.connect(self.copy_log)
+        self.retry_btn = QPushButton("&Try again")
+        self.retry_btn.clicked.connect(self.try_again)
+        self.back_btn = QPushButton("&Back")
+        self.back_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        self.cancel_btn = QPushButton("&Cancel")
+        self.cancel_btn.clicked.connect(self.cancel)
+        row.addWidget(self.details_btn)
+        row.addWidget(self.copy_btn)
+        row.addStretch(1)
+        row.addWidget(self.retry_btn)
+        row.addWidget(self.back_btn)
+        row.addWidget(self.cancel_btn)
+        lay.addLayout(row)
+        self.retry_btn.hide()
+        self.back_btn.hide()
+        return w
+
+    def _ready_view(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(14, 12, 14, 10)
+        lay.setSpacing(10)
+        head = QHBoxLayout()
+        ic = QLabel()
+        ic.setPixmap(classic.flat_icon("info"))
+        head.addWidget(ic, 0, Qt.AlignTop)
+        self.ready_title = QLabel("Your build is ready.")
+        bold(self.ready_title, 13)
+        head.addWidget(self.ready_title, 1)
+        lay.addLayout(head)
+        lay.addWidget(QLabel("The game is in this folder:"))
+        self.ready_path = QLineEdit()
+        self.ready_path.setReadOnly(True)
+        lay.addWidget(self.ready_path)
         row = QHBoxLayout()
         self.open_btn = QPushButton("&Open folder")
         self.open_btn.clicked.connect(lambda: self.open_result("folder"))
-        self.launch_btn = QPushButton("&Launch game")
-        self.launch_btn.setObjectName("primary")
-        self.launch_btn.clicked.connect(lambda: self.open_result("launch"))
+        self.play_btn = QPushButton("&Play")
+        self.play_btn.setDefault(True)
+        self.play_btn.clicked.connect(lambda: self.open_result("launch"))
         row.addWidget(self.open_btn)
-        row.addWidget(self.launch_btn)
+        row.addWidget(self.play_btn)
         row.addStretch(1)
         lay.addLayout(row)
-        self.res_text = QTextBrowser()
-        self.res_text.setOpenExternalLinks(True)
-        self.res_text.setAccessibleName("Next steps")
-        lay.addWidget(self.res_text, 1)
-        legal = label("Legal: " + LEGAL_NOTE)
-        legal.setStyleSheet("color:%s" % theme.WARN)
+        self.next_lbl = QLabel("")
+        self.next_lbl.setWordWrap(True)
+        lay.addWidget(self.next_lbl)
+        self.help_btn = QPushButton("&Help...")
+        self.help_btn.clicked.connect(lambda: self.open_help("Add it to Steam"))
+        lay.addWidget(self.help_btn, 0, Qt.AlignLeft)
+        lay.addStretch(1)
+        legal = QLabel("This build contains Nintendo's game data. It is for your own use only. Please do not share it.")
+        legal.setWordWrap(True)
         lay.addWidget(legal)
-        return page
+        again = QPushButton("Build &again")
+        again.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        lay.addWidget(again, 0, Qt.AlignRight)
+        return w
 
-    # ------------------------------------------------------------------ settings
-    def load_settings_into_ui(self):
-        s = self.settings
-        tg = (s.get("targets") or [""])[0]
-        avail = [t["id"] for t in self.builder.targets() if t["available"]]
-        pick = tg if tg in avail else (avail[0] if avail else None)
-        for k, rb in self.target_radios.items():
-            rb.blockSignals(True)
-            rb.setChecked(k == pick)
-            rb.blockSignals(False)
-        self.rom_edit.setText(s.get("rom", ""))
-        self.dir_edit.setText(s.get("dir") or self.builder.default_dir())
-        self.jobs.setValue(s.get("jobs") or max(1, (os.cpu_count() or 2) // 2))
-        self.low.setChecked(s.get("low_priority", True))
-        self.run_test.setChecked(s.get("run_test", False))
-        self.container.setText(s.get("container") or "emerald-build")
-        if s.get("msys_root"):
-            self.builder.msys_root = s["msys_root"]
-        self.on_target_changed()
-        if self.rom_edit.text():
-            self.check_rom()
+    def run_box(self, box):
+        if self.no_modal:
+            self.last_box = box
+            return QMessageBox.Cancel
+        return box.exec()
 
-    def current_target(self):
-        for k, rb in self.target_radios.items():
-            if rb.isChecked():
-                return k
-        return None
+    # ------------------------------------------------------------------ settings access
+    def setting(self, key, default=None):
+        return load_settings().get(key, default)
 
-    def collect_opts(self):
-        tg = self.current_target()
-        return {"targets": [tg] if tg else [], "rom": self.rom_edit.text().strip(), "dir": self.dir_edit.text().strip(),
-                "jobs": self.jobs.value(), "low_priority": self.low.isChecked(), "run_test": self.run_test.isChecked(),
-                "container": self.container.text().strip() or "emerald-build"}
+    def cpu_level(self):
+        v = self.setting("cpu", "low")
+        return v if v in ("low", "normal", "high") else "low"
 
-    def save(self):
-        o = self.collect_opts()
-        save_settings({"targets": o["targets"], "rom": o["rom"], "jobs": o["jobs"], "low_priority": o["low_priority"],
-                       "run_test": o["run_test"], "container": o["container"],
-                       "dir": o["dir"]})
+    def install_dir(self):
+        return self.setting("dir") or self.builder.default_dir()
 
-    # ------------------------------------------------------------------ setup actions
-    def on_target_changed(self):
-        lin = self.current_target() == "linux32"
-        for w in (self.container, self.container_lbl, self.run_test):
-            w.setVisible(lin)
-        self.update_start_state()
+    def log_folder(self):
+        if self.builder.host["kind"] == "windows":
+            return os.path.join(self.builder.repo or self.source.work, "build-win", "builder-logs")
+        return os.path.join(self.install_dir(), "builder-logs")
 
-    def update_repo_ui(self):
-        self.source_lbl.setText(self.source.describe() if not self.source_busy else "Preparing the source...")
-        self.bundled_btn.setEnabled(self.source.manifest is not None and bool(self.source.own))
-        self.update_start_state()
+    def open_settings(self):
+        if self.task and self.task.state == "running":
+            self.run_box(info_box(self, "info", "Settings", "Please wait until the build is finished.", QMessageBox.Ok))
+            return
+        dlg = SettingsDialog(self)
+        if dlg.exec():
+            save_settings(dlg.values())
+            self.update_state()
 
+    def open_help(self, find=None):
+        HelpDialog(self, find).exec()
+
+    def about(self):
+        info_box(self, "info", "About " + TITLE, "%s\n\nBuilds Pokemon Bravely Emerald from your own ROM.\n%s\n\n%s" %
+                 (TITLE, self.source.describe(), LEGAL_NOTE), QMessageBox.Ok).exec()
+
+    # ------------------------------------------------------------------ source and checks (background, at start)
     def prepare_source(self, force=False):
-        """Extract the bundled source (or select the chosen checkout) in a thread, then run the prerequisite checks."""
         self.source_busy = True
-        self.update_repo_ui()
-        self.status.setText("Preparing the source...")
+        self.update_state()
+        self.step_panel.setText("Preparing the program files...")
 
         def work():
             try:
-                path = self.source.prepare(force)
-                self.bridge.source_ready.emit(path, "")
+                self.bridge.source_ready.emit(self.source.prepare(force), "")
             except (SourceError, OSError) as e:
                 self.bridge.source_ready.emit("", str(e))
         threading.Thread(target=work, daemon=True).start()
@@ -419,32 +382,42 @@ class MainWindow(QMainWindow):
         self.source_busy = False
         if err:
             self.builder.repo = ""
-            self.source_lbl.setText("Source problem")
-            self.status.setText("")
-            QMessageBox.warning(self, "Source", err)
-            self.update_start_state()
+            self.step_panel.setText("The program files could not be prepared")
+            self.source_error = err
+            self.update_state()
             return
+        self.source_error = ""
         self.builder.repo = os.path.abspath(path)
-        self.status.setText("")
-        self.update_repo_ui()
-        self.check_rom() if self.rom_edit.text() else None
-        self.refresh_checks()
+        self.step_panel.setText("Ready")
+        self.update_state()
+        self.run_checks()
+
+    def run_checks(self):
+        def work():
+            try:
+                res = self.builder.checks()
+            except Exception as e:
+                res = [{"id": "err", "label": "Check", "status": "bad", "detail": repr(e), "blocking": True}]
+            self.bridge.checks_done.emit(res)
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_checks(self, items):
+        self.blockers = [c for c in items if c.get("blocking")]
+        self.update_state()
 
     def choose_work(self):
-        d = QFileDialog.getExistingDirectory(self, "Work folder for the extracted source", self.work_edit.text() or os.path.expanduser("~"))
+        d = QFileDialog.getExistingDirectory(self, "Work folder for the program files", os.path.dirname(self.source.work) or os.path.expanduser("~"))
         if d:
-            target = os.path.join(os.path.normpath(d), "source")
-            self.source.work = target
-            self.work_edit.setText(target)
-            save_settings({"source_dir": target})
+            self.source.work = os.path.join(os.path.normpath(d), "source")
+            save_settings({"source_dir": self.source.work})
             self.prepare_source()
 
     def choose_own(self):
-        d = QFileDialog.getExistingDirectory(self, "Choose your own checkout of the repository", os.path.expanduser("~"))
+        d = QFileDialog.getExistingDirectory(self, "Choose your own checkout of the project", os.path.expanduser("~"))
         if not d:
             return
         if not is_repo(d):
-            QMessageBox.warning(self, "Not the repository", "%s does not contain the build scripts (fetch_assets.sh, tools/deck, tools/windows)." % d)
+            self.run_box(info_box(self, "error", "Settings", "%s does not hold the build scripts (fetch_assets.sh, tools\\deck, tools\\windows)." % d, QMessageBox.Ok))
             return
         self.source.own = os.path.abspath(d)
         save_settings({"own_checkout": self.source.own})
@@ -455,184 +428,134 @@ class MainWindow(QMainWindow):
         save_settings({"own_checkout": ""})
         self.prepare_source()
 
+    # ------------------------------------------------------------------ ROM
     def browse_rom(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Select your Pokemon Emerald .gba file", os.path.dirname(self.rom_edit.text()) or os.path.expanduser("~"),
+        f, _ = QFileDialog.getOpenFileName(self, "Choose your Pokemon Emerald ROM", os.path.dirname(self.rom_edit.text()) or os.path.expanduser("~"),
                                            "GBA ROM (*.gba);;All files (*)")
         if f:
             self.rom_edit.setText(os.path.normpath(f))
             self.check_rom()
 
-    def choose_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Choose the install folder", self.dir_edit.text() or os.path.expanduser("~"))
-        if d:
-            self.dir_edit.setText(os.path.normpath(d))
-
     def check_rom(self):
         p = self.rom_edit.text().strip()
         if not p:
             self.rom_ok = False
-            self.rom_status.setText("")
+            self.rom_icon.clear()
+            self.rom_text.setText("")
         else:
             v = validate_rom(p)
             self.rom_ok = v["ok"]
-            color = theme.OK if v["ok"] else theme.BAD
-            self.rom_status.setText('<span style="color:%s;font-weight:600">%s</span> %s' % (color, "VALID" if v["ok"] else "REJECTED", v["message"]))
-            self.rom_status.setTextFormat(Qt.RichText)
-        have = self.builder.have_assets() if self.builder.repo else False
-        self.rom_need.setText("The game files already exist, so the ROM is not needed again (it is only used for the first run)." if have
-                              else "Needed for the first run: it is read to check it is Pokemon Emerald; it is not copied or stored.")
-        self.update_start_state()
+            self.rom_icon.setPixmap(classic.flat_icon("tick" if v["ok"] else "cross", 16))
+            if v["ok"]:
+                self.rom_text.setText("Pokemon Emerald (%s) found." % LANG.get(v["code"][3:4], v["code"]))
+            else:
+                self.rom_text.setText(v["message"])
+        self.update_state()
 
-    def refresh_checks(self):
-        if not is_repo(self.builder.repo):
-            self.apply_checks([])
+    # ------------------------------------------------------------------ idle state
+    def update_state(self):
+        busy = bool(self.task and self.task.state == "running") or self.planning
+        have_files = bool(self.builder.repo) and self.builder.have_assets()
+        warn, info = "", ""
+        if self.source_busy:
+            info = "Please wait while the program files are prepared..."
+        elif not self.builder.repo:
+            warn = getattr(self, "source_error", "") or "The program files are not available. Open File, Settings to fix this."
+        elif self.blockers:
+            warn = "The build cannot start yet: " + "; ".join("%s. %s" % (c["label"], c["detail"]) for c in self.blockers)
+            for c in self.blockers:
+                if c.get("manual"):
+                    warn += " Run this in a terminal: " + c["manual"]
+        elif not have_files and not self.rom_ok:
+            info = "Choose your Pokemon Emerald ROM to continue."
+        elif have_files and not self.rom_text.text():
+            info = "The game files from an earlier build were found, so the ROM is not needed again."
+        self.problem_icon.setPixmap(classic.flat_icon("warning", 16)) if warn else self.problem_icon.clear()
+        self.problem_text.setText(warn or info)
+        ready = bool(self.builder.repo) and not self.source_busy and not warn and (have_files or self.rom_ok)
+        self.build_btn.setEnabled(ready and not busy)
+
+    # ------------------------------------------------------------------ build
+    def build_opts(self):
+        jobs, low = cpu_profile(self.cpu_level(), os.cpu_count() or 1)
+        target = "windows" if self.builder.host["kind"] == "windows" else "linux32"
+        return {"targets": [target], "rom": self.rom_edit.text().strip(), "dir": self.install_dir(), "jobs": jobs,
+                "low_priority": low, "run_test": bool(self.setting("run_test", False)),
+                "container": self.setting("container", "emerald-build")}
+
+    def make_confirm_box(self):
+        text = ("The build will now download and install what it needs, then build the game.\n\n"
+                "It needs an internet connection and downloads the build tools, the SDL2 libraries and the game files from the public "
+                "pret/pokeemerald project (several hundred MB in all, more if the tools are not installed yet).\n\n"
+                "It takes about 30 to 60 minutes the first time and needs about 15 GB of free disk space.\n"
+                "Your ROM is only read to check it. The finished build is for your own use only.\n\n"
+                "Do you want to continue?")
+        box = info_box(self, "question", TITLE, text, QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Ok)
+        box.button(QMessageBox.Ok).setText("Continue")
+        return box
+
+    def confirm_and_build(self):
+        if self.run_box(self.make_confirm_box()) != QMessageBox.Ok:
             return
-        self.refresh_btn.setEnabled(False)
-        self.status.setText("Checking prerequisites...")
+        self.start_build()
+
+    def start_build(self):
+        opts = self.build_opts()
+        self.last_opts = opts
+        save_settings({"rom": opts["rom"]})
+        self.planning = True
+        self.update_state()
+        self.step_panel.setText("Preparing the build...")
 
         def work():
             try:
-                res = self.builder.checks()
+                self.bridge.plan_ready.emit(self.builder.plan_build(opts), "")
+            except ValueError as e:
+                self.bridge.plan_ready.emit(None, str(e))
             except Exception as e:
-                res = [{"id": "err", "label": "Checks failed", "status": "bad", "detail": repr(e), "action": None, "manual": None, "blocking": True, "auto": False}]
-            self.bridge.checks_done.emit(res)
+                self.bridge.plan_ready.emit(None, repr(e))
         threading.Thread(target=work, daemon=True).start()
 
-    def apply_checks(self, items):
-        self.checks = items
-        while self.checks_body.count():
-            w = self.checks_body.takeAt(0).widget()
-            if w:
-                w.deleteLater()
-        for it in items:
-            self.checks_body.addWidget(PrereqRow(it, self.install))
-        self.refresh_btn.setEnabled(True)
-        self.status.setText("")
-        self.check_rom() if self.rom_edit.text() else self.update_start_state()
-
-    def update_start_state(self):
-        busy = bool(self.task and self.task.state == "running")
-        repo_ok = is_repo(self.builder.repo)
-        blockers = [c for c in self.checks if c["blocking"]]
-        need_rom = repo_ok and not self.builder.have_assets()
-        reasons = []
-        if self.source_busy:
-            reasons.append("the source is being prepared")
-        elif not repo_ok:
-            reasons.append("no source available (see Advanced)")
-        if not self.current_target():
-            reasons.append("no target available on this computer")
-        if blockers:
-            reasons.append("fix the missing prerequisites above (%s)" % ", ".join(c["label"] for c in blockers))
-        if need_rom and not self.rom_ok:
-            reasons.append("pick a valid ROM")
-        self.blockers_lbl.setText(("Not ready: " + "; ".join(reasons) + ".") if reasons else "Ready.")
-        self.start_btn.setEnabled(not reasons and not busy)
-
-    # ------------------------------------------------------------------ installs
-    def install(self, what):
-        if what == "msys2":
-            self.status.setText("Looking up the installer size...")
-            threading.Thread(target=lambda: self.bridge.msys_info.emit(self.builder.msys2_prepare()), daemon=True).start()
+    def on_plan(self, plan, err):
+        self.planning = False
+        if plan is None:
+            self.step_panel.setText("Ready")
+            self.update_state()
+            self.run_box(info_box(self, "error", TITLE, err, QMessageBox.Ok))
             return
-        text = {"packages": "Run pacman in MSYS2 to update it and install the build packages (mingw32 toolchain, cmake, make, python-pillow, ...).\n"
-                            "This downloads packages from the MSYS2 mirrors.",
-                "deps": "Download the official SDL2 2.32.10 and SDL2_image 2.8.12 sources and build them as static 32-bit libraries "
-                        "(tools/windows/build_deps.sh). A few minutes."}.get(what, what)
-        if QMessageBox.question(self, "Install", text + "\n\nContinue?") != QMessageBox.Yes:
-            return
+        label, stages, steps, meta = plan
+        meta["container"] = (self.last_opts or {}).get("container", "emerald-build")
         try:
-            label_, stages, steps, meta = self.builder.plan_install(what, True)
+            self.task = self.builder.start(label, stages, steps, meta, "build", lambda ev: self.bridge.event.emit(ev))
         except ValueError as e:
-            QMessageBox.warning(self, "Install", str(e))
+            self.run_box(info_box(self, "error", TITLE, str(e), QMessageBox.Ok))
             return
-        self.begin_task(label_, stages, steps, meta, "install")
-
-    def show_msys_consent(self, info):
-        self.status.setText("")
-        size = ("%.1f MB (%d bytes)" % (info["size"] / 1048576.0, info["size"])) if info.get("size") else "unknown (could not reach github.com)"
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle("Download the MSYS2 installer")
-        box.setText("Download and run the official MSYS2 installer?")
-        box.setInformativeText("File: %s\nFrom: %s\nSize: %s\nSaved in: %s\nThen run silently into: %s\n\nWindows may show a permission prompt." %
-                               (info["filename"], info["url"], size, info["dest"], info["root"]))
-        box.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
-        box.button(QMessageBox.Yes).setText("Download and install")
-        box.setDefaultButton(QMessageBox.Cancel)
-        if box.exec() != QMessageBox.Yes:
-            return
-        try:
-            label_, stages, steps, meta = self.builder.plan_install("msys2", True)
-        except ValueError as e:
-            QMessageBox.warning(self, "Install", str(e))
-            return
-        self.begin_task(label_, stages, steps, meta, "install")
-
-    # ------------------------------------------------------------------ build
-    def start_build(self):
-        self.save()
-        try:
-            label_, stages, steps, meta = self.builder.plan_build(self.collect_opts())
-        except ValueError as e:
-            QMessageBox.warning(self, "Cannot start", str(e))
-            return
-        meta["container"] = self.collect_opts()["container"]
-        self.begin_task(label_, stages, steps, meta, "build")
-
-    def begin_task(self, label_, stages, steps, meta, kind):
-        try:
-            self.task = self.builder.start(label_, stages, steps, meta, kind, lambda ev: self.bridge.event.emit(ev))
-        except ValueError as e:
-            QMessageBox.warning(self, "Busy", str(e))
-            return
-        self.task_kind = kind
+        self.stage_order = list(stages)
+        self.stage_done = set()
+        self.cur_stage = None
+        self.pct = 0
         self.log.clear()
         self.log_buf = []
         self.fail_box.hide()
-        self.pct = 0
-        self.task_title.setText(label_)
-        self.set_stages(stages)
-        self.bar.setValue(0)
+        self.prog_title.setText("Building Bravely Emerald")
+        self.prog_step.setText(STEP_TEXT["prereq"])
+        self.set_progress()
+        for b, on in ((self.cancel_btn, True), (self.retry_btn, False), (self.back_btn, False)):
+            b.setVisible(on)
         self.cancel_btn.setEnabled(True)
-        self.tabs.setTabEnabled(1, True)
-        self.tabs.setTabEnabled(2, False)
-        self.tabs.setCurrentIndex(1)
-        self.update_start_state()
-        self.logfile_btn.setEnabled(bool(self.task.logfile))
+        self.stack.setCurrentIndex(1)
+        self.update_state()
 
-    def set_stages(self, stages):
-        while self.stage_row.count():
-            w = self.stage_row.takeAt(0).widget()
-            if w:
-                w.deleteLater()
-        self.stage_labels, self.stage_state, self.stage_order = {}, {}, list(stages)
-        for s in stages:
-            lb = QLabel(STAGE_LABELS.get(s, s))
-            lb.setAlignment(Qt.AlignCenter)
-            self.stage_labels[s] = lb
-            self.stage_state[s] = "pending"
-            self.stage_row.addWidget(lb)
-        self.restyle_stages()
-
-    def restyle_stages(self):
-        for s, lb in self.stage_labels.items():
-            st = self.stage_state[s]
-            col, bg, fw = {"pending": (theme.MUTED, "#1c2228", "400"), "active": ("#06140d", theme.ACCENT, "700"),
-                           "done": (theme.OK, "#18322a", "600"), "failed": ("white", "#8a2d2d", "700")}[st]
-            mark = {"done": "✓ ", "failed": "✗ "}.get(st, "")
-            lb.setText(mark + STAGE_LABELS.get(s, s))
-            lb.setStyleSheet("color:%s;background:%s;font-weight:%s;border-radius:11px;padding:4px 10px;" % (col, bg, fw))
-        n = max(1, len(self.stage_order))
-        done = sum(1 for s in self.stage_order if self.stage_state[s] == "done")
-        act = next((i for i, s in enumerate(self.stage_order) if self.stage_state[s] == "active"), None)
-        frac = 0.0
-        if act is not None and self.stage_order[act] == "compile":
-            frac = self.pct / 100.0
-        elif act is not None:
-            frac = 0.3
-        self.bar.setValue(int(1000 * min(1.0, (done + frac) / n)))
-        self.bar.setFormat("%d%%" % int(self.bar.value() / 10))
+    def set_progress(self):
+        total = sum(WEIGHT.get(s, 1) for s in self.stage_order) or 1
+        done = sum(WEIGHT.get(s, 1) for s in self.stage_done)
+        cur = 0.0
+        if self.cur_stage in self.stage_order:
+            w = WEIGHT.get(self.cur_stage, 1)
+            cur = w * (self.pct / 100.0 if self.cur_stage == "compile" else 0.3)
+        v = int(min(100, 100.0 * (done + cur) / total))
+        self.bar.setValue(v)
+        self.pct_lbl.setText("%d%%" % v)
 
     def on_event(self, ev):
         t = ev["type"]
@@ -640,20 +563,16 @@ class MainWindow(QMainWindow):
             self.log_buf.append(ev["text"])
         elif t == "stage":
             s = ev["stage"]
-            if s in self.stage_state:
-                idx = self.stage_order.index(s)
-                for o in self.stage_order[:idx]:
-                    if self.stage_state[o] in ("pending", "active"):
-                        self.stage_state[o] = "done"
-                for o in self.stage_order:
-                    if self.stage_state[o] == "active" and o != s:
-                        self.stage_state[o] = "done"
-                self.stage_state[s] = "active"
+            if s in self.stage_order:
+                self.stage_done.update(self.stage_order[:self.stage_order.index(s)])
+                self.cur_stage = s
                 self.pct = 0
-                self.restyle_stages()
+                self.prog_step.setText(STEP_TEXT.get(s, s))
+                self.step_panel.setText(STEP_SHORT.get(s, s))
+                self.set_progress()
         elif t == "progress":
             self.pct = ev["pct"]
-            self.restyle_stages()
+            self.set_progress()
         elif t == "state":
             self.flush_log()
             self.finish_task(ev)
@@ -670,107 +589,94 @@ class MainWindow(QMainWindow):
 
     def finish_task(self, ev):
         st = ev["state"]
-        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.setVisible(False)
         if st == "done":
-            for s in self.stage_order:
-                self.stage_state[s] = "done"
-            self.bar.setValue(1000)
-        else:
-            for s in self.stage_order:
-                if self.stage_state[s] == "active":
-                    self.stage_state[s] = "failed" if st == "failed" else "pending"
-        self.restyle_stages()
-        kind = self.task_kind
-        if st == "failed":
-            hints = ev.get("hints") or []
-            html = "<b>The step failed.</b> The log above has the details."
-            if ev.get("step"):
-                html += " Step: %s (exit code %s)." % (ev["step"], ev.get("code"))
-            for h in hints:
-                html += "<br><br><b>%s</b><br>%s" % (h["title"], h["fix"])
-            if not hints:
-                html += "<br><br>No known fix matches this message. Read the first error lines of the log; see docs/BUILD_DECK.md or docs/WINDOWS_BUILD.md."
-            self.fail_lbl.setText(html)
-            self.fail_box.show()
+            self.stage_done.update(self.stage_order)
+            self.set_progress()
+            self.show_ready(self.task.result or {})
         elif st == "cancelled":
-            self.fail_lbl.setText("<b>Cancelled.</b> The whole process tree was stopped. Start again to resume.")
-            self.fail_box.show()
-        elif st == "done":
-            if kind == "build":
-                self.show_result(self.task.result or {})
-            if kind == "install":
-                self.refresh_checks()
-        self.update_start_state()
-        self.status.setText("%s: %s in %s" % (self.task.label, st, fmt_secs((self.task.finished or time.time()) - self.task.started)))
+            self.step_panel.setText("Cancelled")
+            self.stack.setCurrentIndex(0)
+            self.update_state()
+            self.run_box(info_box(self, "info", TITLE, "The build was cancelled. Finished steps are kept, so the next build continues where this one stopped.",
+                                  QMessageBox.Ok))
+        else:
+            self.show_failure(ev)
+        self.update_state()
+
+    def show_failure(self, ev):
+        hints = ev.get("hints") or []
+        html = "<b>A step did not finish.</b>"
+        plain = "A step did not finish."
+        for h in hints:
+            html += "<br><br><b>%s</b><br>%s" % (h["title"], h["fix"])
+            plain += "\n\n%s\n%s" % (h["title"], h["fix"])
+        if not hints:
+            extra = "No known fix matches this problem. Press Show details and read the first error lines."
+            html += "<br><br>" + extra
+            plain += "\n\n" + extra
+        self.fail_text.setText(html)
+        self.fail_box.show()
+        self.prog_title.setText("The build stopped")
+        self.step_panel.setText("Stopped")
+        for b, on in ((self.retry_btn, True), (self.back_btn, True), (self.cancel_btn, False)):
+            b.setVisible(on)
+        box = info_box(self, "warning", TITLE, plain, QMessageBox.Retry | QMessageBox.Cancel, QMessageBox.Retry)
+        if self.run_box(box) == QMessageBox.Retry:
+            self.try_again()
+
+    def try_again(self):
+        self.start_build()
+
+    def toggle_details(self, on):
+        self.log.setVisible(on)
+        self.details_btn.setText("<< Hide &details" if on else "Show &details >>")
+
+    def copy_log(self):
+        self.flush_log()
+        QGuiApplication.clipboard().setText(self.log.toPlainText())
+        self.step_panel.setText("The log was copied to the clipboard")
 
     def tick(self):
         t = self.task
         if t and t.state == "running":
-            self.elapsed.setText(fmt_secs(time.time() - t.started))
-        elif t and t.finished:
-            self.elapsed.setText(fmt_secs(t.finished - t.started))
+            self.elapsed.setText("Time elapsed: " + fmt_secs(time.time() - t.started))
 
     def cancel(self):
-        if self.task and self.task.state == "running":
+        if not (self.task and self.task.state == "running"):
+            return
+        box = info_box(self, "question", TITLE, "Do you want to cancel the build?\n\nFinished steps are kept.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if self.run_box(box) == QMessageBox.Yes:
             self.cancel_btn.setEnabled(False)
             self.builder.cancel()
 
-    def open_logfile(self):
-        if self.task and self.task.logfile and os.path.isfile(self.task.logfile):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(self.task.logfile))
-
-    # ------------------------------------------------------------------ result
-    def show_result(self, res):
-        self.res_result = res
-        ok = res.get("ok") or self.builder.dry_run
-        self.tabs.setTabEnabled(2, True)
-        self.tabs.setCurrentIndex(2)
-        if self.builder.dry_run:
-            self.res_title.setText("Dry run finished (nothing was built)")
-        else:
-            self.res_title.setText("Build finished" if ok else "Build incomplete")
-        rows = [("Game folder", res.get("folder")), ("Zip", res.get("zip")), ("Launcher", res.get("launcher")),
-                ("Saves", res.get("savedir")), ("Log", res.get("log"))]
-        self.res_info.setText("<br>".join("<b>%s:</b> %s" % (k, v) for k, v in rows if v))
+    # ------------------------------------------------------------------ ready
+    def show_ready(self, res):
+        self.res = res
+        self.ready_path.setText(res.get("folder") or "")
+        self.ready_title.setText("Dry run finished. Nothing was built." if self.builder.dry_run else "Your build is ready.")
         self.open_btn.setEnabled(bool(res.get("ok")))
-        self.launch_btn.setEnabled(bool(res.get("launch")))
-        self.res_text.setHtml(self.next_steps_html(res))
-
-    CODE_CSS = '<style>code{font-family:Consolas,"DejaVu Sans Mono",monospace;color:#2fcf8a}</style>'
-
-    def next_steps_html(self, res):
-        return self.CODE_CSS + self._next_steps(res)
-
-    def _next_steps(self, res):
+        self.play_btn.setEnabled(bool(res.get("launch")))
         if res.get("target") == "linux32":
-            return ("<h3>Add it to Steam (Game Mode)</h3><ol>"
-                    "<li>In Desktop Mode open <b>Steam</b>, then <i>Games &gt; Add a Non-Steam Game to My Library</i>.</li>"
-                    "<li>Pick <b>Pokemon Emerald (Deck)</b> in the list. If it is not listed, press <i>Browse</i>, choose the file type "
-                    "<i>All files</i> and select <code>%s</code>. Press <i>Add Selected Programs</i>.</li>"
-                    "<li>Optional: right-click the entry &gt; <i>Properties</i> to rename it or set artwork.</li>"
-                    "<li>Switch back to Game Mode with the <i>Return to Gaming Mode</i> icon. The game is under <i>Non-Steam</i>.</li></ol>"
-                    "<p>The launcher starts the game inside the build container with distrobox. Starting from Game Mode has not been "
-                    "verified by the authors of the guide; see docs/BUILD_DECK.md.</p>"
-                    "<h3>Import a save</h3><p>Close the game, then copy <code>pokeemerald.sav</code> from another install (the Windows build's "
-                    "<code>userdata\\saves\\</code>) to <code>%s</code>.</p>"
-                    "<p>Saves live outside the build folder, so rebuilding never touches them.</p>" %
-                    (res.get("launcher", "~/emerald-deck/emerald-launch.sh"), res.get("savedir", "")))
-        return ("<h3>Play</h3><p>Open the folder and double-click <code>run.bat</code> (or <code>pokeemerald.exe</code>). Keep <code>app0\\</code> and "
-                "<code>userdata\\</code> next to the exe.</p>"
-                "<h3>Import a Steam Deck save</h3><p>Close the game, then copy <code>userdata/saves/pokeemerald.sav</code> from the Deck install "
-                "(<code>~/emerald-deck/userdata/saves/</code>) to <code>%s</code>, replacing the existing file.</p>"
-                "<p>The zip next to the repository is for yourself only; do not share it.</p>" % res.get("savedir", "userdata\\saves"))
+            self.next_lbl.setText("Next step: to play from Steam Game Mode, add the launcher to Steam. Press Help for the steps.")
+            self.help_btn.setVisible(True)
+        else:
+            self.next_lbl.setText("Next step: press Play, or double-click run.bat in that folder.")
+            self.help_btn.setVisible(False)
+        self.step_panel.setText("Done")
+        self.stack.setCurrentIndex(2)
 
     def open_result(self, what):
         try:
             self.builder.open_result(what)
         except Exception as e:
-            QMessageBox.warning(self, "Open", str(e))
+            self.run_box(info_box(self, "error", TITLE, str(e), QMessageBox.Ok))
 
     # ------------------------------------------------------------------ closing
     def closeEvent(self, e):
         if self.task and self.task.state == "running":
-            if QMessageBox.question(self, "Quit", "A task is running. Cancel it and quit?") != QMessageBox.Yes:
+            box = info_box(self, "question", TITLE, "A build is running. Cancel it and exit?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if self.run_box(box) != QMessageBox.Yes:
                 e.ignore()
                 return
             self.builder.cancel()
@@ -778,5 +684,4 @@ class MainWindow(QMainWindow):
                 if self.task.state != "running":
                     break
                 time.sleep(0.1)
-        self.save()
         e.accept()

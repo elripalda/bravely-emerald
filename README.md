@@ -110,7 +110,7 @@ launcher you can add to Steam. Step by step, with Game Mode, saves and troublesh
 **Windows** (32-bit build with MSYS2): get the game files once with `fetch_assets.sh`, then run
 `tools\windows\build.bat`. See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md).
 
-**GUI builder** (Windows, Linux, SteamOS): a desktop app checks your computer, installs what is missing and runs the two builds above with a live log. Download `BravelyEmeraldBuilder-win.zip`, unzip it and run `BravelyEmeraldBuilder.exe` (Linux: unpack the `.tar.gz` and run `sh install.sh`), or from a clone: `pip install PySide6` then `python tools/builder/app.py`. It needs your own ROM and does not upload anything. See [docs/BUILDER.md](docs/BUILDER.md).
+**GUI builder** (Windows, Linux, SteamOS): a small desktop program that builds the game for you. Download `BravelyEmeraldBuilder-win.zip` (Linux: the `.tar.gz`, then `sh install.sh`), unzip it, run `BravelyEmeraldBuilder.exe`, choose your ROM and press Build. It carries the repository inside it, so you need only your own ROM and an internet connection: it downloads the build tools (MSYS2 or a build container and the compiler packages), the SDL2 sources and, from the public pret/pokeemerald project, the game files, after one confirmation. It is standalone for the repository, not for the toolchain. The first build takes 30 to 60 minutes and needs about 15 GB. From a clone: `pip install PySide6` then `python tools/builder/app.py`. Nothing is uploaded. See [docs/BUILDER.md](docs/BUILDER.md).
 
 PS Vita builds are not covered by this fork's instructions (the Vita code lineage remains in the tree).
 

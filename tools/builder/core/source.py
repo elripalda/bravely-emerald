@@ -271,3 +271,18 @@ class Source:
         if not path:
             raise SourceError(self.describe())
         return path
+
+
+def help_file():
+    """The bundled help page (Markdown), or None. Packaged app: help/BUILDER_HELP.md; source checkout: docs/BUILDER_HELP.md."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cands = []
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+        cands.append(os.path.join(base, "help", "BUILDER_HELP.md"))
+    cands.append(os.path.join(here, "help", "BUILDER_HELP.md"))
+    cands.append(os.path.join(here, "..", "..", "docs", "BUILDER_HELP.md"))
+    for c in cands:
+        if os.path.isfile(c):
+            return os.path.abspath(c)
+    return None

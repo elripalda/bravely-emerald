@@ -31,6 +31,8 @@ class Builder:
         self.task = None
         self.lock = threading.Lock()
         self.net_cache = (0, False)
+        self.last_checks = None        # result of the last checks(), reused when planning a build
+        self.pkg_missing = None        # missing MSYS2 packages from the last check (None: unknown)
         self.msys_root = None
 
     # ----- environment helpers
@@ -105,6 +107,7 @@ class Builder:
             self._checks_linux(add)
         else:
             add("host", "Host", "bad", "Unsupported system: %s." % self.host["label"], blocking=True)
+        self.last_checks = items
         return items
 
     def _checks_windows(self, add):
@@ -114,18 +117,20 @@ class Builder:
             "(installed with the MSYS2 packages below). To clone this repository you need Git from https://git-scm.com.")
         bash = self.msys_bash()
         have_msys = os.path.isfile(bash)
-        add("msys2", "MSYS2 (%s)" % self.msys(), "ok" if have_msys else "bad",
-            "Found." if have_msys else "Not found. Install it from the official installer (about 82 MB, needs consent).",
-            action=None if have_msys else "msys2", blocking=True)
+        add("msys2", "MSYS2 (%s)" % self.msys(), "ok" if have_msys else "warn",
+            "Found." if have_msys else "Not installed. The build installs it from the official installer (about 85 MB).",
+            action=None if have_msys else "msys2", auto=True)
         if not have_msys:
-            add("packages", "MSYS2 packages (mingw32 toolchain, cmake, make, python-pillow, ...)", "bad",
-                "Needs MSYS2 first.", blocking=True)
+            self.pkg_missing = None
+            add("packages", "MSYS2 packages (mingw32 toolchain, cmake, make, python-pillow, ...)", "warn",
+                "Not installed. The build installs them after MSYS2.", auto=True)
         else:
             missing, err = self._missing_packages()
+            self.pkg_missing = None if err else missing
             if err:
-                add("packages", "MSYS2 packages", "bad", "Could not query pacman: %s" % err, action="packages", blocking=True)
+                add("packages", "MSYS2 packages", "warn", "Could not query pacman (%s); the build will run the install anyway." % err, action="packages", auto=True)
             elif missing:
-                add("packages", "MSYS2 packages", "bad", "Missing: %s" % ", ".join(missing), action="packages", blocking=True)
+                add("packages", "MSYS2 packages", "warn", "Missing: %s. The build installs them." % ", ".join(missing), action="packages", auto=True)
             else:
                 add("packages", "MSYS2 packages", "ok", "All %d required packages are installed." % len(MSYS_PACKAGES))
         deps = os.path.join(self.repo, "build-win", "deps", "lib")
@@ -265,10 +270,26 @@ class Builder:
 
     def _plan_windows(self, rom, jobs, low, opts):
         if not self.dry_run:
-            blockers = [c for c in self.checks() if c["blocking"]]
+            blockers = [c for c in (self.last_checks or self.checks()) if c["blocking"]]
             if blockers:
-                raise ValueError("Prerequisites missing: " + "; ".join("%s (%s)" % (c["label"], c["detail"]) for c in blockers))
+                raise ValueError("Cannot build yet: " + "; ".join("%s (%s)" % (c["label"], c["detail"]) for c in blockers))
         steps = []
+        have_msys = os.path.isfile(self.msys_bash())
+        if not have_msys:
+            steps.append(Step("Install MSYS2 (official installer)", "install", [], func=self._msys2_step))
+        need_pkgs = not have_msys
+        if have_msys:
+            if self.pkg_missing is None and not self.dry_run:
+                missing, err = self._missing_packages()
+                self.pkg_missing = None if err else missing
+                need_pkgs = bool(err or missing)
+            else:
+                need_pkgs = bool(self.pkg_missing)
+        if need_pkgs:
+            s1, e1 = self.msys_cmd("pacman --noconfirm -Syu")
+            s2, e2 = self.msys_cmd('pacman --noconfirm -S --needed "$@"', MSYS_PACKAGES)
+            steps.append(Step("Update MSYS2 (it may ask for a restart of MSYS2; that is fine)", "install", s1, e1, tolerate=lambda lines: True))
+            steps.append(Step("Install the build packages", "install", s2, e2))
         bash_rules = [
             (r"=== Building the host tools", "tools"), (r"=== Converting the game files", "assets"),
             (r"=== Intro margins", "assets"), (r"=== SDL2 and SDL2_image", "deps"),
@@ -296,7 +317,7 @@ class Builder:
         if os.path.normcase(os.path.abspath(out)) == repo_n or os.path.normcase(os.path.abspath(out)).startswith(repo_n + os.sep):
             raise ValueError("The install folder must be outside the source folder.")
         steps.append(Step("Copy the game to the install folder (saves and settings are kept)", "package", [], func=lambda task: install_windows_result(task, self.repo, out)))
-        stages = ["prereq", "files", "tools", "assets", "deps", "compile", "link", "package"]
+        stages = ["prereq"] + (["install"] if (not have_msys or need_pkgs) else []) + ["files", "tools", "assets", "deps", "compile", "link", "package"]
         meta = {"target": "windows", "dir": out, "logdir": os.path.join(self.repo, "build-win", "builder-logs"),
                 "low": low}
         return "Windows build", stages, steps, meta
@@ -450,12 +471,16 @@ class Builder:
             task.log("INTERNAL ERROR: %r" % (e,))
             task.finish("failed", hints=[{"title": "Internal error in the builder.", "fix": repr(e)}])
 
+    def _msys2_step(self, task):
+        if not self._run_msys2_install(task):
+            raise RuntimeError("The MSYS2 installer did not finish (see the details).")
+
     def _run_msys2_install(self, task):
         """Download the official installer (consent was given in the UI) and run it silently."""
         dest_dir = os.path.join(tempfile.gettempdir(), "bravely-builder-dl")
         os.makedirs(dest_dir, exist_ok=True)
         dest = os.path.join(dest_dir, MSYS_INSTALLER_FILE)
-        task.set_stage("download")
+        task.set_stage("install")
         task.log("Downloading %s" % MSYS_INSTALLER_URL)
         if self.dry_run:
             task.log("[dry run] would download to %s and run: %s in --confirm-command --accept-messages --root %s" % (dest, dest, self.msys()))

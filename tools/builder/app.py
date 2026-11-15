@@ -38,11 +38,11 @@ def main(argv=None):
         from PySide6.QtWidgets import QApplication
     except ImportError:
         sys.exit("PySide6 is needed: pip install PySide6   (or use the packaged BravelyEmeraldBuilder)")
-    from ui import theme
+    from ui import classic
     from ui.main_window import MainWindow
     app = QApplication(sys.argv[:1])
-    app.setApplicationName("Bravely Emerald builder")
-    theme.apply(app)
+    app.setApplicationName("Bravely Emerald Builder")
+    classic.apply(app)
     win = MainWindow(args.repo, args.dry_run)
     win.show()
     if args.smoke:
