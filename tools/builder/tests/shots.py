@@ -65,7 +65,7 @@ def main():
         step = Step("fake build", "compile", [sys.executable, "-u", "-c", code.replace('FAIL', str(fail))],
                     stage_rules=[(r"Linking C executable", "link")])
         if name.endswith("running"):
-            step.argv[3] = code.replace('FAIL', 'False') + "time.sleep(30)\n"
+            step.argv[3] = code.replace('FAIL', 'False').replace("print('Linking", "time.sleep(60); print('Linking")
         w.begin_task("Windows build", ["prereq", "files", "tools", "assets", "deps", "compile", "link", "package"],
                      [step], {"logdir": tempfile.mkdtemp(), "low": False}, "build")
         pump(app, 3 if not fail else 4)
@@ -77,10 +77,12 @@ def main():
     res = {"ok": True, "target": "windows", "folder": r"F:\bravely-emerald\dist-win", "zip": r"F:\bravely-emerald\pokeemerald-win.zip",
            "savedir": r"F:\bravely-emerald\dist-win\userdata\saves", "log": r"F:\bravely-emerald\build-win\builder-logs\build.log", "launch": True}
     w.show_result(res)
+    pump(app, 0.4)
     w.grab().save(os.path.join(out, "04_result_windows.png"))
     res = {"ok": True, "target": "linux32", "folder": "/home/deck/emerald-deck/build/dist", "launcher": "/home/deck/emerald-deck/emerald-launch.sh",
            "savedir": "/home/deck/emerald-deck/userdata/saves", "log": "/home/deck/emerald-deck/builder-logs/build.log", "launch": True}
     w.show_result(res)
+    pump(app, 0.4)
     w.grab().save(os.path.join(out, "05_result_linux.png"))
     print("shots in", out)
     w.save = lambda: None
