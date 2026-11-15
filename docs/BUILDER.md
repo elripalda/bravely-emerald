@@ -239,5 +239,8 @@ possible here and its code is not reused (it is also under CC BY-NC-SA 4.0). Thi
 
 ## Tested and not verified
 
-See the hand-off report of the change for the exact runs. Not verified unless noted there: the Linux and Steam Deck target beyond
-command construction, the Linux package, the MSYS2 install on a computer without MSYS2, and Game Mode start-up (as in `BUILD_DECK.md`).
+Tested on Windows 10 (2026-11-15): 66 core and window tests; every screen rendered offscreen at 1x and 2x and read (with 4x zooms of the title bar, buttons, field, checkbox and progress bar); simulated desktops of 1280x800 to 3840x2160; the packaged exe (`--smoke`, `--selftest`); and builds through the packaged exe whose repository is only its bundled snapshot, from a folder with no repository: a full build (29 min 22 s), a second full build of the newer bundle onto the same work folder (4 min 52 s), and a rebuild after the `build.sh` cache fix (1 min 47 s, nothing recompiled). The game started, showed the title screen and logged no GL error each time.
+
+`tools/windows/build.sh` had a bug that deleted `build-win/out` on every run (the cache check compared an MSYS path with a Windows path), so every Windows rebuild compiled everything; it is fixed in the same change.
+
+Not verified: the Linux and Steam Deck target beyond command construction (the Deck was not reachable), the Linux package and `build_linux_in_container.sh`, the MSYS2 install and the package install on a computer without MSYS2, the window frame drag on Linux and Wayland (only the fallback logic is tested), and Game Mode start-up (as in `BUILD_DECK.md`).
