@@ -33,7 +33,7 @@ git-ignored.
 The voxel data files are made by Emerald 3DS's generators, copied into `voxelgen/`
 (CC BY-NC-SA 4.0). They read the decompilation in this tree, not a ROM, and reproduce the
 shipped files byte for byte. `voxelgen/regen.sh` regenerates them into `assets/voxel/`; see
-[voxelgen/README.md](../voxelgen/README.md). Terrain faults are corrected as data in
+`voxelgen/README.md` (not in this repository). Terrain faults are corrected as data in
 `voxelgen/assets/voxel/relief_fixes.json`.
 
 ## 3. Generated C tables
