@@ -45,7 +45,7 @@ window and quit, a self test), `--selftest` (extract the bundled source and dry-
 
 ## The screens
 
-The window has the layout of the mockup: a Windows 95 window (520 x 392 at 1x, fixed size) with its own title bar, a `?` button
+The window has the layout of the mockup: a Windows 95 window (480 x 360 pixels at 1x, fixed size, like a normal Windows 95 dialog) with its own title bar, a `?` button
 (opens the Help page) and an `X` button (close). Esc and Alt+F4 close it too; double-clicking the title bar does nothing.
 
 ![Main screen, 2x](screens/builder_idle.png)
@@ -191,9 +191,24 @@ licence text is in `docs/licenses/W95FA-OFL.txt` and in the package). It is draw
 the section labels use the same font at 32 px (an exact doubling, so they stay crisp pixels); bold is the font smeared by one pixel
 (the caption) or synthesised. `BRAVELY_FONT=system` uses Microsoft Sans Serif, Tahoma or DejaVu Sans instead. The log uses Courier New.
 
-**Scaling** is by whole numbers only: the UI is drawn at 1x and enlarged with `QT_SCALE_FACTOR` (rounding policy Floor), so bevels
-stay crisp. The factor is the largest whole number that keeps the 392 pixel high window on the screen (2x on 1080p and on the Deck's
-1280 x 800); `BRAVELY_SCALE=1..4` overrides it.
+**Size and scaling.** The window is designed at 1x: **480 x 360 pixels**, text 16 px (the native size of the pixel font; the
+section labels are the same size in bold). The UI is only ever enlarged by a whole number (1, 2 or 3), so bevels stay crisp pixels.
+The rule (`core/scale.py`, tested): the *natural* scale is what the OS gives, its scale factor rounded down (and 2 on screens 2560
+pixels wide or more that have no OS scaling); the *cap* is the largest whole number that keeps the window within 55% of the screen
+width and of the screen height; the scale is the smaller of the two. The OS scale is not multiplied again: the app adds only the
+difference through `QT_SCALE_FACTOR` (rounding policy Floor). The screen is found by a short child process before Qt starts
+(`--probe-screen` in the packaged exe). `BRAVELY_UI_SCALE=1|2|3` overrides the choice. The chosen scale and window size are printed
+and written to the first lines of the details log. Results of `tests/screens_sim.py`:
+
+| Screen | OS scale | UI scale | Window | % of width / height |
+|---|---|---|---|---|
+| 1280 x 800 (Steam Deck) | 100% | 1x | 480 x 360 | 38 / 45 |
+| 1366 x 768 | 100% | 1x | 480 x 360 | 35 / 47 |
+| 1920 x 1080 | 100% | 1x | 480 x 360 | 25 / 33 |
+| 2560 x 1440 | 100% | 2x | 960 x 720 | 38 / 50 |
+| 3840 x 2160 | 100% or 200% | 2x | 960 x 720 | 25 / 33 |
+
+![The window on a 1920 x 1080 desktop, actual pixels](screens/builder_desktop_1080p.png)
 
 **Frame.** The window is frameless with the title bar drawn by the app. Dragging uses `QWindow.startSystemMove()`; if the platform
 does not support it the app moves the window by mouse and says so in the details log; on Wayland without move support it falls back to

@@ -17,43 +17,22 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 
-BASE_HEIGHT = 392
-
-
-def screen_height():
-    """Primary screen height in pixels, found without Qt (the scale must be set before Qt starts). 0 when unknown."""
-    try:
-        if os.name == "nt":
-            import ctypes
-            return int(ctypes.windll.user32.GetSystemMetrics(1))
-        import re
-        import subprocess
-        out = subprocess.run(["xrandr", "--current"], capture_output=True, text=True, timeout=3).stdout
-        m = re.search(r"current \d+ x (\d+)", out)
-        return int(m.group(1)) if m else 0
-    except Exception:
-        return 0
-
-
-def set_integer_scale():
-    """The whole UI is drawn at 1x and enlarged by a whole number only, so bevels stay crisp pixels.
-    BRAVELY_SCALE=1..4 overrides: the default is the largest whole number that keeps the window on the screen."""
-    if os.environ.get("QT_SCALE_FACTOR") or os.environ.get("QT_QPA_PLATFORM") == "offscreen" and not os.environ.get("BRAVELY_SCALE"):
-        return
-    env = os.environ.get("BRAVELY_SCALE")
-    if env and env.isdigit() and 1 <= int(env) <= 4:
-        scale = int(env)
-    else:
-        h = screen_height()
-        scale = max(1, min(4, (h - 80) // BASE_HEIGHT)) if h else 2
-    os.environ["QT_SCALE_FACTOR"] = str(scale)
-    os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "Floor"
-
-
 def main(argv=None):
     # headless modes, used to test the packaged exe: they run the core without a window (see cli.py)
     if argv is None:
         argv = sys.argv[1:]
+    if "--probe-screen" in argv:                      # used by core/scale.py to learn the screen before Qt is configured
+        from PySide6.QtGui import QGuiApplication
+        import json
+        qa = QGuiApplication([])
+        sc = qa.primaryScreen()
+        g, d = sc.geometry(), sc.devicePixelRatio()
+        line = json.dumps([int(g.width() * d), int(g.height() * d), d])
+        if sys.stdout is not None:
+            print(line, flush=True)
+        else:
+            os.write(1, (line + "\n").encode())
+        return 0
     if "--selftest" in argv:
         import cli
         return cli.main(["selftest"])
@@ -66,7 +45,8 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="show the commands in the log, execute nothing")
     ap.add_argument("--smoke", action="store_true", help="start, create the window, quit after a second (self test)")
     args = ap.parse_args(argv)
-    set_integer_scale()
+    from core import scale as uiscale
+    scale_info = uiscale.configure()
     try:
         from PySide6.QtCore import QTimer
         from PySide6.QtWidgets import QApplication
@@ -78,6 +58,7 @@ def main(argv=None):
     app.setApplicationName("Bravely Emerald Builder")
     win95.apply(app)
     win = MainWindow(args.repo, args.dry_run)
+    win.note(scale_info)
     win.show()
     if args.smoke:
         def finish():

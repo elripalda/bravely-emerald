@@ -21,7 +21,8 @@ from .dialogs import HelpDialog, SettingsDialog
 TITLE = "Pokemon Bravely Emerald Builder"
 CONSENT = "Yeah, download the nerdy stuff needed to build (requires internet and it is safe). *"
 LANG = {"E": "USA", "D": "German", "F": "French", "I": "Italian", "S": "Spanish", "J": "Japan", "P": "Europe"}
-WIDTH, HEIGHT = 520, 392
+from core.scale import WINDOW_SIZE
+WIDTH, HEIGHT = WINDOW_SIZE
 
 # what the user reads while a stage runs
 STEP_TEXT = {"prereq": "Checking this computer...", "install": "Please wait while the build tools are installed...",
@@ -64,7 +65,7 @@ def info_box(parent, icon, title, text, buttons, default=None):
 
 def label(text="", points=10.5, bold=False, wrap=False, color=None):
     lb = QLabel(text)
-    lb.setFont(win95.ui_font(2 if points >= 14 else 1, bold))
+    lb.setFont(win95.ui_font(1, bold))
     lb.setWordWrap(wrap)
     if color:
         lb.setStyleSheet("color:%s" % color)      # text colour only: the look itself comes from the Windows style
@@ -92,7 +93,7 @@ def section(text):
     """A bold label followed by an etched line that runs to the right edge."""
     row = QHBoxLayout()
     row.setSpacing(10)
-    row.addWidget(label(text, 15, True))
+    row.addWidget(label(text, 10.5, True))
     row.addWidget(sunken_line(), 1, Qt.AlignVCenter)
     return row
 
@@ -304,47 +305,47 @@ class MainWindow(QMainWindow):
     def _form_view(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(26, 14, 26, 12)
+        lay.setContentsMargins(16, 10, 16, 10)
         lay.setSpacing(0)
 
         lay.addLayout(section("Select ROM location"))
-        lay.addSpacing(8)
+        lay.addSpacing(4)
         row = QHBoxLayout()
         self.rom_edit = QLineEdit()
         self.rom_edit.setFont(win95.ui_font(1))
-        self.rom_edit.setFixedHeight(30)
+        self.rom_edit.setFixedHeight(24)
         self.rom_edit.setAccessibleName("ROM file")
         self.rom_edit.editingFinished.connect(self.check_rom)
         browse = raised_button("Browse")
-        browse.setFixedSize(112, 32)
+        browse.setFixedSize(88, 26)
         browse.clicked.connect(self.browse_rom)
         row.addWidget(self.rom_edit, 1)
         row.addSpacing(8)
         row.addWidget(browse)
         lay.addLayout(row)
         self.rom_text = label("", 9, wrap=True)
-        self.rom_text.setMinimumHeight(30)
+        self.rom_text.setMinimumHeight(18)
         self.rom_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         lay.addWidget(self.rom_text)
-        lay.addSpacing(4)
+        lay.addSpacing(10)
 
         lay.addLayout(section("Where to build?"))
-        lay.addSpacing(8)
+        lay.addSpacing(4)
         row = QHBoxLayout()
         self.dir_edit = QLineEdit(self.install_dir())
         self.dir_edit.setFont(win95.ui_font(1))
-        self.dir_edit.setFixedHeight(30)
+        self.dir_edit.setFixedHeight(24)
         self.dir_edit.setAccessibleName("Build folder")
         self.dir_edit.editingFinished.connect(self.check_dir)
         browse2 = raised_button("Browse")
-        browse2.setFixedSize(112, 32)
+        browse2.setFixedSize(88, 26)
         browse2.clicked.connect(self.browse_dir)
         row.addWidget(self.dir_edit, 1)
         row.addSpacing(8)
         row.addWidget(browse2)
         lay.addLayout(row)
         self.dir_text = label("", 9, wrap=True)
-        self.dir_text.setMinimumHeight(22)
+        self.dir_text.setMinimumHeight(18)
         self.dir_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         lay.addWidget(self.dir_text)
         lay.addSpacing(6)
@@ -378,7 +379,7 @@ class MainWindow(QMainWindow):
         self.settings_link.setTextInteractionFlags(Qt.LinksAccessibleByMouse | Qt.LinksAccessibleByKeyboard)
         self.settings_link.linkActivated.connect(lambda _: self.open_settings())
         self.build_btn = raised_button("Build", True, 11.5)
-        self.build_btn.setFixedSize(140, 36)
+        self.build_btn.setFixedSize(104, 28)
         self.build_btn.setDefault(True)
         self.build_btn.clicked.connect(self.start_build)
         bottom.addWidget(self.settings_link, 0, Qt.AlignBottom)
@@ -390,9 +391,9 @@ class MainWindow(QMainWindow):
     def _progress_view(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(26, 16, 26, 12)
+        lay.setContentsMargins(16, 12, 16, 10)
         lay.setSpacing(8)
-        self.prog_title = label("Building Bravely Emerald", 15, True)
+        self.prog_title = label("Building Bravely Emerald", 10.5, True)
         lay.addWidget(self.prog_title)
         self.prog_step = label("", 10.5, wrap=True)
         lay.addWidget(self.prog_step)
@@ -400,7 +401,7 @@ class MainWindow(QMainWindow):
         self.bar = QProgressBar()
         self.bar.setRange(0, 100)
         self.bar.setTextVisible(False)
-        self.bar.setFixedHeight(24)
+        self.bar.setFixedHeight(22)
         self.bar.setAccessibleName("Progress")
         self.pct_lbl = label("0%", 10.5)
         self.pct_lbl.setMinimumWidth(38)
@@ -448,8 +449,8 @@ class MainWindow(QMainWindow):
         self.cancel_btn = raised_button("Cancel")
         self.cancel_btn.clicked.connect(self.cancel)
         for b in (self.details_btn, self.copy_btn, self.retry_btn, self.back_btn, self.cancel_btn):
-            b.setMinimumHeight(30)
-            b.setMinimumWidth(96)
+            b.setMinimumHeight(26)
+            b.setMinimumWidth(80)
         row.addWidget(self.details_btn)
         row.addWidget(self.copy_btn)
         row.addStretch(1)
@@ -464,19 +465,19 @@ class MainWindow(QMainWindow):
     def _ready_view(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(26, 16, 26, 12)
+        lay.setContentsMargins(16, 12, 16, 10)
         lay.setSpacing(10)
         head = QHBoxLayout()
         ic = QLabel()
         ic.setPixmap(win95.flat_icon("info"))
         head.addWidget(ic, 0, Qt.AlignTop)
-        self.ready_title = label("Your build is ready", 15, True)
+        self.ready_title = label("Your build is ready", 10.5, True)
         head.addWidget(self.ready_title, 1)
         lay.addLayout(head)
         lay.addWidget(label("The game is in this folder:", 10.5))
         self.ready_path = QLineEdit()
         self.ready_path.setFont(win95.ui_font(1))
-        self.ready_path.setFixedHeight(30)
+        self.ready_path.setFixedHeight(24)
         self.ready_path.setReadOnly(True)
         lay.addWidget(self.ready_path)
         row = QHBoxLayout()
@@ -484,7 +485,7 @@ class MainWindow(QMainWindow):
         self.play_btn = raised_button("Play", True)
         self.play_btn.setDefault(True)
         for b in (self.open_btn, self.play_btn):
-            b.setFixedSize(130, 34)
+            b.setFixedSize(104, 28)
         self.open_btn.clicked.connect(lambda: self.open_result("folder"))
         self.play_btn.clicked.connect(lambda: self.open_result("launch"))
         row.addWidget(self.open_btn)
@@ -494,13 +495,13 @@ class MainWindow(QMainWindow):
         self.next_lbl = label("", 10.5, wrap=True)
         lay.addWidget(self.next_lbl)
         self.help_btn = raised_button("Help")
-        self.help_btn.setFixedSize(130, 30)
+        self.help_btn.setFixedSize(88, 26)
         self.help_btn.clicked.connect(lambda: self.open_help("Add it to Steam"))
         lay.addWidget(self.help_btn, 0, Qt.AlignLeft)
         lay.addStretch(1)
         lay.addWidget(label("This build contains Nintendo's game data. It is for your own use only. Please do not share it.", 9.5, wrap=True))
         again = raised_button("Build again")
-        again.setFixedSize(130, 30)
+        again.setFixedSize(88, 26)
         again.clicked.connect(lambda: self.stack.setCurrentIndex(0))
         lay.addWidget(again, 0, Qt.AlignRight)
         return w
@@ -577,7 +578,10 @@ class MainWindow(QMainWindow):
                 res = self.builder.checks()
             except Exception as e:
                 res = [{"id": "err", "label": "Check", "status": "bad", "detail": repr(e), "blocking": True}]
-            self.bridge.checks_done.emit(res)
+            try:
+                self.bridge.checks_done.emit(res)
+            except RuntimeError:
+                pass                                  # the window was closed meanwhile
         threading.Thread(target=work, daemon=True).start()
 
     def on_checks(self, items):
