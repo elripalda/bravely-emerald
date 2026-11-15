@@ -5,9 +5,10 @@
 
 Windows: tools/builder/dist-builder/BravelyEmeraldBuilder/BravelyEmeraldBuilder.exe (one-folder app) and
          tools/builder/dist-builder/BravelyEmeraldBuilder-win.zip
-Linux:   tools/builder/dist-builder/BravelyEmeraldBuilder-linux-x86_64.tar.gz holding the app folder,
-         install.sh and the .desktop template (see packaging/). On the Steam Deck run
-         packaging/build_linux_in_container.sh, which does this inside a fresh container.
+Linux:   tools/builder/dist-builder/BravelyEmeraldBuilder-linux-x86_64.tar.gz holding one folder, BravelyEmeraldBuilder/:
+         the app, install.sh, the .desktop template, README.txt and the font licences (see packaging/). On the Steam Deck run
+         packaging/build_linux_in_container.sh (Arch container); for the widest glibc range build on Debian, e.g.
+         packaging/build_linux_debian.sh (a WSL Debian or a Debian container).
 
 The app carries a snapshot of the project source (see core/source.py, make_bundle below), so users need only a ROM.
 
@@ -127,23 +128,48 @@ def package_windows():
     return zp
 
 
+LINUX_README = """Bravely Emerald builder (Linux x86_64, Steam Deck)
+==================================================
+Run it:    tar xf BravelyEmeraldBuilder-linux-x86_64.tar.gz
+           cd BravelyEmeraldBuilder
+           ./BravelyEmeraldBuilder
+Menu entry: sh install.sh   (no root; copies the app to ~/.local/share/bravely-emerald-builder; "sh install.sh --uninstall" removes it)
+Steam Deck: use Desktop Mode (hold the power button, choose Switch to Desktop), open a terminal (Konsole) and run the lines above.
+Internet:   the first build downloads the SDL2 2.32.10 and SDL2_image 2.8.12 sources (a few MB) and, if missing, a build container with
+            the compiler packages (several hundred MB). The app asks before it downloads anything and says the sizes. This
+            program itself is a PyInstaller build (Python and Qt inside, nothing to install) and carries a snapshot of the project source.
+Your ROM:   you need your own Pokemon Emerald dump. It is only read to check it, nothing is uploaded. The result contains Nintendo's
+            game data: use it yourself and do not share it.
+Fonts:      W95FA (SIL Open Font License, see licenses/W95FA-OFL.txt).
+Docs:       docs/BUILDER.md in https://github.com/marcoscodas/bravely-emerald
+"""
+
+
 def package_linux():
     folder = os.path.join(OUT, NAME)
     exe = os.path.join(folder, NAME)
     if not os.path.isfile(exe):
         sys.exit("PyInstaller did not produce %s" % exe)
-    with open(os.path.join(folder, "README.txt"), "w", encoding="utf-8") as f:
-        f.write(README.format(exe=NAME))
+    # the archive holds ONE folder, BravelyEmeraldBuilder/: the one-folder app plus install.sh, the .desktop template,
+    # README.txt and the font licence, so "tar xf; cd BravelyEmeraldBuilder; ./BravelyEmeraldBuilder" works as written
     stage = os.path.join(WORK, "linux-stage")
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage)
-    shutil.copytree(folder, os.path.join(stage, NAME), symlinks=True)
+    app = os.path.join(stage, NAME)
+    shutil.copytree(folder, app, symlinks=True)
     for fn in ("install.sh", "bravely-emerald-builder.desktop.in"):
-        shutil.copy(os.path.join(HERE, "packaging", fn), os.path.join(stage, fn))
-    os.chmod(os.path.join(stage, "install.sh"), 0o755)
+        shutil.copy(os.path.join(HERE, "packaging", fn), os.path.join(app, fn))
+    os.chmod(os.path.join(app, "install.sh"), 0o755)
+    os.makedirs(os.path.join(app, "licenses"))
+    for fn in ("W95FA-OFL.txt", "Cinzel-OFL.txt"):
+        src = os.path.join(REPO, "docs", "licenses", fn)
+        if os.path.isfile(src):
+            shutil.copy(src, os.path.join(app, "licenses", fn))
+    with open(os.path.join(app, "README.txt"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(LINUX_README)
     tg = os.path.join(OUT, NAME + "-linux-x86_64.tar.gz")
     with tarfile.open(tg, "w:gz") as t:
-        t.add(stage, arcname=NAME + "-linux-x86_64")
+        t.add(app, arcname=NAME)
     print("tar.gz: %s (%.1f MB)" % (tg, os.path.getsize(tg) / 1048576))
     return tg
 
