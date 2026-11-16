@@ -1,0 +1,72 @@
+{
+    "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+    "format": 1,
+    "name": "Bravely Emerald",
+    "requires": [
+        "start",
+        "setup",
+        "makes"
+    ],
+    "game": {
+        "kind": "iso",
+        "label": "Your own Pokémon Emerald ROM (.gba), or a .zip that holds one."
+    },
+    "start": {
+        "program": [
+            "game/pokeemerald.exe",
+            "game/emerald-launch.sh"
+        ]
+    },
+    "prepare": {
+        "program": [
+            "BravelyEmeraldBuilder.exe",
+            "BravelyEmeraldBuilder"
+        ],
+        "args": [
+            "--prepare",
+            "--game",
+            "{game}",
+            "--out",
+            "{install}/game"
+        ],
+        "label": "Building the game from your ROM (the first build takes 30 to 60 minutes)",
+        "timeout": 7200,
+        "done": [
+            "{install}/game/prepared.txt"
+        ],
+        "options": [
+            {
+                "id": "downloads",
+                "label": "Download the build tools",
+                "note": "About 1 GB of compiler tools and the game's source files, from the internet.",
+                "args": [
+                    "--allow-downloads"
+                ],
+                "default": false
+            }
+        ]
+    },
+    "saves": [
+        "{install}/game/userdata/saves"
+    ],
+    "folders": {
+        "saves": [
+            {
+                "path": "{install}/game/userdata/saves"
+            }
+        ],
+        "logs": [
+            {
+                "path": "{install}/game/userdata"
+            }
+        ]
+    },
+    "actions": [
+        {
+            "id": "saves",
+            "label": "Saves",
+            "help": "Your save file and the game's settings.",
+            "open": "saves"
+        }
+    ]
+}
