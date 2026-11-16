@@ -29,6 +29,10 @@ KNOWN_ERRORS = [
     (r"not a Pok.mon Emerald dump|header is damaged|does not exist\b",
      "The ROM was rejected.",
      "Use an unmodified dump of Pokemon Emerald (any language, 16 MiB, game code BPE?). Patched or truncated files fail."),
+    (r"curl: \(60\)|unable to get local issuer certificate|SSL certificate problem",
+     "A download was refused because its certificate is not trusted.",
+     "Antivirus 'HTTPS scanning' or a proxy is re-signing the connection. Turn that off for this build (or add github.com "
+     "to its exceptions) and run the build again. The build already retries once with the Windows certificate store."),
     (r"no internet|Could not resolve host|Connection timed out|Failed to connect|curl: \(\d+\)|unable to access",
      "A download failed (network or mirror).",
      "Check the internet connection and run the build again. Finished steps are kept."),

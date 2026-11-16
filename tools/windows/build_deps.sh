@@ -25,7 +25,17 @@ fetch() {
     fi
     rm -f "$1" "$1.part"
     echo "downloading $1"
-    curl -fsSL --retry 3 --retry-delay 5 -o "$1.part" "$2"
+    rc=0
+    curl -fsSL --retry 3 --retry-delay 5 -o "$1.part" "$2" || rc=$?
+    if [ $rc -eq 60 ]; then
+        # exit 60: MSYS2's own certificate bundle does not trust what the network presents (antivirus or a proxy that
+        # re-signs HTTPS). That root is in the Windows store, so try again with it.
+        echo "certificate not trusted by MSYS2; retrying with the Windows certificate store"
+        rm -f "$1.part"
+        curl -fsSL --ca-native --retry 3 --retry-delay 5 -o "$1.part" "$2"
+    elif [ $rc -ne 0 ]; then
+        exit $rc
+    fi
     mv "$1.part" "$1"
 }
 fetch $SDL.tar.gz https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/$SDL.tar.gz
