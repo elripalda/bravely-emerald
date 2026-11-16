@@ -15,6 +15,7 @@ changing. Contribution rules are in [../CONTRIBUTING.md](../CONTRIBUTING.md).
 | [BUILD_DECK.md](BUILD_DECK.md) | For users: build the Steam Deck version with one script from your own ROM |
 | [WINDOWS_BUILD.md](WINDOWS_BUILD.md) | The 32-bit Windows build (MSYS2) |
 | [BUILDER.md](BUILDER.md) | The desktop builder app: install, what it runs, security model, packaging |
+| [RECOMPLAUNCHER.md](RECOMPLAUNCHER.md) | RecompLauncher support: recomplauncher.json, the `--prepare` build step, how to test it |
 | [FEATURES.md](FEATURES.md) | Every feature of the Deck and Windows builds, and the full settings reference |
 | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | Known issues and what has not been checked |
 | [PERFORMANCE.md](PERFORMANCE.md) | Measured frame timing |

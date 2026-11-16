@@ -7,16 +7,20 @@ exe can be tested without a display:  BravelyEmeraldBuilder.exe --selftest   |  
     cli.py rom FILE
     cli.py source   [--repo DIR] [--force]     (resolve the source; extract the bundle)
     cli.py selftest
-    cli.py build --target windows|linux32 [--rom FILE] [--jobs N] [--low] [--out DIR] [--repo DIR] [--dry-run]
+    cli.py build --target windows|linux32 [--rom|--game FILE] [--jobs N] [--low] [--out DIR] [--repo DIR] [--dry-run]
+    cli.py prepare --game FILE --out DIR [--allow-downloads] [--target ...] [--jobs N] [--low] [--repo DIR]
+                   (RecompLauncher setup step: a build without a window that prints "progress 0.4 Text" lines; see docs/RECOMPLAUNCHER.md)
 
 Without --repo the source is the bundled snapshot (extracted into the work folder), else a checkout (see core/source.py).
 """
 import argparse
 import json
 import os
+import shutil
 import sys
 import tempfile
 import time
+import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core import Builder, validate_rom          # noqa: E402
@@ -106,6 +110,115 @@ def selftest():
     return rc
 
 
+PREPARE_MARKER = "prepared.txt"          # written into --out when a prepare run finished; recomplauncher.json lists it in prepare.done
+STAGE_TEXT = {"prereq": "Checking the build tools", "install": "Installing the build tools", "container": "Preparing the build container",
+              "files": "Fetching and converting the game files", "tools": "Building the host tools", "assets": "Converting graphics and data",
+              "deps": "Building SDL2", "compile": "Compiling the game", "link": "Linking the game", "package": "Copying the game to its folder",
+              "test": "Testing the start-up"}
+
+
+def progress_line(fraction, text):
+    """The line RecompLauncher reads from a setup step: progress <0..1> <text>."""
+    return "progress %.2f %s" % (max(0.0, min(1.0, fraction)), text)
+
+
+def stage_fraction(stages, stage):
+    """Share of the build behind us when `stage` starts: its place in the plan's stage list, never 1 before the end."""
+    if stage not in stages:
+        return 0.0
+    return min(0.99, stages.index(stage) / float(len(stages)))
+
+
+def rom_from_zip(path, dest_dir):
+    """A zipped ROM: the one .gba inside (else the one 16 MiB file) is extracted into dest_dir. Returns the path, or raises ValueError."""
+    from core.constants import ROM_SIZE
+    with zipfile.ZipFile(path) as z:
+        files = [i for i in z.infolist() if not i.is_dir()]
+        pick = [i for i in files if i.filename.lower().endswith(".gba")] or [i for i in files if i.file_size == ROM_SIZE]
+        if len(pick) != 1:
+            raise ValueError("The zip must hold exactly one .gba file (it holds %d)." % len(pick))
+        dest = os.path.join(dest_dir, "rom.gba")
+        with z.open(pick[0]) as src, open(dest, "wb") as out:
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    return dest
+                out.write(chunk)
+
+
+def prepare(a):
+    """Headless build for RecompLauncher. stdout carries only `progress` and ERROR lines (the full log goes to the builder's log file,
+    whose path is printed on failure). Exit codes: 0 done, 1 build failed, 2 bad ROM or options, 3 source, 4 downloads not allowed."""
+    game = a.game
+    tmp = None
+    try:
+        if game and game.lower().endswith(".zip") and zipfile.is_zipfile(game):
+            print(progress_line(0, "Reading your zipped ROM"), flush=True)
+            tmp = tempfile.mkdtemp(prefix="bb-rom-")
+            try:
+                game = rom_from_zip(game, tmp)
+            except (ValueError, OSError, zipfile.BadZipFile) as e:
+                print("ERROR: " + str(e))
+                return 2
+        v = validate_rom(game) if game else {"ok": False, "message": "No game file given (--game FILE)."}
+        if not v["ok"]:
+            print("ERROR: " + v["message"])
+            return 2
+        if not a.out:
+            print("ERROR: --out DIR is missing.")
+            return 2
+        print(progress_line(0, v["message"]), flush=True)
+        b, _ = make_builder(a.repo, False)
+        target = a.target or ("windows" if b.host["kind"] == "windows" else "linux32")
+        need = sum(r["mb"] for r in b.plan(target))
+        if need and not a.allow_downloads:
+            print("ERROR: the build needs downloads (about %d MB) and --allow-downloads was not given." % need)
+            return 4
+        opts = {"targets": [target], "rom": game, "jobs": a.jobs, "low_priority": a.low, "dir": a.out, "container": a.container}
+        try:
+            label, stages, steps, meta = b.plan_build(opts)
+        except ValueError as e:
+            print("ERROR: " + str(e))
+            return 2
+        meta["container"] = a.container
+        state = {"done": None, "stage": None}
+
+        def on_event(ev):
+            if ev["type"] == "stage":
+                state["stage"] = ev["stage"]
+                print(progress_line(stage_fraction(stages, ev["stage"]), STAGE_TEXT.get(ev["stage"], ev["stage"])), flush=True)
+            elif ev["type"] == "state":
+                state["done"] = ev
+
+        t = b.start(label, stages, steps, meta, "build", on_event)
+        last = time.time()
+        try:
+            while not state["done"]:
+                time.sleep(0.5)
+                if time.time() - last > 30 and state["stage"]:       # a quiet compile still shows the launcher a live step
+                    last = time.time()
+                    print(progress_line(stage_fraction(stages, state["stage"]), STAGE_TEXT.get(state["stage"], state["stage"])), flush=True)
+        except KeyboardInterrupt:
+            b.cancel()
+            while not state["done"]:
+                time.sleep(0.5)
+        if state["done"]["state"] != "done":
+            print("ERROR: the build %s at step '%s'. Log: %s" % (state["done"]["state"], t.final.get("step") or t.cur_step, t.logfile))
+            for h in t.hints:
+                print("ERROR: %s %s" % (h["title"], h["fix"]))
+            return 1
+        with open(os.path.join(a.out, PREPARE_MARKER), "w", encoding="utf-8") as f:
+            f.write("Built by the Bravely Emerald builder from your own ROM.\n")
+        print(progress_line(1, "The game is ready"), flush=True)
+        return 0
+    except SourceError as e:
+        print("ERROR: " + str(e))
+        return 3
+    finally:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main(argv=None):
     setup_stdout()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -119,12 +232,21 @@ def main(argv=None):
     sub.choices["plan"].add_argument("--json", action="store_true")
     bp = sub.choices["build"]
     bp.add_argument("--target", default=None, choices=["windows", "linux32"])
-    bp.add_argument("--rom", default="")
+    bp.add_argument("--rom", "--game", dest="rom", default="", help="the ROM (--game is the same option, as RecompLauncher calls it)")
     bp.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     bp.add_argument("--low", action="store_true", help="low priority")
     bp.add_argument("--out", default="", help="install folder (the game is copied there)")
     bp.add_argument("--container", default="emerald-build")
     bp.add_argument("--run-test", action="store_true")
+    pp = sub.add_parser("prepare", help="build without a window for RecompLauncher (prints progress lines)")
+    pp.add_argument("--game", default="", help="your Pokemon Emerald ROM (.gba, or a .zip holding it)")
+    pp.add_argument("--out", default="", help="folder the game is built into")
+    pp.add_argument("--target", default=None, choices=["windows", "linux32"])
+    pp.add_argument("--repo", default=None)
+    pp.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
+    pp.add_argument("--low", action="store_true", help="low priority")
+    pp.add_argument("--container", default="emerald-build")
+    pp.add_argument("--allow-downloads", action="store_true", help="the player agreed to the downloads (build tools, game files)")
     sub.add_parser("selftest")
     r = sub.add_parser("rom")
     r.add_argument("file")
@@ -136,6 +258,8 @@ def main(argv=None):
             return 0 if v["ok"] else 1
         if a.cmd == "selftest":
             return selftest()
+        if a.cmd == "prepare":
+            return prepare(a)
         if a.cmd == "source":
             make_builder(a.repo, a.dry_run, a.force)
             return 0

@@ -5,6 +5,7 @@
     python tools/builder/app.py [--repo DIR] [--dry-run] [--smoke]
 
 --selftest extracts the bundled source and dry-runs this host's build; --build --rom X --out DIR builds without a window.
+--prepare --game X --out DIR [--allow-downloads] is the same build for RecompLauncher: it prints "progress 0.4 Text" lines.
 --smoke opens the window, lets it run for a moment and quits (used to test the packaged app).
 The logic is in tools/builder/core (no Qt); the windows are in tools/builder/ui. See docs/BUILDER.md.
 """
@@ -107,6 +108,9 @@ def main(argv=None):
     if "--plan" in argv:                              # what is present / missing / outdated, nothing is changed
         import cli
         return cli.main(["plan"] + [a for a in argv if a != "--plan"])
+    if "--prepare" in argv:                           # RecompLauncher's setup step: no window, progress lines on stdout (see cli.py)
+        import cli
+        return cli.main(["prepare"] + [a for a in argv if a != "--prepare"])
     if "--build" in argv:
         import cli
         rest = [a for a in argv if a != "--build"]
