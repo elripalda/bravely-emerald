@@ -71,6 +71,8 @@ AUTO. Defaults are AUTO unless stated. The rows are those of `src/platform/vita/
 |---|---|---|---|
 | GENERAL > SOUND | AMBIENT VOLUME | `ambient_level` | OFF, LOW, MEDIUM (default), HIGH |
 | GENERAL > SOUND | AMBIENT FREQUENCY | `ambient_density` | SPARSE (default), NORMAL, FREQUENT |
+| GENERAL > DISPLAY | SCREEN MODE | `fullscreen` | WINDOWED, FULLSCREEN (default: WINDOWED on Windows, FULLSCREEN on the Deck; stored `0`, `1`) |
+| GENERAL > DISPLAY | RESOLUTION | `resolution` | `auto` (default) or `WxH`, for example `1920x1080`; the menu offers the display modes of the primary screen that are at least 960x540 and 16:9, 16:10 or the screen's own shape |
 | GENERAL > INTERFACE | PANEL GLASS, PANEL TINT, TEXT CLARITY, MENU CURSOR, MENU ANIMATION, HP BARS, WIDE UI LAYOUT | `voxel_uiglass`, `voxel_uitint`, `voxel_uitext`, `voxel_uisel`, `voxel_uianim`, `voxel_uibars`, `voxel_uilayout` | levels |
 | GENERAL > INTERFACE | BUTTON ICONS | `voxel_uiglyphs` | OFF (port circles), GBA, DECK (default) |
 | WORLD > RENDERER | 3D VOXEL DIORAMA | `voxel_3d` | OFF, ON (default) |
@@ -91,6 +93,14 @@ AUTO. Defaults are AUTO unless stated. The rows are those of `src/platform/vita/
 | WORLD > EFFECTS | TITLE SCREEN | `voxel_title` | ORIGINAL, HD-2D (default) |
 | WORLD > EFFECTS | REVEAL FLASH | `voxel_reveal` | OFF, ON (default) |
 | WORLD > EFFECTS | CAMERA TILT | `voxel_pitch` | CLASSIC, 36, 32 (default), 28, 24 (stored `0` to `4`) |
+
+SCREEN MODE and RESOLUTION: windowed, the window is the chosen size (AUTO: 1280x720 on Windows, 1280x800
+on the Deck; never larger than the screen). Fullscreen with AUTO is borderless fullscreen at the
+native size. Fullscreen with a chosen size is a real video mode change to that size (the nearest mode
+the display lists), so the screen or graphics driver does the scaling to the panel. In every mode the
+960x544 picture keeps its 16:9 shape and gets black bars. F11 and Alt+Enter toggle at any time, the
+choice is saved. `DECK_FULLSCREEN=1` or `0` in the environment forces fullscreen or a window for the
+first start only.
 
 What each level changes, row by row: [DECK_NOTES.md](DECK_NOTES.md).
 

@@ -19,6 +19,9 @@
 #include "event_data.h"
 #include "sound.h"
 #include "constants/songs.h"
+#ifdef PLATFORM_DECK
+#include "../deck/deck_window.h"
+#endif
 
 #define MAX_SETTINGS_ENTRIES 128
 #define SETTINGS_FILENAME "settings.txt"
@@ -189,6 +192,20 @@ static const char *const sClockSpeedValues[] = { "1X", "6X", "12X", "24X", "60X"
 static const char *const sBattleSpeedValues[] = { "1X", "1.5X", "2X", "3X", "4X", NULL };
 static const char *const sLevelCapValues[] = { "OFF", "GYM CAP", "STRICT", NULL };
 static const char *const sShinyOddsValues[] = { "1/8192", "1/4096", "1/1024", "1/256", "1/64", "ALWAYS", NULL };
+#ifdef PLATFORM_DECK
+static const char *const sScreenModeValues[] = { "WINDOWED", "FULLSCREEN", NULL };
+
+// RESOLUTION row: the choices are the sane display modes found at start (deck_video.c), so it steps itself.
+static void ResolutionStep(int32_t direction)
+{
+    const int32_t count = DeckVideo_ResolutionCount();
+    int32_t next = (DeckVideo_GetResolutionIndex() + direction) % count;
+
+    if (next < 0)
+        next += count;
+    VitaExtras_Set("resolution", next);
+}
+#endif
 static const char *const sActionSetValues[] = { "EXECUTE", NULL };
 static const char *const sGivePockets[] = { "ITEMS", "POKE BALLS", "TMS & HMS", "BERRIES", "KEY ITEMS", NULL };
 static const char *const sGiveCounts[] = { "1", "5", "10", "50", "99", NULL };
@@ -325,6 +342,14 @@ const VitaExtra gVitaExtras[] = {
     { VITA_TAB_GENERAL, "DISPLAY",    "2D SCALER",         "filter",           3, 0, sFilterValues,      NULL, NULL, NULL },
     { VITA_TAB_GENERAL, "DISPLAY",    "MENU COLOR",        "ui_theme",         5, 0, sUiThemeValues,     NULL, NULL, NULL },
 #ifdef PLATFORM_DECK
+#ifdef PLATFORM_WINDOWS
+    { VITA_TAB_GENERAL, "DISPLAY",    "SCREEN MODE",       "fullscreen",       2, 0, sScreenModeValues,  NULL, NULL, NULL },
+#else
+    { VITA_TAB_GENERAL, "DISPLAY",    "SCREEN MODE",       "fullscreen",       2, 1, sScreenModeValues,  NULL, NULL, NULL },
+#endif
+    { VITA_TAB_GENERAL, "DISPLAY",    "RESOLUTION",        "resolution",       DECK_RES_MAX, 0, gDeckResValues, NULL, ResolutionStep, NULL },
+#endif
+#ifdef PLATFORM_DECK
     { VITA_TAB_GENERAL, "INTERFACE",  "PANEL GLASS",       "voxel_uiglass",    5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
     { VITA_TAB_GENERAL, "INTERFACE",  "PANEL TINT",        "voxel_uitint",     5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
     { VITA_TAB_GENERAL, "INTERFACE",  "TEXT CLARITY",      "voxel_uitext",     5, 1, sVoxelLevelValues,  NULL, NULL, NULL },
@@ -440,6 +465,9 @@ static void SyncPlatformSetting(const char *key, const int32_t value)
     else if (strcmp(key, "exp_share") == 0) Platform_SetSetting(PLATFORM_SETTING_EXP_SHARE, (u8)value);
     else if (strcmp(key, "voxel_3d") == 0) Platform_SetSetting(PLATFORM_SETTING_VOXEL_3D, (u8)value);
     else if (strcmp(key, "voxel_fps") == 0) Platform_SetSetting(PLATFORM_SETTING_VOXEL_FPS, (u8)value);
+#ifdef PLATFORM_DECK
+    else if (strcmp(key, "fullscreen") == 0) DeckVideo_RequestApply();
+#endif
     else if (strcmp(key, "filter") == 0)
     {
         Platform_SetSetting(PLATFORM_SETTING_FILTER, (u8)value);
@@ -531,6 +559,16 @@ void VitaExtras_Init(void)
     {
         char key[32];
         int32_t val = 0;
+#ifdef PLATFORM_DECK
+        // resolution=auto or resolution=WxH: text, not a number
+        if (strncmp(line, "resolution=", 11) == 0)
+        {
+            char text[24] = "";
+            sscanf(line + 11, "%23s", text);
+            DeckVideo_SetResolutionText(text);
+            continue;
+        }
+#endif
         if (sscanf(line, "%31[^=]=%d", key, &val) == 2)
         {
             const int32_t idx = FindSettingIndex(key, true);
@@ -557,7 +595,16 @@ void VitaExtras_Save(void)
         return;
 
     for (uint32_t i = 0; i < sSettingCount; i++)
+    {
+#ifdef PLATFORM_DECK
+        if (strcmp(sSettings[i].key, "resolution") == 0)
+        {
+            fprintf(f, "resolution=%s\n", DeckVideo_GetResolutionText());
+            continue;
+        }
+#endif
         fprintf(f, "%s=%d\n", sSettings[i].key, sSettings[i].value);
+    }
     fclose(f);
 }
 
@@ -566,6 +613,10 @@ int32_t VitaExtras_Get(const char *key)
     if (!sInitialized)
         VitaExtras_Init();
 
+#ifdef PLATFORM_DECK
+    if (strcmp(key, "resolution") == 0)
+        return DeckVideo_GetResolutionIndex();
+#endif
     const int32_t fastId = LookupFastId(key);
     if (fastId >= 0)
         return sFastSettings[fastId];
@@ -587,6 +638,14 @@ void VitaExtras_Set(const char *key, int32_t value)
     if (!sInitialized)
         VitaExtras_Init();
 
+#ifdef PLATFORM_DECK
+    if (strcmp(key, "resolution") == 0)
+    {
+        DeckVideo_SetResolutionIndex(value);   // the choice lives in deck_video.c; settings.txt gets its text
+        VitaExtras_Save();
+        return;
+    }
+#endif
     const int32_t idx = FindSettingIndex(key, true);
     if (idx < 0 || sSettings[idx].value == value)
         return;
