@@ -7,8 +7,11 @@ next to the exe; the game looks for them in its own folder, whatever folder you 
 Needs: Windows 10 or later, a graphics driver with OpenGL 2.1 or newer (GLSL 1.20 for the
 effects). 32-bit program, runs on 64-bit Windows.
 
-Window: starts in a 1280x720 window you can resize. For fullscreen set the environment
-variable DECK_FULLSCREEN=1 before starting.
+Window: starts in a 1280x720 window you can resize. F11 or Alt+Enter switch to fullscreen and
+back at any time. START > OPTIONS > GENERAL > DISPLAY has SCREEN MODE (windowed or fullscreen) and
+RESOLUTION (window size, or the screen mode in fullscreen); both are remembered in
+userdata\settings.txt (keys fullscreen and resolution). Setting the environment variable
+DECK_FULLSCREEN=1 (or 0) forces the first start into fullscreen (or a window).
 
 Controls: keyboard and any game controller SDL supports. The settings menu of the port (WORLD >
 EFFECTS) switches every visual effect on and off.

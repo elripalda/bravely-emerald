@@ -50,7 +50,7 @@ derived data) is committed; `build-win/`, `dist-win/` and the zip are git-ignore
 | Entry | `SDL_MAIN_HANDLED`, `SDL_SetMainReady()`, working directory set to the exe's folder; without a console `stderr` goes to `userdata/stderr.txt` |
 | Time and sleep | `SDL_GetTicks64`, performance counter; `VitaPlatform_DelayMicroseconds` sleeps whole milliseconds and spins the rest; `mkdir`, `localtime_s` |
 | Telemetry | `/proc` and `/sys` readers return -1, CPU time not read (optional) |
-| Window | Resizable 1280x720 window; `DECK_FULLSCREEN=1` gives the Deck's desktop fullscreen |
+| Window | Resizable 1280x720 window by default; `fullscreen` and `resolution` settings, F11 and Alt+Enter (see [FEATURES.md](FEATURES.md)); `DECK_FULLSCREEN=1` still forces fullscreen at start |
 
 ## Output
 

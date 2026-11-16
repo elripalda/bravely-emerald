@@ -21,6 +21,7 @@
 #ifdef PLATFORM_DECK
 #include "deck/deck_ambient_game.h"
 #include "deck/deck_uifx.h"
+#include "deck/deck_video.h"
 #include "deck/deck_flatfx.h"
 #include "deck/deck_title.h"
 #include "deck/deck_reveal.h"
@@ -1240,8 +1241,21 @@ void ProcessEvents(void)
 {
     SDL_Event event;
 
+#ifdef PLATFORM_DECK
+    DeckVideo_Poll();   // a window mode or size change asked for by the options menu or a hotkey
+#endif
     while (SDL_PollEvent(&event))
     {
+#ifdef PLATFORM_DECK
+        // F11 and Alt+Enter switch fullscreen; Enter alone stays START. The key is eaten here.
+        if (event.type == SDL_KEYDOWN && !event.key.repeat
+            && (event.key.keysym.sym == SDLK_F11
+                || (event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT))))
+        {
+            DeckVideo_ToggleFullscreen();
+            continue;
+        }
+#endif
         switch (event.type)
         {
         case SDL_QUIT:

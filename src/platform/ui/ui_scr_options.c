@@ -57,6 +57,8 @@ static const struct { const char *key, *help; } sExtraHelp[] = {
     { "ff_button", "Hold the button, or press it once to toggle." },
     { "filter", "How the 2D screens are scaled to the Vita display." },
     { "ui_theme", "Colour and style of the menus." },
+    { "fullscreen", "Window or full screen. F11 and ALT+ENTER switch at any time." },
+    { "resolution", "Window size, or the screen mode in full screen. AUTO: 1280x720 window, native full screen." },
     { "voxel_3d", "Draw the overworld as a 3D voxel diorama." },
     { "voxel_blur", "Blur the far background of the diorama." },
     { "voxel_fps", "Frame rate of the 3D world. 60 uses more battery." },

@@ -8,6 +8,7 @@
 #include <GL/glext.h>
 #include "deck_gl_shader.h"
 #include "deck_shot.h"
+#include "platform/vita_extras.h"
 
 static SDL_Window *sWindow;
 static SDL_GLContext sContext;
@@ -108,6 +109,259 @@ void DeckGlCheckFbos(unsigned int diorama, unsigned int scratch)
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev);
 }
 
+// ---- Window mode: settings keys "fullscreen" (0 windowed, 1 fullscreen) and "resolution" ("auto" or "WxH") ----
+// Windowed: the window is WxH (AUTO: 1280x720 on Windows, 1280x800 on the Deck). Fullscreen with AUTO is SDL's
+// borderless desktop fullscreen at the native size; with a chosen WxH it is a real video mode change to the nearest
+// mode SDL lists, and the picture keeps 16:9 inside it through DeckVideo_GetViewport. Everything that depends on the
+// window size (viewport, flat-FX and UI-glass targets) reads SDL_GL_GetDrawableSize each frame, so a change needs
+// no GL work here. SDL window calls must come from the main thread: other threads only raise sApplyPending.
+#ifdef PLATFORM_WINDOWS
+#define WINDOWED_AUTO_W 1280
+#define WINDOWED_AUTO_H 720
+#else
+#define WINDOWED_AUTO_W 1280
+#define WINDOWED_AUTO_H 800
+#endif
+#define RES_MIN_W 960
+#define RES_MIN_H 540
+
+const char *gDeckResValues[DECK_RES_MAX + 1] = { "AUTO" };
+static char sResLabel[DECK_RES_MAX][16];
+static int sModeW[DECK_RES_MAX], sModeH[DECK_RES_MAX]; // list entry i + 1 of the row
+static int sModeCount;
+static int sResW, sResH;                  // saved choice, 0 = AUTO
+static char sResText[24] = "auto";
+static int sEnvFs = -1;                   // DECK_FULLSCREEN: -1 unset, else forced for the first window state
+static volatile int sApplyPending;
+
+// Sane sizes: from the primary display's mode list, at least 960x540, 16:9, 16:10 or the desktop's own shape, no duplicates.
+static void BuildResolutionList(void)
+{
+    SDL_DisplayMode desk, m;
+    int tmpW[256], tmpH[256], n = 0, count;
+
+    sModeCount = 0;
+    if (SDL_GetDesktopDisplayMode(0, &desk) != 0)
+        desk.w = desk.h = 0;
+    count = SDL_GetNumDisplayModes(0);
+    for (int i = 0; i < count && n < 256; i++)
+    {
+        int dup = 0, at;
+        if (SDL_GetDisplayMode(0, i, &m) != 0)
+            continue;
+        if (m.w < RES_MIN_W || m.h < RES_MIN_H)
+            continue;
+        if (m.w * 9 != m.h * 16 && m.w * 10 != m.h * 16 && (desk.w == 0 || m.w * desk.h != m.h * desk.w))
+            continue;
+        for (int k = 0; k < n; k++)
+            if (tmpW[k] == m.w && tmpH[k] == m.h)
+                dup = 1;
+        if (dup)
+            continue;
+        for (at = n; at > 0 && (tmpW[at - 1] > m.w || (tmpW[at - 1] == m.w && tmpH[at - 1] > m.h)); at--)
+        {
+            tmpW[at] = tmpW[at - 1];
+            tmpH[at] = tmpH[at - 1];
+        }
+        tmpW[at] = m.w;
+        tmpH[at] = m.h;
+        n++;
+    }
+    {
+        const int skip = n > DECK_RES_MAX - 1 ? n - (DECK_RES_MAX - 1) : 0; // too many: drop the smallest
+        for (int i = skip; i < n; i++)
+        {
+            sModeW[sModeCount] = tmpW[i];
+            sModeH[sModeCount] = tmpH[i];
+            sModeCount++;
+        }
+    }
+    for (int i = 0; i < DECK_RES_MAX; i++)
+    {
+        if (i < sModeCount)
+            snprintf(sResLabel[i], sizeof(sResLabel[i]), "%dx%d", sModeW[i], sModeH[i]);
+        else
+            sResLabel[i][0] = '\0';
+        gDeckResValues[i + 1] = sResLabel[i];
+    }
+    gDeckResValues[0] = "AUTO";
+}
+
+// The saved choice if the list has it, else AUTO (0, 0).
+static void ResolveResolution(int *w, int *h)
+{
+    *w = *h = 0;
+    for (int i = 0; i < sModeCount; i++)
+        if (sModeW[i] == sResW && sModeH[i] == sResH)
+        {
+            *w = sResW;
+            *h = sResH;
+        }
+}
+
+int DeckVideo_ResolutionCount(void)
+{
+    return sModeCount + 1;
+}
+
+int DeckVideo_GetResolutionIndex(void)
+{
+    for (int i = 0; i < sModeCount; i++)
+        if (sModeW[i] == sResW && sModeH[i] == sResH)
+            return i + 1;
+    return 0;
+}
+
+void DeckVideo_SetResolutionIndex(int index)
+{
+    if (index <= 0 || index > sModeCount)
+    {
+        sResW = sResH = 0;
+        snprintf(sResText, sizeof(sResText), "auto");
+    }
+    else
+    {
+        sResW = sModeW[index - 1];
+        sResH = sModeH[index - 1];
+        snprintf(sResText, sizeof(sResText), "%dx%d", sResW, sResH);
+    }
+    DeckVideo_RequestApply();
+}
+
+const char *DeckVideo_GetResolutionText(void)
+{
+    return sResText;
+}
+
+// From settings.txt: "auto" or "WxH"; anything else counts as auto. Not checked against the list here (it may not exist yet).
+void DeckVideo_SetResolutionText(const char *text)
+{
+    int w = 0, h = 0;
+
+    if (text != NULL && sscanf(text, "%dx%d", &w, &h) == 2 && w > 0 && h > 0 && w <= 16384 && h <= 16384)
+    {
+        sResW = w;
+        sResH = h;
+        snprintf(sResText, sizeof(sResText), "%dx%d", w, h);
+    }
+    else
+    {
+        sResW = sResH = 0;
+        snprintf(sResText, sizeof(sResText), "auto");
+    }
+}
+
+void DeckVideo_RequestApply(void)
+{
+    sApplyPending = 1;
+}
+
+static void WindowedSize(int w, int h, int *outW, int *outH)
+{
+    SDL_Rect usable;
+
+    if (w == 0)
+    {
+        w = WINDOWED_AUTO_W;
+        h = WINDOWED_AUTO_H;
+    }
+    if (SDL_GetDisplayUsableBounds(0, &usable) == 0)
+    {
+        if (w > usable.w) w = usable.w;
+        if (h > usable.h) h = usable.h;
+    }
+    *outW = w;
+    *outH = h;
+}
+
+static void ApplyVideo(void)
+{
+    const int wantFs = sEnvFs >= 0 ? sEnvFs : (VitaExtras_Get("fullscreen") != 0);
+    const Uint32 flags = SDL_GetWindowFlags(sWindow);
+    const int isFs = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+    const int isDesktop = (flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
+    int w, h, dw, dh;
+
+    ResolveResolution(&w, &h);
+    if (wantFs && w == 0)
+    {
+        if (!(isFs && isDesktop) && SDL_SetWindowFullscreen(sWindow, SDL_WINDOW_FULLSCREEN_DESKTOP) != 0)
+            DeckDebugLog("[VIDEO] desktop fullscreen failed: %s\n", SDL_GetError());
+    }
+    else if (wantFs)
+    {
+        SDL_DisplayMode want, got, cur;
+        const int display = SDL_GetWindowDisplayIndex(sWindow);
+
+        SDL_zero(want);
+        want.w = w;
+        want.h = h;
+        if (SDL_GetClosestDisplayMode(display < 0 ? 0 : display, &want, &got) == NULL)
+        {
+            DeckDebugLog("[VIDEO] no display mode near %dx%d: %s; using desktop fullscreen\n", w, h, SDL_GetError());
+            if (!(isFs && isDesktop))
+                SDL_SetWindowFullscreen(sWindow, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        }
+        else
+        {
+            const int same = isFs && !isDesktop && SDL_GetWindowDisplayMode(sWindow, &cur) == 0 && cur.w == got.w && cur.h == got.h;
+            if (!same)
+            {
+                if (isFs)
+                    SDL_SetWindowFullscreen(sWindow, 0);   // a mode change only takes effect on entering fullscreen
+                SDL_SetWindowDisplayMode(sWindow, &got);
+                if (SDL_SetWindowFullscreen(sWindow, SDL_WINDOW_FULLSCREEN) != 0)
+                {
+                    DeckDebugLog("[VIDEO] fullscreen %dx%d failed: %s; using desktop fullscreen\n", got.w, got.h, SDL_GetError());
+                    SDL_SetWindowFullscreen(sWindow, SDL_WINDOW_FULLSCREEN_DESKTOP);
+                }
+            }
+        }
+    }
+    else
+    {
+        int curW, curH;
+
+        if (isFs)
+            SDL_SetWindowFullscreen(sWindow, 0);
+        if (flags & SDL_WINDOW_MAXIMIZED)
+            SDL_RestoreWindow(sWindow);
+        SDL_SetWindowResizable(sWindow, SDL_TRUE);
+        WindowedSize(w, h, &dw, &dh);
+        SDL_GetWindowSize(sWindow, &curW, &curH);
+        if (curW != dw || curH != dh)
+            SDL_SetWindowSize(sWindow, dw, dh);
+        if (isFs || curW != dw || curH != dh)
+            SDL_SetWindowPosition(sWindow, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    }
+    {
+        int drawW = 0, drawH = 0;
+
+        SDL_GL_GetDrawableSize(sWindow, &drawW, &drawH);
+        DeckDebugLog("[VIDEO] want fullscreen=%d resolution=%s -> window flags 0x%x, drawable %dx%d\n", wantFs, sResText,
+                     (unsigned)SDL_GetWindowFlags(sWindow), drawW, drawH);
+    }
+}
+
+void DeckVideo_Poll(void)
+{
+    if (sWindow != NULL && sApplyPending)
+    {
+        sApplyPending = 0;
+        ApplyVideo();
+    }
+}
+
+// F11 and Alt+Enter: flip what the window really is now (an env override may disagree with the saved setting).
+void DeckVideo_ToggleFullscreen(void)
+{
+    const int isFs = sWindow != NULL && (SDL_GetWindowFlags(sWindow) & SDL_WINDOW_FULLSCREEN) != 0;
+
+    sEnvFs = -1;
+    VitaExtras_Set("fullscreen", isFs ? 0 : 1);
+    DeckVideo_RequestApply();
+}
+
 bool DeckVideo_Init(SDL_Window **outWindow)
 {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
@@ -116,20 +370,33 @@ bool DeckVideo_Init(SDL_Window **outWindow)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    Uint32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN_DESKTOP;
-    int windowW = 1280, windowH = 800;
-#ifdef PLATFORM_WINDOWS
-    // A desktop PC starts in a resizable window; DECK_FULLSCREEN=1 gives the Deck behaviour.
+    // Start state: DECK_FULLSCREEN (1 fullscreen, 0 windowed) wins, else the saved "fullscreen" setting
+    // (default: fullscreen on the Deck, windowed on Windows).
+    Uint32 windowFlags;
+    int windowW, windowH, startFs, startW, startH;
     {
-        const char *fs = getenv("DECK_FULLSCREEN");
-        if (fs == NULL || strcmp(fs, "0") == 0)
-        {
-            windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
-            windowW = 1280;
-            windowH = 720;
-        }
+        const char *env = getenv("DECK_FULLSCREEN");
+        if (env != NULL && env[0] != '\0')
+            sEnvFs = strcmp(env, "0") != 0;
     }
-#endif
+    SDL_InitSubSystem(SDL_INIT_VIDEO);
+    BuildResolutionList();
+    for (int i = 0; i < sModeCount; i++)
+        DeckDebugLog("[VIDEO] resolution choice %d: %dx%d\n", i + 1, sModeW[i], sModeH[i]);
+    startFs = sEnvFs >= 0 ? sEnvFs : (VitaExtras_Get("fullscreen") != 0);
+    ResolveResolution(&startW, &startH);
+    if (startFs && startW == 0)
+    {
+        windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN_DESKTOP;
+        windowW = 1280;
+        windowH = 800;
+    }
+    else
+    {
+        // windowed, or a chosen fullscreen mode: made windowed first, ApplyVideo switches after the context exists
+        windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+        WindowedSize(startW, startH, &windowW, &windowH);
+    }
     sWindow = SDL_CreateWindow("Pokemon Emerald", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                windowW, windowH, windowFlags);
     if (sWindow == NULL)
@@ -151,6 +418,8 @@ bool DeckVideo_Init(SDL_Window **outWindow)
             fprintf(stderr, "[WINGL] %d GL entry points missing: this driver is too old\n", missing);
     }
 #endif
+    if (startFs && startW != 0)
+        ApplyVideo();
     DeckVideo_SetSwapInterval(1);
     {
         const char *dbg = getenv("DECK_GL_DEBUG");
