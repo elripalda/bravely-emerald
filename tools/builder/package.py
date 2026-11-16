@@ -32,6 +32,7 @@ BUNDLE = os.path.join(HERE, "bundle")
 OUT = os.path.join(HERE, "dist-builder")
 WORK = os.path.join(HERE, "build-builder")
 NAME = "BravelyEmeraldBuilder"
+LAUNCHER_FILE = "recomplauncher.json"        # RecompLauncher reads it from the top of the release, next to the program (docs/RECOMPLAUNCHER.md)
 
 # Qt parts the app does not use; excluded so the folder stays small
 EXCLUDES = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick", "PySide6.QtQuick", "PySide6.QtQml",
@@ -107,6 +108,13 @@ def module_names():
     return names
 
 
+def add_launcher_file(folder):
+    """Put recomplauncher.json (packaging/) at the top of the release folder, next to the program. Returns its path."""
+    dest = os.path.join(folder, LAUNCHER_FILE)
+    shutil.copy(os.path.join(HERE, "packaging", LAUNCHER_FILE), dest)
+    return dest
+
+
 def verify_frozen(exe):
     """Run the frozen app with --imports; a missing module stops the packaging, so a stale or partial build is never handed out."""
     import tempfile
@@ -143,6 +151,7 @@ def package_windows():
     verify_frozen(exe)
     with open(os.path.join(folder, "README.txt"), "w", encoding="utf-8") as f:
         f.write(README.format(exe=NAME + ".exe"))
+    add_launcher_file(folder)
     zp = os.path.join(OUT, NAME + "-win.zip")
     if os.path.exists(zp):
         os.remove(zp)
@@ -197,6 +206,7 @@ def package_linux():
             shutil.copy(src, os.path.join(app, "licenses", fn))
     with open(os.path.join(app, "README.txt"), "w", encoding="utf-8", newline="\n") as f:
         f.write(LINUX_README)
+    add_launcher_file(app)
     tg = os.path.join(OUT, NAME + "-linux-x86_64.tar.gz")
     with tarfile.open(tg, "w:gz") as t:
         t.add(app, arcname=NAME)

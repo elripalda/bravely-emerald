@@ -1,0 +1,42 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "Bravely Emerald",
+  "repo": "marcoscodas/bravely-emerald",
+  "game": {
+    "kind": "iso",
+    "label": "Your own Pokémon Emerald (USA/Europe) ROM, unmodified: the .gba file, or a .zip holding it. 16 MiB, game code BPEE."
+  },
+  "prepare": {
+    "program": ["BravelyEmeraldBuilder.exe", "BravelyEmeraldBuilder"],
+    "args": ["--prepare", "--game", "{game}", "--out", "{install}/game"],
+    "label": "Building the game from your ROM (30 to 60 minutes the first time)",
+    "timeout": 7200,
+    "done": ["{install}/game/prepared.txt"],
+    "version": "1",
+    "options": [
+      {
+        "id": "downloads",
+        "label": "Download the build tools (about 1 GB, needs internet)",
+        "note": "The compiler tools and the game's public data files are downloaded once. Nothing is uploaded.",
+        "args": ["--allow-downloads"],
+        "license": {
+          "name": "Licences of the downloaded tools and the ported code (NOTICE)",
+          "url": "https://github.com/marcoscodas/bravely-emerald/blob/main/NOTICE.md"
+        }
+      }
+    ]
+  },
+  "start": {
+    "program": ["game/pokeemerald.exe", "game/emerald-launch.sh"]
+  },
+  "folders": {
+    "saves": [{ "path": "{install}/game/userdata/saves" }],
+    "logs": [{ "path": "{install}/game/userdata" }]
+  },
+  "saves": ["{install}/game/userdata/saves", "{install}/game/userdata/settings.txt"],
+  "actions": [
+    { "id": "saves", "label": "Saves", "help": "Your save game (pokeemerald.sav).", "open": "saves" },
+    { "id": "logs", "label": "Logs", "help": "debug.log and the other diagnostics.", "open": "logs" }
+  ]
+}

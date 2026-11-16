@@ -17,6 +17,25 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn("--hidden-import", src)
         self.assertEqual([ln.strip() for ln in src.splitlines()].count("verify_frozen(exe)"), 2)                # Windows and Linux packaging both verify the exe
 
+    def test_recomplauncher_json_goes_next_to_the_program_in_both_packages(self):
+        import json
+        import package
+        folder = tempfile.mkdtemp(prefix="bb-rl-")
+        dest = package.add_launcher_file(folder)
+        self.assertEqual(os.path.dirname(dest), folder)                      # top of the release folder, not in a subfolder
+        self.assertEqual(os.path.basename(dest), "recomplauncher.json")
+        with open(dest, encoding="utf-8") as f:
+            data = json.load(f)
+        self.assertEqual(data["format"], 1)
+        self.assertEqual(data["repo"], "marcoscodas/bravely-emerald")
+        self.assertIn("BravelyEmeraldBuilder.exe", data["prepare"]["program"])    # the names the packages ship
+        self.assertIn("BravelyEmeraldBuilder", data["prepare"]["program"])
+        import cli
+        self.assertEqual(data["prepare"]["done"], ["{install}/game/" + cli.PREPARE_MARKER])              # the file --prepare writes
+        src = open(os.path.join(BUILDER, "package.py"), encoding="utf-8").read()
+        self.assertEqual([ln.strip() for ln in src.splitlines()].count("add_launcher_file(folder)"), 1)    # Windows
+        self.assertEqual([ln.strip() for ln in src.splitlines()].count("add_launcher_file(app)"), 1)       # Linux
+
     def test_module_list_matches_the_files(self):
         import package
         names = set(package.module_names())
